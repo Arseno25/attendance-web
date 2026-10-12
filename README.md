@@ -28,6 +28,14 @@ Web: `http://localhost:3000`. API: `http://127.0.0.1:8080/api/v1`. AI lokal: `ht
 
 Jika port 3000 dipakai aplikasi lain, ubah `NUXT_PORT` dan `WEB_ORIGIN` dalam `.env` ke port yang sama, lalu restart API/web. Pada verifikasi workspace ini web memakai port **3001** karena 3000 sudah digunakan.
 
+Preview container web/API/AI hasil verifikasi saat ini masih berjalan pada port 3001/8080/8001. Sebelum menjalankan mode dev pada port tersebut, hentikan preview milik project ini:
+
+```bash
+docker stop attendance-foundation-web attendance-foundation-api attendance-foundation-ai
+```
+
+Database Compose tetap berjalan; perintah ini tidak menghapus volume atau data.
+
 ```bash
 make check
 make build
