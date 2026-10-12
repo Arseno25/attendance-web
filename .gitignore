@@ -1,0 +1,17 @@
+node_modules/
+.nuxt/
+.output/
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+.env
+.env.*
+!.env.example
+.tools/
+.superpowers/
+coverage/
+dist/
+*.log
+.DS_Store
