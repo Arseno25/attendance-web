@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 -include .env
-export DATABASE_URL API_ADDRESS WEB_ORIGIN NUXT_PUBLIC_API_BASE NUXT_PORT AI_SERVICE_TOKEN POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD
+export DATABASE_URL API_ADDRESS WEB_ORIGIN SCHOOL_ID NUXT_PUBLIC_API_BASE NUXT_PORT AI_SERVICE_TOKEN POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD
 
 UV := $(CURDIR)/.tools/uv
 GOOSE := $(CURDIR)/.tools/goose
@@ -46,6 +46,7 @@ build:
 	npm --prefix apps/web run build
 	mkdir -p .tools
 	cd services/api && CGO_ENABLED=0 go build -trimpath -o ../../.tools/api ./cmd/api
+	cd services/api && CGO_ENABLED=0 go build -trimpath -o ../../.tools/bootstrap ./cmd/bootstrap
 	cd services/ai && $(UV) run python -c 'import app.main, onnxruntime; assert "CPUExecutionProvider" in onnxruntime.get_available_providers()'
 
 db-up:
@@ -63,6 +64,7 @@ migration-status: $(GOOSE)
 
 db-test:
 	psql "$$DATABASE_URL" -f services/api/tests/foundation.sql
+	cd services/api && TEST_DATABASE_URL="$$DATABASE_URL" go test -race ./internal/auth -run TestAuthDatabase -count=1
 
 seed:
 	@test "$$SEED_DEVELOPMENT" = 1 || { echo 'Dummy data only: run SEED_DEVELOPMENT=1 make seed on a development DB'; exit 1; }

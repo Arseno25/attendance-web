@@ -1,5 +1,7 @@
 # 05 — HTTP & Realtime API Contract (Draft)
 
+Status implementasi: health, auth, users dan audit berikut telah tersedia pada WP-02. Endpoint domain siswa/kelas/absensi/biometrik/realtime masih spesifikasi untuk tahap selanjutnya.
+
 ## 1. Conventions
 
 Base path `/api/v1`; JSON except transient image upload `multipart/form-data`. All timestamps UTC RFC 3339; response includes `request_id`. User auth: server-side session cookie (`HttpOnly`, `Secure`, `SameSite=Lax/Strict`) with CSRF protection for state changes; RBAC checks on every endpoint. Kiosk access uses short-lived provisioned device session and operational policy (network/device restriction); **browser localStorage tokens are not hardware-secure credentials**. Python API is internal service-to-service only.
@@ -20,6 +22,8 @@ Pagination query: `page=1&page_size=20`, maximum 100; sorting allowlisted. Stand
 | POST | `/auth/login` | Public admin login | Create session |
 | POST | `/auth/logout` | All logged-in | End session |
 | GET | `/auth/me` | All logged-in | Session/role/scopes |
+| GET/POST | `/users` | Super admin only | Search/pagination; create account |
+| PATCH | `/users/{id}` | Super admin only | Change profile/access; revoke affected sessions |
 | GET | `/dashboard/summary?date=` | Admin, teacher scoped | KPIs |
 | GET | `/students` | Admin, teacher scoped | Search / pagination |
 | POST | `/students` | Admin | Add student |
@@ -49,6 +53,43 @@ Pagination query: `page=1&page_size=20`, maximum 100; sorting allowlisted. Stand
 | GET | `/ws/attendance` | Authorized admin/teacher | Realtime events |
 
 ## 3. Core payloads
+
+### Auth, users dan audit — kontrak WP-02
+
+`POST /auth/login` menerima JSON `{ "email": "admin@school.test", "password": "…" }`. `Origin` wajib sama persis dengan `WEB_ORIGIN`. Tidak ada token sesi dalam response JSON; browser menerima cookie host-only HttpOnly, SameSite Lax, path `/`, TTL 8 jam. Production HTTPS memakai Secure dan nama `__Host-attendance_session`; development loopback HTTP memakai `attendance_session`. Frontend dan API harus berada pada site yang sama untuk cookie SameSite Lax.
+
+Login dan `GET /auth/me` mengembalikan envelope:
+
+```json
+{
+  "data": {
+    "user": {
+      "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "school_id": "00000000-0000-4000-8000-000000000001",
+      "email": "admin@school.test",
+      "full_name": "Admin Sekolah",
+      "role": "super_admin",
+      "is_active": true,
+      "grants": [],
+      "class_ids": []
+    },
+    "permissions": ["users.read", "users.write", "audit.read"],
+    "school": {"id": "00000000-0000-4000-8000-000000000001", "name": "Sekolah Demo", "timezone": "Asia/Jakarta"},
+    "csrf_token": "opaque-csrf-value"
+  },
+  "request_id": "server-generated"
+}
+```
+
+Contoh `permissions` disingkat; response aktual berisi semua izin role dan grant yang valid. `class_ids` masih kosong sampai assignment WP-03; guru belum mendapat akses data kelas. Identitas sekolah diambil dari konfigurasi/server, bukan payload client. Sesi idle lebih dari 30 menit atau akun/sekolah nonaktif menghasilkan 401. Login ulang mengganti sesi yang dibawa oleh browser tersebut. `POST /auth/logout`, `POST /users`, dan `PATCH /users/{id}` wajib `Origin` serta header `X-CSRF-Token` dari sesi yang sama. Logout sukses mengembalikan `data: { "logged_out": true }`.
+
+`POST /users` menerima `email`, `full_name`, `role`, `password`, dan array opsional `grants`; password 12–128 byte. Role: `super_admin`, `admin`, `teacher`, `operator`. Email dinormalisasi lowercase dan unik per sekolah. Success 201 berisi `data: User` tanpa password/hash. `PATCH /users/{id}` menerima subset `email`, `full_name`, `role`, `is_active`, `grants`; tidak menerima password. Perubahan email/peran/status/izin mencabut sesi pengguna. Perubahan email sendiri, pengurangan akses sendiri, dan penghapusan akses super admin terakhir ditolak 409.
+
+Grant tersedia: `biometrics.enroll`, `biometrics.revoke`, `consents.manage`, `attendance.manual`, `attendance.approve`, `reports.export`. Admin/super admin dapat menerima grant ini; operator hanya enrollment/manual; guru hanya export dengan scope kelas. Grant tidak dapat memberikan akses users/audit kepada role lain, dan tidak mengaktifkan endpoint domain yang belum dibangun.
+
+`GET /users?search=&page=1&page_size=20` mengembalikan `data: User[]` serta `pagination: {page,page_size,total}`. `GET /audit-logs` memiliki envelope pagination yang sama dengan data `{id,actor_id,action,target_type,target_id,request_id,occurred_at}`. Actor/target nullable; action mencakup bootstrap, login berhasil/gagal, logout, users.created/updated. Audit tidak menyimpan password, token atau body request dan tidak dapat di-update/delete oleh SQL biasa. Detail field sebelum/sesudah belum direkam pada WP-02; proteksi terhadap pemilik DB/TRUNCATE dan retention mengikuti WP-11.
+
+Login salah menghasilkan `401 INVALID_CREDENTIALS` tanpa membedakan email tidak terdaftar dan password salah. CSRF salah menghasilkan `403 CSRF_INVALID`. JSON unknown field/lebih dari 8 KiB/pagination invalid menghasilkan `400 VALIDATION_ERROR`; request DB dibatasi context 8 detik. Kuota login 10 percobaan/account dan 30/IP per 15 menit; concurrency hashing maksimal dua. Limiter per-process memakai alamat peer (tidak mempercayai forwarded header); sebelum replicas/proxy production, tetapkan proxy trust dan shared limiter.
 
 ### POST `/students`
 

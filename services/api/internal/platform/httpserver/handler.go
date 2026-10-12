@@ -3,19 +3,23 @@ package httpserver
 import (
 	"context"
 	"crypto/rand"
-	"encoding/json"
 	"log/slog"
 	"net/http"
 	"time"
+
+	"attendance.local/api/internal/platform/httpresponse"
 )
 
-func NewHandler(ping func(context.Context) error, webOrigin string) http.Handler {
+func NewHandler(ping func(context.Context) error, webOrigin string, register func(*http.ServeMux)) http.Handler {
 	mux := http.NewServeMux()
+	if register != nil {
+		register(mux)
+	}
 	mux.HandleFunc("/api/v1/health/live", func(w http.ResponseWriter, r *http.Request) {
 		if !healthMethod(w, r) {
 			return
 		}
-		writeJSON(w, 200, map[string]any{"status": "ok", "request_id": w.Header().Get("X-Request-ID")})
+		httpresponse.JSON(w, 200, map[string]any{"status": "ok", "request_id": w.Header().Get("X-Request-ID")})
 	})
 	mux.HandleFunc("/api/v1/health/ready", func(w http.ResponseWriter, r *http.Request) {
 		if !healthMethod(w, r) {
@@ -24,13 +28,13 @@ func NewHandler(ping func(context.Context) error, webOrigin string) http.Handler
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
 		if err := ping(ctx); err != nil {
-			writeError(w, 503, "DATABASE_UNAVAILABLE", "Layanan belum siap")
+			httpresponse.Error(w, 503, "DATABASE_UNAVAILABLE", "Layanan belum siap")
 			return
 		}
-		writeJSON(w, 200, map[string]any{"status": "ok", "request_id": w.Header().Get("X-Request-ID")})
+		httpresponse.JSON(w, 200, map[string]any{"status": "ok", "request_id": w.Header().Get("X-Request-ID")})
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		writeError(w, 404, "NOT_FOUND", "Endpoint tidak tersedia")
+		httpresponse.Error(w, 404, "NOT_FOUND", "Endpoint tidak tersedia")
 	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		started := time.Now()
@@ -44,18 +48,21 @@ func NewHandler(ping func(context.Context) error, webOrigin string) http.Handler
 		w.Header().Add("Vary", "Origin")
 		if origin := r.Header.Get("Origin"); origin != "" {
 			if origin != webOrigin {
-				writeError(w, 403, "FORBIDDEN", "Origin tidak diizinkan")
+				httpresponse.Error(w, 403, "FORBIDDEN", "Origin tidak diizinkan")
 				return
 			}
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
 			if r.Method == http.MethodOptions {
-				w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, POST, PATCH, OPTIONS")
 				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-CSRF-Token")
 				w.WriteHeader(204)
 				return
 			}
 		}
+		ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+		defer cancel()
+		r = r.WithContext(ctx)
 		mux.ServeHTTP(w, r)
 	})
 }
@@ -65,19 +72,6 @@ func healthMethod(w http.ResponseWriter, r *http.Request) bool {
 		return true
 	}
 	w.Header().Set("Allow", "GET, HEAD")
-	writeError(w, 405, "METHOD_NOT_ALLOWED", "Method tidak diizinkan")
+	httpresponse.Error(w, 405, "METHOD_NOT_ALLOWED", "Method tidak diizinkan")
 	return false
-}
-
-func writeJSON(w http.ResponseWriter, status int, body any) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(body)
-}
-
-func writeError(w http.ResponseWriter, status int, code, message string) {
-	writeJSON(w, status, map[string]any{
-		"error":      map[string]string{"code": code, "message": message},
-		"request_id": w.Header().Get("X-Request-ID"),
-	})
 }

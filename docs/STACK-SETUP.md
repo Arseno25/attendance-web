@@ -15,6 +15,7 @@ Verifikasi pada 12 Oktober 2026. Dokumentasi dicari melalui `resolve-library-id`
 | TypeScript / vue-tsc | 6.0.3 / 3.3.13 | Latest compatible compiler API verified by build/typecheck |
 | Go | 1.27.2 | go.mod, Dockerfile, CI |
 | pgx | 5.11.0 | go.mod + go.sum |
+| Go x/crypto (Argon2id) / x/sys | 0.58.0 / 0.49.0 | go.mod + go.sum (WP-02) |
 | Goose CLI | 3.29.0 | Makefile/Dockerfile pinned install |
 | uv | 0.13.0 | Official installer, Dockerfile and CI |
 | Python | 3.14.8 | .python-version, Dockerfile, CI; project limits to 3.14 |
@@ -56,6 +57,8 @@ go mod tidy
 ```
 
 `attendance.local/api` is an internal monorepo module path, not a claimed GitHub repository. No remote repository was fabricated. Goose was installed through official Go CLI with only the PostgreSQL driver enabled, then `goose -dir migrations -s create foundation sql` generated the initial migration.
+
+WP-02 menambahkan Argon2id melalui `go get golang.org/x/crypto@latest` lalu `go mod tidy`. CLI `npx shadcn-vue@2.8.2 add input label alert table --yes` menghasilkan primitives untuk auth/admin. Context7 dipakai untuk pgx transactions, Nuxt middleware/useState/fetch dan shadcn forms. Dokumentasi Go Argon2 tidak tersedia dengan match yang tepat di Context7; implementasi mengikuti [package resmi Argon2](https://pkg.go.dev/golang.org/x/crypto/argon2). Dependency frontend tetap exact dan font tetap lokal setelah scaffold.
 
 Python project setup through uv:
 

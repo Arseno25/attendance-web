@@ -19,7 +19,7 @@ const serviceLabel = computed(() => {
         <NuxtLink to="/" class="text-base font-semibold tracking-tight">
           Absensi Sekolah
         </NuxtLink>
-        <Badge variant="outline">Pengaturan awal</Badge>
+        <Button as-child variant="outline"><NuxtLink to="/login">Masuk</NuxtLink></Button>
       </div>
     </header>
     <main class="mx-auto max-w-5xl px-6 py-16 sm:py-24">

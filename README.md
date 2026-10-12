@@ -2,7 +2,7 @@
 
 Fondasi aplikasi absensi satu sekolah. Nuxt 4 untuk web admin/kiosk, Go untuk API dan transaksi, Python FastAPI/ONNX Runtime untuk service AI internal, serta PostgreSQL sebagai resource terpisah.
 
-Status: **WP-01 foundation**. Login, CRUD siswa, absensi, enrollment dan recognition produksi belum diimplementasikan. Halaman awal menunjukkan koneksi API/DB sebenarnya, tanpa data siswa demo yang diklaim nyata. AI sengaja mengembalikan `503` sampai model, liveness dan evaluasi WP-06 selesai.
+Status: **WP-02 autentikasi dan UI-01 admin**. Login/logout, sesi server-side, pengelolaan pengguna/peran/izin, serta audit aktivitas sudah tersedia. CRUD siswa, absensi, enrollment dan recognition produksi belum diimplementasikan. Halaman awal menunjukkan koneksi API/DB sebenarnya. AI mengembalikan `503` sampai model, liveness dan evaluasi WP-06 selesai.
 
 ## Mulai di lokal
 
@@ -36,6 +36,27 @@ docker stop attendance-foundation-web attendance-foundation-api attendance-found
 
 Database Compose tetap berjalan; perintah ini tidak menghapus volume atau data.
 
+### Administrator pertama
+
+Tidak ada password bawaan. Sesudah migration, build CLI dan buat super admin pertama di database yang belum memiliki pengguna untuk `SCHOOL_ID` tersebut:
+
+```bash
+make build
+set -a
+source .env
+set +a
+read -r -s -p 'Password admin (12–128 byte): ' attendance_admin_password
+printf '%s' "$attendance_admin_password" | .tools/bootstrap \
+  --email admin@school.test --name 'Admin Sekolah' --school-name 'Nama Sekolah'
+unset attendance_admin_password
+```
+
+Password masuk lewat stdin, bukan argumen CLI atau log. Bootstrap berikutnya ditolak. Buka `/login`, lalu `/admin`; menu pengguna dan audit hanya tersedia bagi super admin. Untuk deployment, binary `bootstrap` juga tersedia di image API; jalankan dengan environment/secrets yang sama dan stdin privat.
+
+Workspace ini sudah memiliki akun pengembangan, tersimpan hanya di `.tools/local-admin.json` (ignored, permission `0600`). Password tersebut tidak untuk production. `SCHOOL_ID` wajib berupa UUID dan harus menunjuk sekolah yang akan dikelola; jangan menggantinya untuk berpindah sekolah tanpa memeriksa data.
+
+Web dan API production harus menggunakan HTTPS pada host dengan **site yang sama**, misalnya `app.school.example` dan `api.school.example`, agar cookie SameSite Lax dapat dikirim pada request web ke API. Domain lintas site memerlukan desain auth berbeda. Exact origin web tetap dikonfigurasi melalui `WEB_ORIGIN`.
+
 ```bash
 make check
 make build
@@ -63,7 +84,7 @@ scripts/                  Bootstrap env lokal dan test-nya
 docs/                     Catatan setup, keputusan dan status fondasi
 ```
 
-Dokumen kebutuhan tetap berada di root. Lihat [rencana induk](07-IMPLEMENTATION-PLAN.md), [setup stack](docs/STACK-SETUP.md), dan [progress](docs/FOUNDATION-PROGRESS.md).
+Dokumen kebutuhan tetap berada di root. Lihat [rencana induk](07-IMPLEMENTATION-PLAN.md), [setup stack](docs/STACK-SETUP.md), [progress fondasi](docs/FOUNDATION-PROGRESS.md), dan [progress auth](docs/AUTH-PROGRESS.md).
 
 ## Endpoint fondasi
 
@@ -71,6 +92,12 @@ Dokumen kebutuhan tetap berada di root. Lihat [rencana induk](07-IMPLEMENTATION-
 |---|---|
 | GET `/api/v1/health/live` | 200 bila Go API hidup |
 | GET `/api/v1/health/ready` | 200 bila DB dapat di-ping, 503 bila tidak; bukan bukti seluruh schema/domain siap |
+| POST `/api/v1/auth/login` | Login JSON dengan exact Origin; membuat cookie HttpOnly |
+| GET `/api/v1/auth/me` | Profil, school scope, izin dan CSRF sesi aktif |
+| POST `/api/v1/auth/logout` | Origin + CSRF; mencabut sesi |
+| GET/POST `/api/v1/users` | Super admin: pencarian/pagination dan pembuatan akun |
+| PATCH `/api/v1/users/{id}` | Super admin: perubahan profil/akses dan pencabutan sesi terkait |
+| GET `/api/v1/audit-logs` | Super admin: audit per sekolah, pagination |
 | GET `/internal/v1/health/live` | 200 bila runtime CPU ONNX tersedia |
 | GET `/internal/v1/health/ready` | 503 `MODEL_NOT_CONFIGURED` pada fondasi |
 | POST `/internal/v1/recognize` | 401 tanpa token sah; 503 `RECOGNITION_DISABLED` dengan token sah |
@@ -85,7 +112,7 @@ Go mengembalikan error JSON, generated request ID, exact-origin CORS dan no-stor
 4. Hubungkan Compose ke predefined destination network yang sama dengan DB, lalu verifikasi private DNS/port. Baca [networking resmi Coolify](https://github.com/coollabsio/coolify-docs/blob/main/content/docs/core/networking-in-coolify.mdx).
 5. Publikasikan domain HTTPS hanya untuk web dan API, masing-masing port 3000/8080. AI port 8001 dan DB tidak memiliki domain/published host port.
 6. Jalankan migration **sekali sebagai release task**, sebelum trafik aplikasi. Di container API gunakan goose dengan `GOOSE_DRIVER=postgres`, `GOOSE_DBSTRING` dari secret migration role, `GOOSE_MIGRATION_DIR=/app/migrations`, lalu `goose up`.
-7. Verifikasi health, origin, runtime config dan backup/restore. Health AI di Compose menggunakan liveness; readiness model masih 503 dan bukan readiness biometrik produksi.
+7. Buat administrator pertama menggunakan `bootstrap` dengan password stdin privat, lalu verifikasi login, origin, cookie Secure dan pengelolaan pengguna. Verifikasi health, runtime config dan backup/restore. Health AI di Compose menggunakan liveness; readiness model masih 503 dan bukan readiness biometrik produksi.
 
 Belum ada deployment ke akun/server Coolify pada tahap ini. Domain, credential production, legal policy, model license dan pilot mengikuti gate pada rencana induk.
 

@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"attendance.local/api/internal/auth"
 	"attendance.local/api/internal/platform/config"
 	"attendance.local/api/internal/platform/httpserver"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -35,9 +36,13 @@ func run() error {
 		return errors.New("invalid database configuration")
 	}
 	defer pool.Close()
+	authService, err := auth.New(pool, cfg.SchoolID, cfg.WebOrigin)
+	if err != nil {
+		return errors.New("authentication initialization failed")
+	}
 	server := &http.Server{
 		Addr:              cfg.Address,
-		Handler:           httpserver.NewHandler(pool.Ping, cfg.WebOrigin),
+		Handler:           httpserver.NewHandler(pool.Ping, cfg.WebOrigin, authService.Register),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,

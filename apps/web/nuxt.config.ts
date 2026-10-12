@@ -7,6 +7,7 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
   vite: { plugins: [tailwindcss()] },
   shadcn: { prefix: '', componentDir: '@/components/ui' },
+  routeRules: { '/login': { ssr: false }, '/admin': { ssr: false }, '/admin/**': { ssr: false } },
   runtimeConfig: {
     public: { apiBase: 'http://localhost:8080/api/v1' },
   },

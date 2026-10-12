@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestHealthDoesNotClaimReadinessWithoutDatabase(t *testing.T) {
@@ -21,7 +22,7 @@ func TestHealthDoesNotClaimReadinessWithoutDatabase(t *testing.T) {
 		{"/api/v1/health/ready", nil, 200},
 	} {
 		t.Run(tc.path+http.StatusText(tc.want), func(t *testing.T) {
-			h := NewHandler(func(context.Context) error { return tc.pingErr }, "http://localhost:3000")
+			h := NewHandler(func(context.Context) error { return tc.pingErr }, "http://localhost:3000", nil)
 			w := httptest.NewRecorder()
 			h.ServeHTTP(w, httptest.NewRequest("GET", tc.path, nil))
 			if w.Code != tc.want {
@@ -43,7 +44,7 @@ func TestHealthDoesNotClaimReadinessWithoutDatabase(t *testing.T) {
 }
 
 func TestCORSOnlyAllowsConfiguredOrigin(t *testing.T) {
-	h := NewHandler(func(context.Context) error { return nil }, "http://localhost:3000")
+	h := NewHandler(func(context.Context) error { return nil }, "http://localhost:3000", nil)
 	for _, tc := range []struct {
 		origin string
 		want   int
@@ -66,7 +67,7 @@ func TestCORSOnlyAllowsConfiguredOrigin(t *testing.T) {
 }
 
 func TestUnknownRoutesReturnJSONWithoutEchoingClientRequestID(t *testing.T) {
-	h := NewHandler(func(context.Context) error { return nil }, "http://localhost:3000")
+	h := NewHandler(func(context.Context) error { return nil }, "http://localhost:3000", nil)
 	r := httptest.NewRequest("GET", "/api/v1/students", nil)
 	r.Header.Set("X-Request-ID", "attacker-controlled")
 	w := httptest.NewRecorder()
@@ -76,5 +77,23 @@ func TestUnknownRoutesReturnJSONWithoutEchoingClientRequestID(t *testing.T) {
 	}
 	if w.Header().Get("X-Request-ID") == "attacker-controlled" {
 		t.Fatal("untrusted request ID reflected")
+	}
+}
+
+func TestRequestHasBoundedDatabaseContext(t *testing.T) {
+	h := NewHandler(func(context.Context) error { return nil }, "http://localhost:3000", func(m *http.ServeMux) {
+		m.HandleFunc("/api/v1/probe", func(w http.ResponseWriter, r *http.Request) {
+			deadline, ok := r.Context().Deadline()
+			remaining := time.Until(deadline)
+			if !ok || remaining <= 7*time.Second || remaining > 8*time.Second {
+				t.Error("request database context not bounded")
+			}
+			w.WriteHeader(204)
+		})
+	})
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("GET", "/api/v1/probe", nil))
+	if w.Code != 204 {
+		t.Fatal(w.Code)
 	}
 }
