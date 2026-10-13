@@ -4,6 +4,8 @@ Fondasi aplikasi absensi satu sekolah. Nuxt 4 untuk web admin/kiosk, Go untuk AP
 
 Status: **WP-02 autentikasi dan UI-01 admin**. Login/logout, sesi server-side, pengelolaan pengguna/peran/izin, serta audit aktivitas sudah tersedia. CRUD siswa, absensi, enrollment dan recognition produksi belum diimplementasikan. Halaman awal menunjukkan koneksi API/DB sebenarnya. AI mengembalikan `503` sampai model, liveness dan evaluasi WP-06 selesai.
 
+Panel admin memakai block resmi shadcn-vue `dashboard-01` dengan sidebar inset, menu akun, breadcrumb dan komponen shadcn untuk forms/tables. Halaman pencatatan absensi/kiosk nantinya memakai route/layout mandiri di luar panel. Detail CLI, penyesuaian dan pembagian route ada di [desain panel](docs/PANEL-DESIGN.md).
+
 ## Mulai di lokal
 
 Prasyarat: Node 26, npm, Go dengan toolchain auto-download, Python 3 untuk bootstrap, Docker Compose v2 (atau Podman dengan Compose provider), dan `psql` untuk pemeriksaan database. uv mengelola Python 3.14.8 dan dependency project; tidak perlu install package Python secara global.

@@ -47,6 +47,7 @@ function edit(user: User) {
   success.value = ''
 }
 async function save() {
+  if (saving.value) return
   saving.value = true
   message.value = ''
   success.value = ''
@@ -62,37 +63,61 @@ async function save() {
   catch (error) { message.value = apiMessage(error) }
   finally { saving.value = false }
 }
-async function changePage(delta: number) { page.value += delta; await load() }
+async function changePage(value: number) { page.value = value; await load() }
 await load()
 </script>
 
 <template>
-  <div class="max-w-6xl">
-    <h1 class="text-2xl font-semibold tracking-tight">Pengguna & peran</h1>
-    <p class="mt-2 text-sm leading-6 text-muted-foreground">Atur akses petugas sekolah. Perubahan akses mencabut sesi pengguna terkait.</p>
-    <Alert v-if="message" class="mt-6" role="alert"><AlertDescription>{{ message }}</AlertDescription></Alert>
-    <p v-if="success" class="mt-4 text-sm" role="status">{{ success }}</p>
-    <Card class="mt-6">
+  <div class="flex flex-col gap-6">
+    <div><h1 class="text-2xl font-semibold tracking-tight">Pengguna & peran</h1><p class="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">Atur akses petugas sekolah. Perubahan akses mencabut sesi pengguna terkait.</p></div>
+    <Alert v-if="message" variant="destructive" role="alert"><AlertDescription>{{ message }}</AlertDescription></Alert>
+    <Alert v-if="success" role="status"><AlertDescription>{{ success }}</AlertDescription></Alert>
+    <Card class="shadow-none">
       <CardHeader><CardTitle>{{ editing ? 'Edit pengguna' : 'Tambah pengguna' }}</CardTitle><CardDescription>{{ editing ? 'Periksa peran dan izin sebelum menyimpan.' : 'Buat akun untuk petugas sekolah.' }}</CardDescription></CardHeader>
       <CardContent>
-        <form class="space-y-5" @submit.prevent="save">
-          <div class="grid gap-5 sm:grid-cols-2">
-            <div class="space-y-2"><Label for="user-name">Nama</Label><Input id="user-name" v-model="form.full_name" required maxlength="120" :disabled="saving" /></div>
-            <div class="space-y-2"><Label for="user-email">Email</Label><Input id="user-email" v-model="form.email" type="email" required maxlength="254" :disabled="saving" /></div>
-            <div class="space-y-2"><Label for="user-role">Peran</Label><select id="user-role" v-model="form.role" class="h-9 w-full rounded-md border bg-background px-3 text-sm focus-visible:outline-2 focus-visible:outline-ring" :disabled="saving"><option v-for="(label, role) in roleLabels" :key="role" :value="role">{{ label }}</option></select></div>
-            <div v-if="!editing" class="space-y-2"><Label for="new-password">Password awal</Label><Input id="new-password" v-model="form.password" type="password" autocomplete="new-password" required minlength="12" maxlength="128" :disabled="saving" /><p class="text-xs text-muted-foreground">Minimal 12 karakter; tidak dikirim lewat email otomatis.</p></div>
-          </div>
-          <fieldset class="space-y-3"><legend class="mb-3 text-sm font-medium">Izin tambahan</legend><div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><label v-for="grant in availableGrants" :key="grant.id" class="flex items-center gap-2 text-sm"><input v-model="form.grants" type="checkbox" :value="grant.id" :disabled="saving" class="size-4 accent-primary">{{ grant.label }}</label></div></fieldset>
-          <label v-if="editing" class="flex items-center gap-2 text-sm"><input v-model="form.is_active" type="checkbox" :disabled="saving" class="size-4 accent-primary">Akun aktif</label>
-          <div class="flex gap-3"><Button type="submit" :disabled="saving">{{ saving ? 'Menyimpan…' : 'Simpan pengguna' }}</Button><Button v-if="editing" type="button" variant="outline" :disabled="saving" @click="reset">Batal</Button></div>
+        <form class="space-y-6" @submit.prevent="save">
+          <FieldGroup class="grid gap-5 md:grid-cols-2">
+            <Field><FieldLabel for="user-name">Nama</FieldLabel><Input id="user-name" v-model="form.full_name" required maxlength="120" :disabled="saving" /></Field>
+            <Field><FieldLabel for="user-email">Email</FieldLabel><Input id="user-email" v-model="form.email" type="email" required maxlength="254" :disabled="saving" /></Field>
+            <Field><FieldLabel for="user-role">Peran</FieldLabel><Select :model-value="form.role" :disabled="saving" @update:model-value="value => form.role = value as Role"><SelectTrigger id="user-role" class="w-full"><SelectValue placeholder="Pilih peran" /></SelectTrigger><SelectContent><SelectItem v-for="(label, role) in roleLabels" :key="role" :value="role">{{ label }}</SelectItem></SelectContent></Select></Field>
+            <Field v-if="!editing"><FieldLabel for="new-password">Password awal</FieldLabel><Input id="new-password" v-model="form.password" type="password" autocomplete="new-password" required minlength="12" maxlength="128" :disabled="saving" /><FieldDescription>Minimal 12 karakter; tidak dikirim lewat email otomatis.</FieldDescription></Field>
+          </FieldGroup>
+          <FieldSeparator />
+          <FieldSet>
+            <FieldLegend variant="label">Izin tambahan</FieldLegend>
+            <FieldDescription>Izin tambahan tetap mengikuti batas akses peran yang dipilih.</FieldDescription>
+            <FieldGroup class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <Field v-for="grant in availableGrants" :key="grant.id" orientation="horizontal">
+                <Checkbox :id="`grant-${grant.id}`" :model-value="form.grants.includes(grant.id)" :disabled="saving" @update:model-value="checked => form.grants = checked === true ? [...form.grants, grant.id] : form.grants.filter(id => id !== grant.id)" />
+                <FieldLabel :for="`grant-${grant.id}`" class="font-normal">{{ grant.label }}</FieldLabel>
+              </Field>
+            </FieldGroup>
+          </FieldSet>
+          <Field v-if="editing" orientation="horizontal">
+            <Switch id="user-active" v-model="form.is_active" :disabled="saving" />
+            <FieldContent><FieldLabel for="user-active">Akun aktif</FieldLabel><FieldDescription>Akun nonaktif tidak dapat masuk ke panel.</FieldDescription></FieldContent>
+          </Field>
+          <div class="flex flex-wrap gap-3"><Button type="submit" :disabled="saving"><Spinner v-if="saving" />{{ saving ? 'Menyimpan…' : 'Simpan pengguna' }}</Button><Button v-if="editing" type="button" variant="outline" :disabled="saving" @click="reset">Batal</Button></div>
         </form>
       </CardContent>
     </Card>
-    <form class="mt-8 flex max-w-md gap-2" @submit.prevent="page = 1; load()"><Label for="user-search" class="sr-only">Cari pengguna</Label><Input id="user-search" v-model="search" placeholder="Cari nama atau email" maxlength="100" /><Button variant="outline" type="submit" :disabled="loading">Cari</Button></form>
-    <p v-if="loading" class="mt-6 text-sm" role="status">Memuat pengguna…</p>
-    <div v-else class="mt-4 overflow-x-auto rounded-lg border">
-      <Table><TableHeader><TableRow><TableHead>Nama</TableHead><TableHead>Email</TableHead><TableHead>Peran</TableHead><TableHead>Status</TableHead><TableHead class="text-right">Tindakan</TableHead></TableRow></TableHeader><TableBody><TableRow v-for="user in users" :key="user.id"><TableCell class="font-medium">{{ user.full_name }}</TableCell><TableCell>{{ user.email }}</TableCell><TableCell>{{ roleLabels[user.role] }}</TableCell><TableCell><Badge variant="outline">{{ user.is_active ? 'Aktif' : 'Nonaktif' }}</Badge></TableCell><TableCell class="text-right"><Button variant="ghost" size="sm" :disabled="user.id === auth.session.value?.user.id" @click="edit(user)">{{ user.id === auth.session.value?.user.id ? 'Akun Anda' : 'Edit' }}</Button></TableCell></TableRow><TableRow v-if="!users.length"><TableCell colspan="5" class="py-8 text-center text-muted-foreground">Tidak ada pengguna sesuai pencarian.</TableCell></TableRow></TableBody></Table>
-    </div>
-    <div class="mt-4 flex items-center justify-between gap-4 text-sm"><span>{{ total }} pengguna · halaman {{ page }}</span><div class="flex gap-2"><Button variant="outline" size="sm" :disabled="page <= 1 || loading" @click="changePage(-1)">Sebelumnya</Button><Button variant="outline" size="sm" :disabled="page * 20 >= total || loading" @click="changePage(1)">Berikutnya</Button></div></div>
+    <Card class="min-w-0 shadow-none">
+      <CardHeader class="gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div><CardTitle>Daftar pengguna</CardTitle><CardDescription class="mt-1.5">Cari dan perbarui akun petugas sekolah.</CardDescription></div>
+        <form class="flex w-full gap-2 sm:max-w-sm" @submit.prevent="page = 1; load()"><Label for="user-search" class="sr-only">Cari pengguna</Label><Input id="user-search" v-model="search" placeholder="Cari nama atau email" maxlength="100" /><Button variant="outline" type="submit" :disabled="loading">Cari</Button></form>
+      </CardHeader>
+      <CardContent class="min-w-0">
+        <div v-if="loading" class="space-y-3" role="status"><span class="sr-only">Memuat pengguna…</span><Skeleton v-for="row in 4" :key="row" class="h-10 w-full" /></div>
+        <Table v-else class="min-w-[640px]">
+          <TableCaption class="sr-only">Daftar pengguna sekolah</TableCaption>
+          <TableHeader><TableRow><TableHead>Nama</TableHead><TableHead>Email</TableHead><TableHead>Peran</TableHead><TableHead>Status</TableHead><TableHead class="text-right">Tindakan</TableHead></TableRow></TableHeader>
+          <TableBody>
+            <TableRow v-for="user in users" :key="user.id"><TableCell class="font-medium">{{ user.full_name }}</TableCell><TableCell>{{ user.email }}</TableCell><TableCell>{{ roleLabels[user.role] }}</TableCell><TableCell><Badge :variant="user.is_active ? 'secondary' : 'outline'">{{ user.is_active ? 'Aktif' : 'Nonaktif' }}</Badge></TableCell><TableCell class="text-right"><Button variant="ghost" size="sm" :disabled="user.id === auth.session.value?.user.id" @click="edit(user)">{{ user.id === auth.session.value?.user.id ? 'Akun Anda' : 'Edit' }}</Button></TableCell></TableRow>
+            <TableRow v-if="!users.length"><TableCell colspan="5"><Empty><EmptyHeader><EmptyTitle>Tidak ada pengguna sesuai pencarian</EmptyTitle><EmptyDescription>Coba nama atau email lain, atau kosongkan pencarian untuk melihat semua pengguna.</EmptyDescription></EmptyHeader></Empty></TableCell></TableRow>
+          </TableBody>
+        </Table>
+      </CardContent>
+      <CardFooter class="block border-t pt-4"><TablePagination :page="page" :total="total" label="pengguna" :disabled="loading" @update:page="changePage" /></CardFooter>
+    </Card>
   </div>
 </template>

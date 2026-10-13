@@ -23,16 +23,25 @@ async function load() {
   catch (error) { message.value = apiMessage(error) }
   finally { loading.value = false }
 }
-async function changePage(delta: number) { page.value += delta; await load() }
+async function changePage(value: number) { page.value = value; await load() }
 await load()
 </script>
 
 <template>
-  <div class="max-w-6xl">
-    <div class="flex items-center justify-between gap-4"><div><h1 class="text-2xl font-semibold tracking-tight">Audit aktivitas</h1><p class="mt-2 text-sm leading-6 text-muted-foreground">Histori perubahan akun dan sesi, tanpa password atau data biometrik.</p></div><Button variant="outline" :disabled="loading" @click="load">Muat ulang</Button></div>
-    <Alert v-if="message" class="mt-6" role="alert"><AlertDescription>{{ message }}</AlertDescription></Alert>
-    <p v-if="loading" class="mt-8 text-sm" role="status">Memuat aktivitas…</p>
-    <div v-else class="mt-8 overflow-x-auto rounded-lg border"><Table><TableHeader><TableRow><TableHead>Waktu</TableHead><TableHead>Aktivitas</TableHead><TableHead>Pelaku</TableHead><TableHead>Target</TableHead><TableHead>Request ID</TableHead></TableRow></TableHeader><TableBody><TableRow v-for="entry in entries" :key="entry.id"><TableCell class="whitespace-nowrap">{{ date(entry.occurred_at) }}</TableCell><TableCell>{{ labels[entry.action] ?? entry.action }}</TableCell><TableCell>{{ entry.actor_id?.slice(0, 8) ?? 'Anonim' }}</TableCell><TableCell>{{ entry.target_id?.slice(0, 8) ?? '—' }}</TableCell><TableCell class="font-mono text-xs">{{ entry.request_id }}</TableCell></TableRow><TableRow v-if="!entries.length"><TableCell colspan="5" class="py-8 text-center text-muted-foreground">Belum ada aktivitas tercatat.</TableCell></TableRow></TableBody></Table></div>
-    <div class="mt-4 flex items-center justify-between gap-4 text-sm"><span>{{ total }} aktivitas · halaman {{ page }}</span><div class="flex gap-2"><Button variant="outline" size="sm" :disabled="page <= 1 || loading" @click="changePage(-1)">Sebelumnya</Button><Button variant="outline" size="sm" :disabled="page * 20 >= total || loading" @click="changePage(1)">Berikutnya</Button></div></div>
+  <div class="flex min-w-0 flex-col gap-6">
+    <div><h1 class="text-2xl font-semibold tracking-tight">Audit aktivitas</h1><p class="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">Histori perubahan akun dan sesi, tanpa password atau data biometrik.</p></div>
+    <Alert v-if="message" variant="destructive" role="alert"><AlertDescription>{{ message }}</AlertDescription></Alert>
+    <Card class="min-w-0 shadow-none">
+      <CardHeader class="flex-row flex-wrap items-center justify-between gap-4"><div><CardTitle>Aktivitas sekolah</CardTitle><CardDescription class="mt-1.5">Catatan terbaru ditampilkan lebih dahulu.</CardDescription></div><Button variant="outline" :disabled="loading" @click="load"><Spinner v-if="loading" />Muat ulang</Button></CardHeader>
+      <CardContent class="min-w-0">
+        <div v-if="loading" class="space-y-3" role="status"><span class="sr-only">Memuat aktivitas…</span><Skeleton v-for="row in 5" :key="row" class="h-10 w-full" /></div>
+        <Table v-else class="min-w-[760px]">
+          <TableCaption class="sr-only">Audit aktivitas sekolah</TableCaption>
+          <TableHeader><TableRow><TableHead>Waktu</TableHead><TableHead>Aktivitas</TableHead><TableHead>Pelaku</TableHead><TableHead>Target</TableHead><TableHead>Request ID</TableHead></TableRow></TableHeader>
+          <TableBody><TableRow v-for="entry in entries" :key="entry.id"><TableCell class="whitespace-nowrap tabular-nums">{{ date(entry.occurred_at) }}</TableCell><TableCell>{{ labels[entry.action] ?? entry.action }}</TableCell><TableCell>{{ entry.actor_id?.slice(0, 8) ?? 'Anonim' }}</TableCell><TableCell>{{ entry.target_id?.slice(0, 8) ?? '—' }}</TableCell><TableCell class="font-mono text-xs">{{ entry.request_id }}</TableCell></TableRow><TableRow v-if="!entries.length"><TableCell colspan="5"><Empty><EmptyHeader><EmptyTitle>Belum ada aktivitas tercatat</EmptyTitle><EmptyDescription>Aktivitas login dan perubahan pengguna akan tampil di sini.</EmptyDescription></EmptyHeader></Empty></TableCell></TableRow></TableBody>
+        </Table>
+      </CardContent>
+      <CardFooter class="block border-t pt-4"><TablePagination :page="page" :total="total" label="aktivitas" :disabled="loading" @update:page="changePage" /></CardFooter>
+    </Card>
   </div>
 </template>

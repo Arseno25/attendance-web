@@ -203,7 +203,7 @@ Consent evidence bukan upload publik umum. MVP memakai referensi bukti dalam pen
 
 ## 7. Rencana frontend dan UX
 
-Sitemap, warna, komponen dan breakpoint mengikuti blueprint bagian 03. Nuxt menangani presentasi; Go menangani aturan bisnis. Komponen kamera berjalan client-side dan seluruh media tracks dihentikan ketika dialog ditutup, page hidden, proses selesai, atau session tidak aktif.
+Sitemap dan breakpoint mengikuti blueprint bagian 03. Arahan UI terbaru: panel `/admin/**` memakai block resmi shadcn-vue `dashboard-01` (sidebar inset, header, menu akun, cards) dan komponen shadcn untuk seluruh kontrol/form/tabel. Halaman pencatatan absensi/kiosk nantinya di `/absensi`, dengan layout mandiri tanpa sidebar/header panel; pengelolaan dan laporan absensi tetap di panel. Nuxt menangani presentasi; Go menangani aturan bisnis. Komponen kamera berjalan client-side dan seluruh media tracks dihentikan ketika dialog ditutup, page hidden, proses selesai, atau session tidak aktif.
 
 | Gelombang | Halaman/alur | Ketergantungan | Acceptance |
 |---|---|---|---|
