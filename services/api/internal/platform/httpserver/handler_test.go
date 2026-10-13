@@ -97,3 +97,16 @@ func TestRequestHasBoundedDatabaseContext(t *testing.T) {
 		t.Fatal(w.Code)
 	}
 }
+
+func TestCalendarPUTPreflightAllowsCredentialedWrite(t *testing.T) {
+	h := NewHandler(func(context.Context) error { return nil }, "http://localhost:3000", nil)
+	r := httptest.NewRequest("OPTIONS", "/api/v1/school/calendar/2026-10-13", nil)
+	r.Header.Set("Origin", "http://localhost:3000")
+	r.Header.Set("Access-Control-Request-Method", "PUT")
+	r.Header.Set("Access-Control-Request-Headers", "Content-Type, X-CSRF-Token")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != 204 || w.Header().Get("Access-Control-Allow-Origin") != "http://localhost:3000" || w.Header().Get("Access-Control-Allow-Credentials") != "true" || !strings.Contains(w.Header().Get("Access-Control-Allow-Methods"), "PUT") {
+		t.Fatal("calendar write blocked by preflight", w.Code, w.Header())
+	}
+}

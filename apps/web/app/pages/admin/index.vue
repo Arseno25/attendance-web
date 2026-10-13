@@ -18,9 +18,6 @@ const route = useRoute()
         <Button v-if="auth.session.value?.user.role === 'super_admin'" as-child variant="outline"><NuxtLink to="/admin/audit"><ScrollText />Lihat audit aktivitas</NuxtLink></Button>
       </CardContent>
     </Card>
-    <Empty class="border">
-      <EmptyHeader><EmptyMedia variant="icon"><ClipboardCheck /></EmptyMedia><EmptyTitle>Data kehadiran belum tersedia</EmptyTitle><EmptyDescription>Pencatatan absensi akan tersedia pada tahap berikutnya. Halaman absensi akan dibuka terpisah dari panel pengelolaan.</EmptyDescription></EmptyHeader>
-      <EmptyContent v-if="auth.session.value?.user.role === 'teacher'" class="text-sm text-muted-foreground">Akses data kelas tersedia setelah penugasan guru dikonfigurasi.</EmptyContent>
-    </Empty>
+    <Card v-if="auth.session.value?.permissions.includes('attendance.read') || auth.session.value?.permissions.includes('attendance.manual')"><CardHeader><CardTitle>Absensi sekolah</CardTitle><CardDescription>Kelola sesi, catat kehadiran manual dan tinjau koreksi. Alfa menunggu penutupan sesi dan rekonsiliasi.</CardDescription></CardHeader><CardContent class="flex flex-wrap gap-3"><Button as-child><NuxtLink to="/admin/attendance"><ClipboardCheck />Buka sesi absensi</NuxtLink></Button><Button as-child variant="outline"><NuxtLink to="/admin/corrections">Antrean koreksi</NuxtLink></Button></CardContent></Card>
   </div>
 </template>

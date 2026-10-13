@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { GraduationCap, LayoutDashboard, School, ScrollText, Users } from '@lucide/vue'
+import { CalendarDays, ClipboardCheck, GraduationCap, LayoutDashboard, ListChecks, School, ScrollText, Users } from '@lucide/vue'
 import NavMain from '~/components/NavMain.vue'
 import NavUser from '~/components/NavUser.vue'
 
@@ -7,6 +7,8 @@ const auth = useAuth()
 const links = computed(() => [
   { title: 'Ringkasan', url: '/admin', icon: LayoutDashboard },
   ...(auth.session.value?.permissions.includes('academics.read') ? [{ title: 'Data akademik', url: '/admin/academics', icon: GraduationCap }, { title: 'Siswa', url: '/admin/students', icon: Users }] : []),
+  ...(auth.session.value?.permissions.includes('academics.read') ? [{ title: 'Jadwal & kalender', url: '/admin/schedules', icon: CalendarDays }] : []),
+  ...((auth.session.value?.permissions.includes('attendance.read') || auth.session.value?.permissions.includes('attendance.manual')) ? [{ title: 'Sesi absensi', url: '/admin/attendance', icon: ClipboardCheck }, { title: 'Koreksi absensi', url: '/admin/corrections', icon: ListChecks }] : []),
   ...(auth.session.value?.user.role === 'super_admin'
     ? [{ title: 'Pengguna & peran', url: '/admin/users', icon: Users }, { title: 'Audit aktivitas', url: '/admin/audit', icon: ScrollText }]
     : []),

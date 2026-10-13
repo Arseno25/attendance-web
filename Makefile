@@ -64,7 +64,7 @@ migration-status: $(GOOSE)
 
 db-test:
 	psql "$$DATABASE_URL" -f services/api/tests/foundation.sql
-	cd services/api && TEST_DATABASE_URL="$$DATABASE_URL" go test -race ./internal/auth ./internal/masterdata -run Database -count=1
+	cd services/api && TEST_DATABASE_URL="$$DATABASE_URL" go test -race ./internal/auth ./internal/masterdata ./internal/attendance -run Database -count=1
 
 seed:
 	@test "$$SEED_DEVELOPMENT" = 1 || { echo 'Dummy data only: run SEED_DEVELOPMENT=1 make seed on a development DB'; exit 1; }

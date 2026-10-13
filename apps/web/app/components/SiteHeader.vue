@@ -1,6 +1,6 @@
 <script setup lang="ts">
 const route = useRoute()
-const title = computed(() => ({ '/admin': 'Ringkasan', '/admin/users': 'Pengguna & peran', '/admin/audit': 'Audit aktivitas', '/admin/academics': 'Data akademik', '/admin/students': 'Siswa' }[route.path] ?? (route.path.startsWith('/admin/students/') ? 'Detail siswa' : 'Panel sekolah')))
+const title = computed(() => ({ '/admin': 'Ringkasan', '/admin/users': 'Pengguna & peran', '/admin/audit': 'Audit aktivitas', '/admin/academics': 'Data akademik', '/admin/students': 'Siswa', '/admin/schedules': 'Jadwal & kalender', '/admin/attendance': 'Sesi absensi', '/admin/corrections': 'Koreksi absensi' }[route.path] ?? (route.path.startsWith('/admin/students/') ? 'Detail siswa' : route.path.startsWith('/admin/attendance/') ? 'Detail sesi' : 'Panel sekolah')))
 </script>
 
 <template>

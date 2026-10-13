@@ -45,3 +45,8 @@ Pencatatan absensi/kiosk direncanakan pada `/absensi`, dengan layout mandiri, ta
 ## Verifikasi
 
 Lint, typecheck, build Nuxt, checks lokal dan build image dijalankan. Browser memeriksa desktop 1440×900 dan mobile 390×844: sidebar, menu akun/logout, breadcrumb, Select peran, Checkbox grants, pencarian/empty state, audit dan overflow tabel. Bukti screenshot lokal di `.tools/dashboard-desktop.png` dan `.tools/dashboard-mobile.png`. Verifikasi terakhir 2026-10-13: logout lewat menu akun berhasil kembali ke login; sidebar mobile menutup setelah navigasi; satu landmark main; lebar scroll halaman sama dengan lebar viewport. Lint/typecheck exit 0, image dashboard berhasil dibangun, dan audit npm tetap 19 temuan upstream (14 high, 5 moderate, 0 critical). Workflow CI remote belum dijalankan.
+
+
+## WP-04
+
+Menu Jadwal & kalender, Sesi absensi dan Koreksi absensi menggunakan layout/preset Vega yang sama. Tahun/kelas/siswa tetap melalui master data. Form jadwal dan pencatatan memakai Sheet/Field/Input/Select/Checkbox/Switch/Textarea; tindakan sesi dan keputusan koreksi memakai Dialog dengan title/description. API menghitung waktu hadir/grace; panel menampilkan not_recorded sebagai Belum tercatat sampai rekonsiliasi. Pencatatan manual panel ini terpisah dari route kiosk /absensi yang baru masuk WP-08. Audit aktivitas menerjemahkan tindakan sesi, kalender, roster, manual dan koreksi ke Bahasa Indonesia.

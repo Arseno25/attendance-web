@@ -1,0 +1,41 @@
+<script setup lang="ts">
+import type { Result } from '~/types/auth'
+import { attendanceLabels, correctionLabels, type Correction } from '~/types/attendance'
+definePageMeta({ layout: 'admin', middleware: ['auth', 'attendance'] })
+const { request, dateTime, canApprove } = useAttendance()
+const auth = useAuth()
+const entries = ref<Correction[]>([])
+const page = ref(1)
+const total = ref(0)
+const status = ref('pending')
+const loading = ref(false)
+const saving = ref(false)
+const message = ref('')
+const success = ref('')
+const selected = ref<Correction | null>(null)
+const decision = ref('approved')
+const reason = ref('')
+async function load() {
+  loading.value = true; message.value = ''
+  try { const result = await request<Result<Correction[]>>('/attendance-corrections', { query: { status: status.value === 'all' ? '' : status.value, page: page.value, page_size: 20 } }); entries.value = result.data; total.value = result.pagination?.total ?? 0 }
+  catch (error) { message.value = apiMessage(error) }
+  finally { loading.value = false }
+}
+function show(item: Correction, value: string) { selected.value = item; decision.value = value; reason.value = ''; message.value = '' }
+async function save() {
+  if (!selected.value) return
+  saving.value = true; message.value = ''
+  try { await request(`/attendance-corrections/${selected.value.id}/decision`, { method: 'POST', body: { decision: decision.value, reason: reason.value } }); selected.value = null; success.value = 'Keputusan tersimpan beserta histori dan audit.'; await load() }
+  catch (error) { message.value = apiMessage(error) }
+  finally { saving.value = false }
+}
+async function filter() { page.value = 1; await load() }
+async function changePage(value: number) { page.value = value; await load() }
+await load()
+</script>
+<template>
+  <div class="flex min-w-0 flex-col gap-6"><div><h1 class="text-2xl font-semibold tracking-tight">Koreksi absensi</h1><p class="mt-2 text-sm text-muted-foreground">Tinjau alasan dan perubahan yang diminta. Pemohon tidak dapat menyetujui koreksinya sendiri.</p></div><Alert v-if="message && !selected" variant="destructive"><AlertDescription>{{ message }}</AlertDescription></Alert><Alert v-if="success" role="status"><AlertDescription>{{ success }}</AlertDescription></Alert>
+    <Card class="min-w-0"><CardHeader class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><CardTitle>Antrean koreksi</CardTitle><CardDescription class="mt-1.5">{{ total }} permintaan sesuai filter.</CardDescription></div><Select v-model="status" :disabled="loading" @update:model-value="filter"><SelectTrigger aria-label="Filter status koreksi" class="w-full sm:w-48"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua status</SelectItem><SelectItem v-for="(label, key) in correctionLabels" :key="key" :value="key">{{ label }}</SelectItem></SelectContent></Select></CardHeader><CardContent class="min-w-0"><div v-if="loading" class="space-y-3" role="status"><span class="sr-only">Memuat koreksi</span><Skeleton v-for="n in 4" :key="n" class="h-10" /></div><Table v-else class="min-w-[900px]"><TableCaption class="sr-only">Permintaan koreksi absensi</TableCaption><TableHeader><TableRow><TableHead>Siswa / sesi</TableHead><TableHead>Perubahan</TableHead><TableHead>Alasan / pemohon</TableHead><TableHead>Status</TableHead><TableHead class="text-right">Tindakan</TableHead></TableRow></TableHeader><TableBody><TableRow v-for="item in entries" :key="item.id"><TableCell class="font-medium">{{ item.full_name }}<div class="text-xs font-normal text-muted-foreground">{{ item.nis }} · {{ item.class_name }} · {{ item.session_date }}</div></TableCell><TableCell>{{ attendanceLabels[item.previous_status] }} → {{ attendanceLabels[item.new_status] }}<div v-if="item.check_in_at" class="text-xs text-muted-foreground">{{ dateTime(item.check_in_at) }}</div></TableCell><TableCell class="max-w-64 whitespace-normal">{{ item.reason }}<div class="mt-1 text-xs text-muted-foreground">{{ item.requester_name }}</div></TableCell><TableCell><Badge :variant="item.status === 'approved' ? 'secondary' : 'outline'">{{ correctionLabels[item.status] }}</Badge><div v-if="item.decision_reason" class="mt-1 max-w-48 whitespace-normal text-xs text-muted-foreground">{{ item.decision_reason }}</div></TableCell><TableCell class="text-right"><div v-if="canApprove && item.status === 'pending' && item.requested_by !== auth.session.value?.user.id" class="flex justify-end gap-1"><Button variant="ghost" size="sm" @click="show(item, 'approved')">Setujui</Button><Button variant="ghost" size="sm" @click="show(item, 'rejected')">Tolak</Button></div><span v-else-if="item.status === 'pending' && item.requested_by === auth.session.value?.user.id" class="text-xs text-muted-foreground">Menunggu petugas lain</span><Button as-child variant="ghost" size="sm"><NuxtLink :to="`/admin/attendance/${item.session_id}`">Lihat sesi</NuxtLink></Button></TableCell></TableRow><TableRow v-if="!entries.length"><TableCell colspan="5"><Empty><EmptyHeader><EmptyTitle>Tidak ada permintaan sesuai filter</EmptyTitle><EmptyDescription>Ajukan koreksi dari detail sesi absensi bila ada catatan yang perlu diperbaiki.</EmptyDescription></EmptyHeader></Empty></TableCell></TableRow></TableBody></Table></CardContent><CardFooter class="block border-t"><TablePagination :page="page" :total="total" label="koreksi" :disabled="loading" @update:page="changePage" /></CardFooter></Card>
+    <Dialog :open="!!selected" @update:open="value => { if (!value && !saving) selected = null }"><DialogContent><DialogHeader><DialogTitle>{{ decision === 'approved' ? 'Setujui' : 'Tolak' }} koreksi?</DialogTitle><DialogDescription>{{ selected?.full_name }}: {{ attendanceLabels[selected?.previous_status ?? ''] }} → {{ attendanceLabels[selected?.new_status ?? ''] }}. {{ decision === 'approved' ? 'Persetujuan memperbarui catatan dan menyimpan event perubahan.' : 'Penolakan mempertahankan catatan yang sudah ada.' }}</DialogDescription></DialogHeader><form class="space-y-4" @submit.prevent="save"><Alert v-if="message" variant="destructive"><AlertDescription>{{ message }}</AlertDescription></Alert><Field><FieldLabel for="decision-reason">Alasan keputusan</FieldLabel><Textarea id="decision-reason" v-model="reason" required maxlength="500" :disabled="saving" /></Field><DialogFooter><Button type="button" variant="outline" :disabled="saving" @click="selected = null">Batal</Button><Button type="submit" :disabled="saving"><Spinner v-if="saving" />{{ decision === 'approved' ? 'Setujui koreksi' : 'Tolak koreksi' }}</Button></DialogFooter></form></DialogContent></Dialog>
+  </div>
+</template>

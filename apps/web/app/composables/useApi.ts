@@ -3,7 +3,7 @@ import type { Session } from '~/types/auth'
 export function useApi() {
   const config = useRuntimeConfig()
   const session = useState<Session | null>('auth-session', () => null)
-  return async <T>(path: string, options: { method?: 'GET' | 'POST' | 'PATCH', body?: object, query?: Record<string, string | number> } = {}) => {
+  return async <T>(path: string, options: { method?: 'GET' | 'POST' | 'PATCH' | 'PUT', body?: object, query?: Record<string, string | number> } = {}) => {
     try {
       return await $fetch<T>(`${config.public.apiBase}${path}`, {
         ...options,

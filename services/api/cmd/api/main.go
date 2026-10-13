@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"attendance.local/api/internal/attendance"
 	"attendance.local/api/internal/auth"
 	"attendance.local/api/internal/masterdata"
 	"attendance.local/api/internal/platform/config"
@@ -41,11 +42,14 @@ func run() error {
 	if err != nil {
 		return errors.New("authentication initialization failed")
 	}
+	attendanceService := attendance.New(pool, cfg.SchoolID, authService)
+	go attendanceService.Run(ctx)
 	server := &http.Server{
 		Addr: cfg.Address,
 		Handler: httpserver.NewHandler(pool.Ping, cfg.WebOrigin, func(m *http.ServeMux) {
 			authService.Register(m)
 			masterdata.New(pool, cfg.SchoolID, authService).Register(m)
+			attendanceService.Register(m)
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,

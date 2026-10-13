@@ -10,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"net/http"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -49,60 +48,11 @@ type scope struct {
 }
 
 func (s *Service) begin(w http.ResponseWriter, r *http.Request, permission string, write bool) (*scope, bool) {
-	actor, ok := s.auth.Authenticate(w, r, write)
+	tx, user, ok := s.auth.BeginAuthorized(w, r, permission, write)
 	if !ok {
 		return nil, false
 	}
-	tx, err := s.pool.Begin(r.Context())
-	if err != nil {
-		dbError(w, err)
-		return nil, false
-	}
-	fail := func() { _ = tx.Rollback(context.Background()) }
-	lock := "FOR SHARE"
-	if write {
-		lock = "FOR UPDATE"
-	}
-	var active bool
-	err = tx.QueryRow(r.Context(), "SELECT is_active FROM schools WHERE id=$1 "+lock, s.schoolID).Scan(&active)
-	if err == nil && active {
-		err = tx.QueryRow(r.Context(), "SELECT role,is_active FROM users WHERE school_id=$1 AND id=$2 FOR SHARE", s.schoolID, actor.ID).Scan(&actor.Role, &actor.Active)
-	}
-	if err != nil {
-		fail()
-		dbError(w, err)
-		return nil, false
-	}
-	if !active || !actor.Active || !slices.Contains(actor.Permissions(), permission) || (write && actor.Role != "admin" && actor.Role != "super_admin") {
-		fail()
-		httpresponse.Error(w, 403, "FORBIDDEN", "Anda tidak memiliki izin untuk data ini")
-		return nil, false
-	}
-	sc := &scope{tx: tx, user: actor, classes: []string{}}
-	if actor.Role == "teacher" {
-		rows, err := tx.Query(r.Context(), `SELECT DISTINCT a.class_id::text FROM teacher_assignments a JOIN classes c ON c.school_id=a.school_id AND c.id=a.class_id JOIN academic_years y ON y.school_id=c.school_id AND y.id=c.academic_year_id WHERE a.school_id=$1 AND a.teacher_id=$2 AND a.is_active AND c.is_active AND y.is_active AND a.starts_at<=statement_timestamp() AND a.ends_at>statement_timestamp()`, s.schoolID, actor.ID)
-		if err != nil {
-			fail()
-			dbError(w, err)
-			return nil, false
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var id string
-			if err = rows.Scan(&id); err != nil {
-				fail()
-				dbError(w, err)
-				return nil, false
-			}
-			sc.classes = append(sc.classes, id)
-		}
-		if err = rows.Err(); err != nil {
-			fail()
-			dbError(w, err)
-			return nil, false
-		}
-	}
-	return sc, true
+	return &scope{tx: tx, user: user, classes: user.ClassIDs}, true
 }
 func rows(ctx context.Context, tx pgx.Tx, query string, args ...any) ([]map[string]any, error) {
 	r, err := tx.Query(ctx, query, args...)
