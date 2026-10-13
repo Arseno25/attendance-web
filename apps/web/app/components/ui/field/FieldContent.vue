@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { HTMLAttributes } from 'vue'
-import { cn } from '@/lib/utils'
+import type { HTMLAttributes } from "vue"
+import { cn } from "@/lib/utils"
 
 const props = defineProps<{
-  class?: HTMLAttributes['class']
+  class?: HTMLAttributes["class"]
 }>()
 </script>
 
@@ -11,7 +11,7 @@ const props = defineProps<{
   <div
     data-slot="field-content"
     :class="cn(
-      'gap-1 group/field-content flex flex-1 flex-col leading-snug',
+      'group/field-content flex flex-1 flex-col gap-1.5 leading-snug',
       props.class,
     )"
   >

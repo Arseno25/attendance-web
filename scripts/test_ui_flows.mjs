@@ -9,6 +9,38 @@ const requireWeb = createRequire(resolve('apps/web/package.json'))
 const { parse, compileScript } = requireWeb('@vue/compiler-sfc')
 const { ref, nextTick, watch } = requireWeb('vue')
 const flush = async () => { await nextTick(); await new Promise(r => setImmediate(r)); await nextTick() }
+
+test('status badges distinguish attendance, review and revoked states', async () => {
+  const { statusVariant } = await import('../apps/web/app/lib/status.ts')
+  assert.notEqual(statusVariant('present'), statusVariant('late'))
+  assert.notEqual(statusVariant('approved'), statusVariant('rejected'))
+  assert.equal(statusVariant('not_recorded'), 'secondary')
+  assert.equal(statusVariant('unknown'), 'secondary')
+})
+
+test('dialog focus returns to a row trigger and respects removed targets or cancelled events', async () => {
+  const { dialogFocus } = await import('../apps/web/app/lib/dialogFocus.ts')
+  const previousDocument = globalThis.document
+  let focused = 0
+  const trigger = { isConnected: true, focus: () => focused++ }
+  globalThis.document = {
+    activeElement: { closest: () => ({ getAttribute: () => 'row-trigger' }) },
+    getElementById: id => id === 'row-trigger' ? trigger : null,
+  }
+  try {
+    const focus = dialogFocus(); focus.onOpenAutoFocus()
+    const event = new Event('close', { cancelable: true }); focus.onCloseAutoFocus(event)
+    assert.equal(focused, 1); assert.equal(event.defaultPrevented, true)
+    const cancelled = new Event('close', { cancelable: true }); cancelled.preventDefault(); focus.onCloseAutoFocus(cancelled)
+    trigger.isConnected = false; focus.onCloseAutoFocus(new Event('close', { cancelable: true }))
+    assert.equal(focused, 1)
+    trigger.isConnected = true; globalThis.document.activeElement = { ...trigger, closest: () => null }
+    focus.onOpenAutoFocus(); focus.onCloseAutoFocus(new Event('close', { cancelable: true }))
+    assert.equal(focused, 2)
+  }
+  finally { globalThis.document = previousDocument }
+})
+
 let mounted, unmounted
 function context(request) {
   mounted = undefined; unmounted = undefined

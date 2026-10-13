@@ -31,13 +31,13 @@ async function save() {
 }
 </script>
 <template>
-  <Sheet :open="open" @update:open="value => { if (!saving) open = value }"><SheetContent class="overflow-y-auto sm:max-w-lg"><SheetHeader><SheetTitle>{{ student ? 'Edit siswa' : 'Tambah siswa' }}</SheetTitle><SheetDescription>{{ student ? 'Mengubah status ke nonaktif, lulus, atau pindah sekolah menutup penempatan saat ini.' : 'Daftarkan siswa dan tempatkan pada kelas di tahun ajaran aktif.' }}</SheetDescription></SheetHeader>
-    <form class="space-y-6 px-4 pb-6" @submit.prevent="save"><Alert v-if="message" variant="destructive"><AlertDescription>{{ message }}</AlertDescription></Alert><FieldGroup>
+  <Dialog :open="open" @update:open="value => { if (!saving) open = value }"><DialogContent :show-close-button="!saving" class="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg"><DialogHeader><DialogTitle>{{ student ? 'Edit siswa' : 'Tambah siswa' }}</DialogTitle><DialogDescription>{{ student ? 'Mengubah status ke nonaktif, lulus, atau pindah sekolah menutup penempatan saat ini.' : 'Daftarkan siswa dan tempatkan pada kelas di tahun ajaran aktif.' }}</DialogDescription></DialogHeader>
+    <form class="flex flex-col gap-6" @submit.prevent="save"><Alert v-if="message" variant="destructive"><AlertDescription>{{ message }}</AlertDescription></Alert><FieldGroup>
       <Field><FieldLabel for="student-name">Nama lengkap</FieldLabel><Input id="student-name" v-model="form.full_name" required maxlength="120" :disabled="saving" /></Field>
       <Field><FieldLabel for="student-nis">NIS</FieldLabel><Input id="student-nis" v-model="form.nis" required maxlength="30" :disabled="saving" /><FieldDescription>Nomor induk unik di sekolah ini.</FieldDescription></Field>
       <Field><FieldLabel for="student-nisn">NISN (opsional)</FieldLabel><Input id="student-nisn" v-model="form.nisn" maxlength="32" :disabled="saving" /></Field>
       <Field v-if="!student"><FieldLabel for="student-class">Kelas awal</FieldLabel><Select v-model="form.class_id" :disabled="saving"><SelectTrigger id="student-class" class="w-full"><SelectValue placeholder="Pilih kelas" /></SelectTrigger><SelectContent><SelectItem v-for="item in classes" :key="item.id" :value="item.id">{{ item.name }} · {{ item.academic_year_name }}</SelectItem></SelectContent></Select><FieldDescription v-if="!classes.length">Aktifkan tahun ajaran dan tambahkan kelas terlebih dahulu.</FieldDescription></Field>
       <Field v-if="student"><FieldLabel for="student-status">Status</FieldLabel><Select v-model="form.status" :disabled="saving"><SelectTrigger id="student-status" class="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem v-for="(label, value) in statusLabels" :key="value" :value="value">{{ label }}</SelectItem></SelectContent></Select><FieldDescription>Setelah mengaktifkan kembali siswa, gunakan Penempatan kelas untuk memulai periode baru.</FieldDescription></Field>
-    </FieldGroup><Button class="w-full" type="submit" :disabled="saving || (!student && !form.class_id)"><Spinner v-if="saving" />Simpan siswa</Button></form>
-  </SheetContent></Sheet>
+    </FieldGroup><DialogFooter><Button type="button" variant="outline" :disabled="saving" @click="open = false">Batal</Button><Button type="submit" :disabled="saving || (!student && !form.class_id)"><Spinner v-if="saving" />Simpan siswa</Button></DialogFooter></form>
+  </DialogContent></Dialog>
 </template>

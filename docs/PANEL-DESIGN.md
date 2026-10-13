@@ -1,61 +1,71 @@
 # Panel — shadcn-vue dashboard-01
 
-Arahan pengguna: panel memakai block `dashboard-01`, seluruh kontrol memakai komponen shadcn, dan halaman pencatatan absensi nantinya terpisah dari panel.
+Arahan pengguna: panel menggunakan dashboard-01 dan komponen shadcn-vue sesuai fungsinya, seluruh form Sheet menjadi modal, badge sesuai status, tabel dan tindakan konsisten. Halaman kiosk `/absensi` tetap di luar panel.
 
-## Implementasi
+## Konfigurasi saat ini
 
-- `/admin/**` memakai layout `admin`: `SidebarProvider`, `AppSidebar` variant inset, `SidebarInset`, `SiteHeader` dan breadcrumb. Sidebar responsif memakai Sheet di mobile, menutup setelah navigasi, dan dapat dibuka/tutup melalui trigger atau shortcut bawaan.
-- Komponen block resmi `AppSidebar`, `NavMain`, `NavUser`, `SiteHeader`, `SectionCards` diadaptasi untuk identitas sekolah, sesi aktual dan menu yang tersedia. Users/audit tetap hanya untuk super admin. Logout memakai API dan cookie/session yang sama.
-- Forms memakai Field, Input, Select, Checkbox, Switch; feedback memakai Alert, Skeleton, Spinner, Empty; tabel memakai Table, Badge dan Pagination. UI menggunakan token reka-vega neutral yang dipasang ulang lewat CLI resmi, font Inter lokal dan ikon Lucide yang sudah menjadi dependency project.
-- Data contoh block, menu billing/notification, grafik revenue dan tabel dokumen demo tidak diterbitkan sebagai data sekolah. WP-05 kartu memakai roster sesi, hadir termasuk late, late subset, dan not_recorded aktual; grafik kehadiran menunggu data WP-04/05. Dependencies chart/TanStack demo dibuang karena tidak dipakai pada tahap ini.
-- SidebarInset sudah menyediakan satu landmark main; konten di dalamnya menggunakan div. Form/tabel mempunyai label, caption, loading/error/empty/disabled states. Header, menu dan pagination berbahasa Indonesia. Sidebar offcanvas yang ditutup diberi inert agar tautan tersembunyi tidak menerima fokus keyboard.
+`apps/web/components.json` menggunakan `style: new-york`, Tailwind CSS 4, CSS variables neutral, alias Nuxt `@/components/ui`, font Inter lokal, dan ikon Lucide. Registry Tailwind 4 untuk block dashboard-01 adalah `new-york-v4`. Context7 dan MCP shadcn-vue mengonfirmasi source ini; CLI `view @shadcn/dashboard-01` berhasil setelah preset disamakan. Preset sebelumnya `reka-vega` mengembalikan 404 untuk block tersebut dan menghasilkan ukuran primitive yang berbeda dari contoh block.
 
-## CLI dan dokumentasi
+Seluruh 26 kelompok primitive yang dipakai dipasang ulang dengan CLI resmi 2.8.2 dan `--overwrite`. Ukuran tombol, input, kartu, tabs, sidebar dan dialog mengikuti source new-york. Font diambil dari paket lokal `@fontsource-variable/inter`; import Google Fonts tambahan dari CLI dihapus. CLI menjadi devDependency dengan pin exact; dependencies dan lockfile tetap terkunci. Enam file sisa preset lama yang tidak diekspor/dipanggil dihapus.
 
-Context7: resolve `shadcn-vue`, lalu query `/websites/shadcn-vue` dan `/unovue/shadcn-vue` untuk CLI, sidebar dan controlled form components. Registry artifact dan CLI terbaru diperiksa langsung; versi CLI saat pemasangan adalah `2.8.2`.
+## Shell dan halaman
 
-Command dokumentasi `add dashboard-01` mengembalikan 404 pada registry style `reka-nova`. Source resmi menyediakan block di `new-york-v4`, sehingga dipasang dengan URL registry resmi melalui CLI (didukung dokumentasi CLI), dengan primitives mengikuti konfigurasi proyek saat pemasangan awal:
+- `/admin/**` memakai SidebarProvider, AppSidebar inset, SidebarInset, SiteHeader dan Breadcrumb. Lebar sidebar dan tinggi header mengikuti block resmi; content menggunakan spacing responsif 16/24px. Menu disaring oleh izin dan role yang sudah ada.
+- AppSidebar, NavMain, NavUser, SiteHeader dan SectionCards mengadaptasi block untuk data sekolah aktual. Dashboard/reports memakai roster, hadir, terlambat, belum tercatat, trend tujuh hari dan catatan terbaru. Tabel trend tetap dipakai; tidak menambahkan grafik/data contoh block.
+- Form memakai Field/FieldGroup/Input/Select/Checkbox/Switch/Textarea; feedback memakai Alert/Skeleton/Spinner/Empty. Seluruh tabel memakai Table, header muted, scroll internal, Badge dan TablePagination.
+- TableActions memakai DropdownMenu nonmodal, Button ikon dengan nama aksesibel per baris, DropdownMenuItem dan Separator. Link tetap NuxtLink; tindakan edit/pencabutan/koreksi memakai handler dan batas izin yang sama. Pengguna tidak dapat mengedit akun sendiri dari tabel; koreksi pending tetap memblokir pencatatan.
+- Pagination berbagi komponen yang sama termasuk perangkat, dengan jumlah/halaman di kiri dan kontrol di kanan saat ruang cukup. Tabel panjang bergulir dalam container dan tidak melebar ke halaman.
+- Sidebar mobile menggunakan Sheet internal komponen Sidebar resmi. Navigasi menutup setelah perpindahan route. Offcanvas desktop yang tertutup tetap `inert`; label pembaca layar dan tooltip berbahasa Indonesia dipulihkan sesudah overwrite CLI.
+- `/absensi` memakai layout mandiri dengan komponen yang sama. Kontrak pairing, sesi perangkat, kamera dan gate biometrik tidak diubah oleh pembaruan tampilan ini.
+
+## Modal dan fokus
+
+Sembilan form Sheet di siswa, akademik, jadwal, sesi/roster/manual/checkout/koreksi, penempatan, wali, consent dan perangkat sekarang memakai Dialog. Editor tambah/edit pengguna yang sebelumnya inline juga menjadi Dialog. Setiap modal memiliki Title, Description, form, Footer Batal/Simpan, label isian dan batas tinggi viewport dengan scroll untuk form panjang. Penutupan dan input diblokir selama penyimpanan; error server tetap ditampilkan di modal.
+
+Lima konfirmasi (cabut penugasan, consent, perangkat, tindakan sesi dan keputusan koreksi) memakai AlertDialog dengan Cancel. Submit async memakai Button di form yang dikontrol, sehingga tidak ditutup otomatis sebelum validasi/request berhasil. Alasan wajib, CSRF, audit dan aturan pemohon berbeda dari pemberi keputusan tetap mengikuti implementasi sebelumnya.
+
+DialogContent dan AlertDialogContent mengingat elemen pemicu saat dibuka. Jika pemicunya menu item yang akan hilang, fokus kembali ke tombol menu baris yang stabil. Target yang sudah dilepas dan event yang dicegah caller dihormati. Ini memperbaiki fokus yang sebelumnya jatuh ke body setelah pembatalan modal dari dropdown.
+
+## Warna status
+
+Badge bawaan diperluas melalui variant semantic dan CSS variables dengan pasangan warna light/dark; label status tetap terlihat selain warna.
+
+| Variant | Status |
+|---|---|
+| success / hijau | aktif, hadir, sesi terbuka, disetujui, perangkat/consent berlaku |
+| warning / amber | terlambat, menunggu, perlu review, terjadwal, kedaluwarsa |
+| info / biru | izin, sakit, lulus |
+| destructive / merah | alfa, ditolak, dicabut, persetujuan dicabut, sesi dibatalkan |
+| secondary / netral | nonaktif, sesi ditutup, belum tercatat, pindah, di luar periode, nilai tidak dikenal |
+
+Role dan badge konteks laporan tetap memakai variant netral karena tidak mewakili status operasional. `statusVariant` berbagi mapping di seluruh halaman; kiosk menggunakan variant yang sama untuk status perangkat.
+
+## Dokumentasi dan CLI
+
+Context7 `/unovue/shadcn-vue`: konfigurasi Nuxt/Tailwind 4, CLI, theming, Dialog/AlertDialog, Table/DropdownMenu dan kompatibilitas preset block. MCP shadcn-vue: registries, search/view dashboard-01 dan primitives, contoh source block/Dialog, add command dan audit checklist. CLI dijalankan dari `apps/web` agar tidak membuat konfigurasi ganda di root monorepo.
 
 ```bash
 cd apps/web
-npx shadcn-vue@2.8.2 add https://shadcn-vue.com/r/styles/new-york-v4/dashboard-01.json --yes --overwrite
-npx shadcn-vue@2.8.2 add field pagination switch empty breadcrumb spinner --yes --overwrite
+npx shadcn-vue@2.8.2 info
+npx shadcn-vue@2.8.2 view @shadcn/dashboard-01
+npx shadcn-vue@2.8.2 add \
+  @shadcn/alert @shadcn/alert-dialog @shadcn/avatar @shadcn/badge \
+  @shadcn/breadcrumb @shadcn/button @shadcn/card @shadcn/checkbox \
+  @shadcn/dialog @shadcn/dropdown-menu @shadcn/empty @shadcn/field \
+  @shadcn/input @shadcn/label @shadcn/pagination @shadcn/select \
+  @shadcn/separator @shadcn/sheet @shadcn/sidebar @shadcn/skeleton \
+  @shadcn/spinner @shadcn/switch @shadcn/table @shadcn/tabs \
+  @shadcn/textarea @shadcn/tooltip --yes --overwrite
 ```
 
-CLI pertama memasang dependencies primitives seperti sidebar, sheet, avatar, dropdown-menu, separator, tooltip, skeleton, select dan checkbox. Komponen block dipakai di layout/page yang sudah ada; halaman demo yang dihasilkan CLI pada `apps/web/pages/dashboard` dikeluarkan dari aplikasi Nuxt 4 yang menggunakan `app/pages`. Lockfile dan dependency versions tetap exact; WP-03 menambah paket font Inter untuk penyajian lokal.
+Block sudah dipasang pada fondasi melalui URL registry resmi dan diadaptasi ke route/data sekolah. Pembaruan ini mengambil ulang primitive yang cocok; demo page dan dependency grafik block tidak dipasang ke runtime. Saat overwrite CLI berikutnya, pertahankan semantic badge, pengembalian fokus modal, atribut inert sidebar, label Indonesia dan font lokal yang dijelaskan di atas.
 
-Referensi primer: [blocks resmi](https://shadcn-vue.com/blocks), [CLI](https://shadcn-vue.com/docs/cli), [sidebar](https://shadcn-vue.com/docs/components/sidebar), [source dashboard-01](https://github.com/unovue/shadcn-vue/tree/dev/apps/v4/registry/new-york-v4/blocks/dashboard-01).
+Referensi: [blocks](https://shadcn-vue.com/blocks), [CLI](https://shadcn-vue.com/docs/cli), [theming](https://shadcn-vue.com/docs/theming), [Dialog](https://shadcn-vue.com/docs/components/dialog), [AlertDialog](https://shadcn-vue.com/docs/components/alert-dialog), [source dashboard-01](https://github.com/unovue/shadcn-vue/tree/dev/apps/v4/registry/new-york-v4/blocks/dashboard-01).
 
-## Penyamaan preset WP-03
+## Verifikasi lokal 13 Oktober 2026
 
-Block lama memakai new-york-v4, sementara primitives awal Nova. CLI terbaru memigrasikan nama style lama ke preset baru; untuk menyamakan seluruh ukuran, spacing dan footer kartu, preset resmi Vega diterapkan menyeluruh:
+`make check` lulus: lint/typecheck, Go vet/gofmt/race, Python ruff + 8 tests, bootstrap unittest dan 7 tes regresi UI. Dua regresi baru mencakup pemetaan status dan fokus modal (menu trigger, event dibatalkan, target dilepas). Lint/typecheck/build Nuxt sesudah perbaikan akhir dijalankan kembali sebelum runtime web diperbarui. Detector Impeccable tidak menemukan masalah deterministik; pemeriksaan browser tetap diperlukan.
 
-```bash
-npx shadcn-vue@2.8.2 add tabs dialog textarea --yes --overwrite
-npx shadcn-vue@2.8.2 apply --preset vega --yes
-npm install --save-exact @fontsource-variable/inter@5.3.0
-```
+Browser memeriksa login, dashboard, akademik, siswa/detail, jadwal, perangkat, pengguna, sesi/detail, koreksi, laporan, audit dan import. Modal diuji buka/batal, fokus/keyboard dan label; AlertDialog tindakan sesi diuji tanpa submit. Pada mobile 390px, form jadwal muat dalam viewport dan form izin pengguna yang panjang bergulir dalam modal; navigasi menutup setelah route dipilih. Penyimpanan/pencabutan/consent/import tidak dijalankan ulang melalui browser untuk pembaruan tampilan ini. CI remote dan UAT sekolah belum dijalankan. Audit npm saat pemasangan masih 19 advisory upstream (14 high, 5 moderate), bukan status dependency bersih.
 
-`components.json` sekarang `reka-vega`. Semua primitives berasal dari CLI; tidak ada style Nova yang disengaja. Font CSS diimpor dari paket lokal, tanpa Google Fonts. Font dan neutral tokens konsisten dengan preset. Header mengikuti tinggi 48px; tabel/form memakai spacing komponen yang sama. Akses keyboard sidebar offcanvas dan teks Indonesia dipulihkan setelah overwrite CLI. Kontrol tambah/edit data akademik dan siswa memakai Sheet; konfirmasi pencabutan penugasan memakai Dialog.
-
-## Halaman absensi berikutnya
-
-Pencatatan absensi/kiosk direncanakan pada `/absensi`, dengan layout mandiri, tanpa sidebar atau header admin, pada WP-08/UI-06. Device session, pairing, kamera dan fallback mengikuti rencana induk; perubahan ini belum membuat endpoint kamera atau menampilkan siswa pada kiosk. Daftar, koreksi dan laporan absensi untuk petugas tetap berada di panel dan memakai izin user. Tidak ada link menu menuju fitur yang belum tersedia.
-
-## Verifikasi
-
-Lint, typecheck, build Nuxt, checks lokal dan build image dijalankan. Browser memeriksa desktop 1440×900 dan mobile 390×844: sidebar, menu akun/logout, breadcrumb, Select peran, Checkbox grants, pencarian/empty state, audit dan overflow tabel. Bukti screenshot lokal di `.tools/dashboard-desktop.png` dan `.tools/dashboard-mobile.png`. Verifikasi terakhir 2026-10-13: logout lewat menu akun berhasil kembali ke login; sidebar mobile menutup setelah navigasi; satu landmark main; lebar scroll halaman sama dengan lebar viewport. Lint/typecheck exit 0, image dashboard berhasil dibangun, dan audit npm tetap 19 temuan upstream (14 high, 5 moderate, 0 critical). Workflow CI remote belum dijalankan.
-
-
-## WP-04
-
-Menu Jadwal & kalender, Sesi absensi dan Koreksi absensi menggunakan layout/preset Vega yang sama. Tahun/kelas/siswa tetap melalui master data. Form jadwal dan pencatatan memakai Sheet/Field/Input/Select/Checkbox/Switch/Textarea; tindakan sesi dan keputusan koreksi memakai Dialog dengan title/description. API menghitung waktu hadir/grace; panel menampilkan not_recorded sebagai Belum tercatat sampai rekonsiliasi. Pencatatan manual panel ini terpisah dari route kiosk /absensi yang baru masuk WP-08. Audit aktivitas menerjemahkan tindakan sesi, kalender, roster, manual dan koreksi ke Bahasa Indonesia.
-
-
-## WP-05
-
-Dashboard memiliki filter tanggal/tahun/kelas, kartu KPI, trend tujuh hari yang dapat dibaca sebagai tabel, dan catatan terbaru dengan NIS masked. `/admin/reports` memakai Field/Input/Select untuk tahun/kelas/periode/status/search, server pagination, totals shared dengan dashboard dan CSV, serta link riwayat dari profil siswa. CSV hanya enabled sesudah filter canonical diterapkan; semua hasil filter diekspor dan diaudit. Audit super admin menambah filter date/actor/action/target dan nama pelaku current. Semua primitives tetap Vega; tidak menambah dependency chart pada P0 sesuai plan. Snapshot roster menentukan siswa historis, bukan kelas siswa saat ini.
-
-## Kelanjutan lokal13Oktober2026
-
-Menu perangkat memakai Card/Table/Sheet/Dialog/Field yang sama. Consent ada pada detail siswa untuk officer, dengan actions di bawah description pada mobile. Import CSV ada di daftar siswa, preview dan errors per baris sebelum commit. Kiosk `/absensi` tidak memakai sidebar/admin layout, dengan Field/Select/Button/Card/Alert dan preview video native; tidak menampilkan identitas siswa. Live status dan checkout ada di detail sesi; report/CSV menambahkan waktu pulang tanpa mengubah denominator statistik. Label/filter audit memasukkan guardian/consent/device/import/checkout.
+Log dan screenshot lokal di `.tools/shadcn-*` (ignored), termasuk hasil CLI, check/build, detector dan bukti UI akhir.

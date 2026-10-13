@@ -1,20 +1,21 @@
 <script setup lang="ts">
-import type { HTMLAttributes } from 'vue'
-import { cn } from '@/lib/utils'
+import type { HTMLAttributes } from "vue"
+import { cn } from "@/lib/utils"
 
-const props = withDefaults(defineProps<{
-  class?: HTMLAttributes['class']
-  size?: 'default' | 'sm'
-}>(), {
-  size: 'default',
-})
+const props = defineProps<{
+  class?: HTMLAttributes["class"]
+}>()
 </script>
 
 <template>
   <div
     data-slot="card"
-    :data-size="size"
-    :class="cn('ring-foreground/10 bg-card text-card-foreground gap-6 overflow-hidden rounded-xl py-6 text-sm shadow-xs ring-1 has-[>img:first-child]:pt-0 data-[size=sm]:gap-4 data-[size=sm]:py-4 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl group/card flex flex-col', props.class)"
+    :class="
+      cn(
+        'bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm',
+        props.class,
+      )
+    "
   >
     <slot />
   </div>

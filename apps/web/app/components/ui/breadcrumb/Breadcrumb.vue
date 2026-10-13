@@ -1,9 +1,8 @@
 <script lang="ts" setup>
-import type { HTMLAttributes } from 'vue'
-import { cn } from '@/lib/utils'
+import type { HTMLAttributes } from "vue"
 
 const props = defineProps<{
-  class?: HTMLAttributes['class']
+  class?: HTMLAttributes["class"]
 }>()
 </script>
 
@@ -11,7 +10,7 @@ const props = defineProps<{
   <nav
     aria-label="breadcrumb"
     data-slot="breadcrumb"
-    :class="cn('', props.class)"
+    :class="props.class"
   >
     <slot />
   </nav>
