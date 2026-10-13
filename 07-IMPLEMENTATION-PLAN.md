@@ -2,7 +2,7 @@
 
 Tanggal: 12 Oktober 2026 · Produk: School Face Attendance
 
-Status: rencana untuk review, belum persetujuan implementasi atau pilot. Dokumen ini dibuat dari analisis seluruh berkas project menggunakan pendekatan brainstorming: memahami tujuan, membandingkan pendekatan, menetapkan rekomendasi, memetakan gap, lalu menguraikan pekerjaan dan kriteria penerimaan.
+Status awal 12 Oktober: rencana untuk review. Pengguna kemudian menyetujui implementasi bertahap dan pada 13 Oktober meminta melanjutkan seluruh plan di lokal; pilot dan deployment Coolify belum disetujui/dijalankan. Status aktual ada di [ledger kelanjutan](docs/LOCAL-COMPLETION-PROGRESS.md). Dokumen ini dibuat dari analisis seluruh berkas project menggunakan pendekatan brainstorming: memahami tujuan, membandingkan pendekatan, menetapkan rekomendasi, memetakan gap, lalu menguraikan pekerjaan dan kriteria penerimaan.
 
 ## 1. Tujuan dan kondisi project
 

@@ -83,5 +83,14 @@ func (s *Service) Tick(ctx context.Context) error {
 			}
 		}
 	}
+	for _, query := range []string{
+		`UPDATE import_batches SET payload=NULL WHERE school_id=$1 AND expires_at<=clock_timestamp() AND payload IS NOT NULL`,
+		`DELETE FROM device_sessions WHERE school_id=$1 AND expires_at<=clock_timestamp()`,
+		`DELETE FROM device_pairing_tokens WHERE school_id=$1 AND expires_at<=clock_timestamp()`,
+	} {
+		if _, err = tx.Exec(ctx, query, s.schoolID); err != nil {
+			return err
+		}
+	}
 	return tx.Commit(ctx)
 }

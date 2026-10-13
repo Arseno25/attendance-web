@@ -206,7 +206,7 @@ func (s *Service) decision(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var recordID string
-		err = tx.QueryRow(r.Context(), `INSERT INTO attendance_records(school_id,session_id,student_id,status,check_in_at,reason,actor_id) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(session_id,student_id) DO UPDATE SET status=EXCLUDED.status,check_in_at=EXCLUDED.check_in_at,reason=EXCLUDED.reason,actor_id=EXCLUDED.actor_id,version=attendance_records.version+1,updated_at=now() RETURNING id::text`, s.schoolID, data["session_id"], data["student_id"], data["new_status"], data["check_in_at"], data["reason"], u.ID).Scan(&recordID)
+		err = tx.QueryRow(r.Context(), `INSERT INTO attendance_records(school_id,session_id,student_id,status,check_in_at,reason,actor_id) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(session_id,student_id) DO UPDATE SET status=EXCLUDED.status,check_in_at=EXCLUDED.check_in_at,check_out_at=NULL,reason=EXCLUDED.reason,actor_id=EXCLUDED.actor_id,version=attendance_records.version+1,updated_at=now() RETURNING id::text`, s.schoolID, data["session_id"], data["student_id"], data["new_status"], data["check_in_at"], data["reason"], u.ID).Scan(&recordID)
 		if err != nil {
 			dbError(w, err)
 			return

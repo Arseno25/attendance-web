@@ -55,3 +55,7 @@ Menu Jadwal & kalender, Sesi absensi dan Koreksi absensi menggunakan layout/pres
 ## WP-05
 
 Dashboard memiliki filter tanggal/tahun/kelas, kartu KPI, trend tujuh hari yang dapat dibaca sebagai tabel, dan catatan terbaru dengan NIS masked. `/admin/reports` memakai Field/Input/Select untuk tahun/kelas/periode/status/search, server pagination, totals shared dengan dashboard dan CSV, serta link riwayat dari profil siswa. CSV hanya enabled sesudah filter canonical diterapkan; semua hasil filter diekspor dan diaudit. Audit super admin menambah filter date/actor/action/target dan nama pelaku current. Semua primitives tetap Vega; tidak menambah dependency chart pada P0 sesuai plan. Snapshot roster menentukan siswa historis, bukan kelas siswa saat ini.
+
+## Kelanjutan lokal13Oktober2026
+
+Menu perangkat memakai Card/Table/Sheet/Dialog/Field yang sama. Consent ada pada detail siswa untuk officer, dengan actions di bawah description pada mobile. Import CSV ada di daftar siswa, preview dan errors per baris sebelum commit. Kiosk `/absensi` tidak memakai sidebar/admin layout, dengan Field/Select/Button/Card/Alert dan preview video native; tidak menampilkan identitas siswa. Live status dan checkout ada di detail sesi; report/CSV menambahkan waktu pulang tanpa mengubah denominator statistik. Label/filter audit memasukkan guardian/consent/device/import/checkout.

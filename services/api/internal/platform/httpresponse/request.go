@@ -21,12 +21,15 @@ func Method(w http.ResponseWriter, r *http.Request, allowed ...string) bool {
 }
 
 func Decode(w http.ResponseWriter, r *http.Request, target any) bool {
+	return DecodeLimit(w, r, target, 8<<10)
+}
+func DecodeLimit(w http.ResponseWriter, r *http.Request, target any, limit int64) bool {
 	media, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || media != "application/json" {
 		Error(w, 400, "VALIDATION_ERROR", "Gunakan JSON yang valid")
 		return false
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, 8<<10)
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	d := json.NewDecoder(r.Body)
 	d.DisallowUnknownFields()
 	if err = d.Decode(target); err == nil {

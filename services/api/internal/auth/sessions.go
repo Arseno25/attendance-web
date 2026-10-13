@@ -262,3 +262,14 @@ func (s *Service) Bootstrap(ctx context.Context, email, name, password, schoolNa
 	}
 	return tx.Commit(ctx)
 }
+
+// EndCurrentSession participates in a handoff transaction; clear the cookie only after commit.
+func (s *Service) EndCurrentSession(ctx context.Context, tx pgx.Tx, r *http.Request) error {
+	cookie, err := r.Cookie(s.cookieName)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, "DELETE FROM user_sessions WHERE school_id=$1 AND token_hash=$2", s.schoolID, tokenHash(cookie.Value))
+	return err
+}
+func (s *Service) ClearSessionCookie(w http.ResponseWriter) { s.setCookie(w, "", true) }

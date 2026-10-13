@@ -229,7 +229,7 @@ func (s *Service) transition(w http.ResponseWriter, r *http.Request, action stri
 	s.finish(w, r, tx, u, 200, data, "attendance.sessions."+action, "attendance_session", map[string]any{"reason": in.Reason})
 }
 
-const participantSelect = `SELECT p.student_id::text AS id,p.student_id::text,p.session_id::text,p.class_id::text,p.nis,p.full_name,p.created_at,ar.id::text AS record_id,coalesce(ar.status,'not_recorded') AS status,ar.check_in_at,ar.reason,coalesce(ar.version,0) AS version,EXISTS(SELECT 1 FROM attendance_corrections ac WHERE ac.school_id=p.school_id AND ac.session_id=p.session_id AND ac.student_id=p.student_id AND ac.status='pending') AS correction_pending FROM attendance_session_participants p LEFT JOIN attendance_records ar ON ar.school_id=p.school_id AND ar.session_id=p.session_id AND ar.student_id=p.student_id WHERE p.school_id=$1 AND p.session_id=$2`
+const participantSelect = `SELECT p.student_id::text AS id,p.student_id::text,p.session_id::text,p.class_id::text,p.nis,p.full_name,p.created_at,ar.id::text AS record_id,coalesce(ar.status,'not_recorded') AS status,ar.check_in_at,ar.check_out_at,ar.reason,coalesce(ar.version,0) AS version,EXISTS(SELECT 1 FROM attendance_corrections ac WHERE ac.school_id=p.school_id AND ac.session_id=p.session_id AND ac.student_id=p.student_id AND ac.status='pending') AS correction_pending FROM attendance_session_participants p LEFT JOIN attendance_records ar ON ar.school_id=p.school_id AND ar.session_id=p.session_id AND ar.student_id=p.student_id WHERE p.school_id=$1 AND p.session_id=$2`
 
 func (s *Service) participants(w http.ResponseWriter, r *http.Request) {
 	if !httpresponse.Method(w, r, "GET", "POST") {

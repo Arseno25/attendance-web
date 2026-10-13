@@ -39,6 +39,7 @@ test:
 	cd services/api && go test -race ./...
 	cd services/ai && $(UV) run pytest -q
 	python3 -m unittest discover -s scripts -p 'test_*.py'
+	node --test scripts/test_ui_flows.mjs
 
 check: lint test
 

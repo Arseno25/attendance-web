@@ -16,15 +16,25 @@ import (
 )
 
 type Service struct {
-	pool     *pgxpool.Pool
-	schoolID string
-	auth     *auth.Service
+	pool      *pgxpool.Pool
+	schoolID  string
+	auth      *auth.Service
+	liveSlots chan struct{}
 }
 
 func New(p *pgxpool.Pool, school string, a *auth.Service) *Service {
-	return &Service{p, strings.ToLower(school), a}
+	return &Service{pool: p, schoolID: strings.ToLower(school), auth: a, liveSlots: make(chan struct{}, 32)}
 }
 func (s *Service) Register(m *http.ServeMux) {
+	m.HandleFunc("/api/v1/devices", s.devices)
+	m.HandleFunc("/api/v1/devices/{id}/revoke", s.deviceRevoke)
+	m.HandleFunc("/api/v1/devices/{id}/pairing-token", s.pairingToken)
+	m.HandleFunc("/api/v1/kiosk/session", s.kioskSession)
+	m.HandleFunc("/api/v1/kiosk/session-options", s.kioskOptions)
+	m.HandleFunc("/api/v1/kiosk/me", s.kioskMe)
+	m.HandleFunc("/api/v1/kiosk/heartbeat", s.heartbeat)
+	m.HandleFunc("/api/v1/kiosk/recognitions", s.recognize)
+	m.HandleFunc("/api/v1/ws/attendance", s.live)
 	m.HandleFunc("/api/v1/reports/attendance", s.report)
 	m.HandleFunc("/api/v1/dashboard/summary", s.dashboard)
 	m.HandleFunc("/api/v1/attendance-schedules", s.schedules)
@@ -40,6 +50,7 @@ func (s *Service) Register(m *http.ServeMux) {
 	}
 	m.HandleFunc("/api/v1/attendances", s.records)
 	m.HandleFunc("/api/v1/attendances/manual", s.manual)
+	m.HandleFunc("/api/v1/attendances/check-out", s.checkout)
 	m.HandleFunc("/api/v1/attendance-corrections", s.corrections)
 	m.HandleFunc("/api/v1/attendance-corrections/{id}", s.correction)
 	m.HandleFunc("/api/v1/attendance-corrections/{id}/decision", s.decision)

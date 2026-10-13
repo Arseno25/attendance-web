@@ -153,3 +153,8 @@ func (s *Service) Authenticate(w http.ResponseWriter, r *http.Request, write boo
 	u, _, ok := s.current(w, r, write, "")
 	return u, ok
 }
+
+func (s *Service) SecureCookies() bool { return s.secure }
+func (s *Service) CheckOrigin(w http.ResponseWriter, r *http.Request) bool {
+	return s.writeOrigin(w, r)
+}

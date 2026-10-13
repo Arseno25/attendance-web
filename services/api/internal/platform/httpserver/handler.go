@@ -60,6 +60,11 @@ func NewHandler(ping func(context.Context) error, webOrigin string, register fun
 				return
 			}
 		}
+		// Upgraded sockets have their own bounded deadlines and live authorization checks.
+		if r.URL.Path == "/api/v1/ws/attendance" && r.Method == http.MethodGet {
+			mux.ServeHTTP(w, r)
+			return
+		}
 		ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
 		defer cancel()
 		r = r.WithContext(ctx)

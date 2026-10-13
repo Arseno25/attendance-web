@@ -70,7 +70,7 @@ func (f reportFilter) args(s *Service, u auth.User) []any {
 	return []any{s.schoolID, u.Role, u.ClassIDs, f.From, f.To, f.Class, f.Year, f.Student, f.Session, f.Status, "%" + f.Search + "%"}
 }
 
-const reportSelect = `SELECT se.id::text AS session_id,p.student_id::text AS student_id,p.class_id::text AS class_id,c.name AS class_name,c.academic_year_id::text AS academic_year_id,y.name AS academic_year_name,se.name AS session_name,se.date::text AS date,se.timezone,se.status AS session_status,p.nis,p.full_name,coalesce(ar.status,'not_recorded') AS status,ar.check_in_at,ar.reason,coalesce(ar.updated_at,p.created_at) AS updated_at
+const reportSelect = `SELECT se.id::text AS session_id,p.student_id::text AS student_id,p.class_id::text AS class_id,c.name AS class_name,c.academic_year_id::text AS academic_year_id,y.name AS academic_year_name,se.name AS session_name,se.date::text AS date,se.timezone,se.status AS session_status,p.nis,p.full_name,coalesce(ar.status,'not_recorded') AS status,ar.check_in_at,ar.check_out_at,ar.reason,coalesce(ar.updated_at,p.created_at) AS updated_at
  FROM attendance_session_participants p JOIN attendance_sessions se ON se.school_id=p.school_id AND se.id=p.session_id JOIN classes c ON c.school_id=p.school_id AND c.id=p.class_id JOIN academic_years y ON y.school_id=c.school_id AND y.id=c.academic_year_id LEFT JOIN attendance_records ar ON ar.school_id=p.school_id AND ar.session_id=p.session_id AND ar.student_id=p.student_id
  WHERE p.school_id=$1 AND ($2::text!='teacher' OR p.class_id=ANY($3::uuid[])) AND se.status IN('open','closed') AND se.date BETWEEN $4::date AND $5::date AND ($6='' OR p.class_id=NULLIF($6,'')::uuid) AND ($7='' OR c.academic_year_id=NULLIF($7,'')::uuid) AND ($8='' OR p.student_id=NULLIF($8,'')::uuid) AND ($9='' OR se.id=NULLIF($9,'')::uuid) AND ($10='' OR coalesce(ar.status,'not_recorded')=$10) AND (p.nis ILIKE $11 OR p.full_name ILIKE $11)`
 const reportTotals = `count(*) AS roster_total,count(DISTINCT student_id) AS students_total,count(DISTINCT session_id) AS sessions_total,count(*) FILTER(WHERE status='present') AS present,count(*) FILTER(WHERE status='late') AS late,count(*) FILTER(WHERE status IN('present','late')) AS attended,count(*) FILTER(WHERE status='excused') AS excused,count(*) FILTER(WHERE status='sick') AS sick,count(*) FILTER(WHERE status='absent') AS absent,count(*) FILTER(WHERE status='not_recorded') AS not_recorded,count(*) FILTER(WHERE status='pending_review') AS pending_review,count(*) FILTER(WHERE status!='not_recorded') AS recorded,coalesce(round(100.0*count(*) FILTER(WHERE status IN('present','late'))/nullif(count(*),0),1),0)::float8 AS attendance_rate`
@@ -204,7 +204,7 @@ func (s *Service) exportReport(w http.ResponseWriter, r *http.Request, tx pgx.Tx
 		}
 		buffer.WriteString(strings.Join(line, ",") + "\r\n")
 	}
-	writeRow([]string{"Tanggal", "Tahun ajaran", "Kelas", "Sesi", "NIS", "Nama siswa", "Status", "Waktu hadir lokal", "Zona waktu", "Alasan", "Status sesi"})
+	writeRow([]string{"Tanggal", "Tahun ajaran", "Kelas", "Sesi", "NIS", "Nama siswa", "Status", "Waktu hadir lokal", "Zona waktu", "Alasan", "Status sesi", "Waktu pulang lokal"})
 	labels := map[string]string{"present": "Hadir", "late": "Terlambat", "excused": "Izin", "sick": "Sakit", "absent": "Alfa", "not_recorded": "Belum tercatat", "pending_review": "Perlu review"}
 	zones := map[string]*time.Location{}
 	for _, item := range data {
@@ -223,8 +223,17 @@ func (s *Service) exportReport(w http.ResponseWriter, r *http.Request, tx pgx.Tx
 			}
 			checkin = at.In(zone).Format("2006-01-02 15:04:05")
 		}
+		checkout := ""
+		if at, ok := item["check_out_at"].(time.Time); ok {
+			zone := zones[item["timezone"].(string)]
+			if zone == nil {
+				dbError(w, fmt.Errorf("missing checkin zone"))
+				return
+			}
+			checkout = at.In(zone).Format("2006-01-02 15:04:05")
+		}
 		reason, _ := item["reason"].(string)
-		line := []string{item["date"].(string), item["academic_year_name"].(string), item["class_name"].(string), item["session_name"].(string), item["nis"].(string), item["full_name"].(string), labels[item["status"].(string)], checkin, item["timezone"].(string), reason, item["session_status"].(string)}
+		line := []string{item["date"].(string), item["academic_year_name"].(string), item["class_name"].(string), item["session_name"].(string), item["nis"].(string), item["full_name"].(string), labels[item["status"].(string)], checkin, item["timezone"].(string), reason, item["session_status"].(string), checkout}
 		writeRow(line)
 	}
 	auditFilter := f

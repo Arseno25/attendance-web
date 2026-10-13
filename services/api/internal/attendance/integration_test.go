@@ -11,6 +11,8 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"github.com/gorilla/websocket"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -147,6 +149,45 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 	student := expect(call("POST", "/students", map[string]any{"nis": "001", "full_name": "=SUM(1,2)", "class_id": class["id"]}), 201)["data"].(map[string]any)
 	student2 := expect(call("POST", "/students", map[string]any{"nis": "002", "full_name": "Student;=1+2", "class_id": class["id"]}), 201)["data"].(map[string]any)
 	student3 := expect(call("POST", "/students", map[string]any{"nis": "003", "full_name": "Student three", "class_id": class["id"]}), 201)["data"].(map[string]any)
+	dry := expect(call("POST", "/students/imports/dry-run", map[string]any{"class_id": class2["id"], "csv": "nis,nisn,full_name\nIMPORT-1,,Imported Student\nIMPORT-2,,Another Student\n"}), 201)["data"].(map[string]any)
+	batchID := dry["id"].(string)
+	expect(call("POST", "/students/imports/"+batchID+"/commit", map[string]any{"hash": "wrong"}), 409)
+	committed := expect(call("POST", "/students/imports/"+batchID+"/commit", map[string]any{"hash": dry["hash"]}), 200)["data"].(map[string]any)
+	if committed["imported"] != float64(2) {
+		t.Fatal(committed)
+	}
+	expect(call("POST", "/students/imports/"+batchID+"/commit", map[string]any{"hash": dry["hash"]}), 200)
+	invalidBatch := expect(call("POST", "/students/imports/dry-run", map[string]any{"class_id": class2["id"], "csv": "nis,nisn,full_name\n001,,Existing Student\nNEW-FAILED,,Rollback Student\n"}), 201)["data"].(map[string]any)
+	if invalidBatch["valid"] != false {
+		t.Fatal("duplicate accepted", invalidBatch)
+	}
+	expect(call("POST", "/students/imports/"+invalidBatch["id"].(string)+"/commit", map[string]any{"hash": invalidBatch["hash"]}), 409)
+	var rolledBack int
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM students WHERE nis='NEW-FAILED'`).Scan(&rolledBack); err != nil || rolledBack != 0 {
+		t.Fatal("invalid import wrote data", rolledBack, err)
+	}
+	expect(call("POST", "/users", map[string]any{"email": "deviceonly@example.test", "full_name": "Device only", "role": "operator", "password": password}), 201)
+	login("deviceonly@example.test")
+	healthOptions := expect(call("GET", "/kiosk/session-options", nil), 200)["data"].([]any)
+	if len(healthOptions) != 0 {
+		t.Fatal("scheduled/closed sessions exposed", healthOptions)
+	}
+	login("owner@example.test")
+	// Lifecycle must be usable before any biometric model is enabled.
+	guardian := expect(call("POST", "/students/"+student["id"].(string)+"/guardians", map[string]any{"full_name": "Guardian", "relationship": "parent", "verification_ref": "PRIVATE-REF-001"}), 201)["data"].(map[string]any)
+	consent := expect(call("POST", "/students/"+student["id"].(string)+"/consents", map[string]any{"guardian_id": guardian["id"], "policy_version": "v1", "evidence_ref": "PRIVATE-CONSENT-001", "valid_until": time.Now().Add(24 * time.Hour).UTC().Format(time.RFC3339)}), 201)["data"].(map[string]any)
+	expect(call("POST", "/students/"+student["id"].(string)+"/consents", map[string]any{"guardian_id": guardian["id"], "policy_version": "v1", "evidence_ref": "duplicate", "valid_until": time.Now().Add(24 * time.Hour).UTC().Format(time.RFC3339)}), 409)
+	expect(call("POST", "/students/"+student["id"].(string)+"/enrollments", nil), 503)
+	expect(call("POST", "/consents/"+consent["id"].(string)+"/withdraw", map[string]string{"reason": "Withdrawn by guardian"}), 200)
+	face := expect(call("GET", "/students/"+student["id"].(string)+"/face-status", nil), 200)["data"].(map[string]any)
+	if face["consent_eligible"] != false || face["recognition_enabled"] != false {
+		t.Fatal(face)
+	}
+	expect(call("POST", "/consents/"+consent["id"].(string)+"/withdraw", map[string]string{"reason": "Retry"}), 200)
+	device := expect(call("POST", "/devices", map[string]string{"name": "Gate", "location": "Entrance"}), 201)["data"].(map[string]any)
+	expect(call("GET", "/devices", nil), 200)
+	expect(call("POST", "/devices/"+device["id"].(string)+"/revoke", map[string]string{"reason": "Retired"}), 200)
+	expect(call("POST", "/devices/"+device["id"].(string)+"/pairing-token", nil), 409)
 	teacher := expect(call("POST", "/users", map[string]any{"email": "teacher@example.test", "full_name": "Teacher", "role": "teacher", "password": password}), 201)["data"].(map[string]any)
 	assignment := expect(call("POST", "/teacher-assignments", map[string]any{"teacher_id": teacher["id"], "class_id": class["id"]}), 201)["data"].(map[string]any)
 	operator := expect(call("POST", "/users", map[string]any{"email": "operator@example.test", "full_name": "Operator", "role": "operator", "password": password, "grants": []string{"attendance.manual"}}), 201)["data"].(map[string]any)
@@ -168,6 +209,43 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 	sessionID := se["id"].(string)
 	expect(call("POST", "/attendance-sessions", map[string]any{"schedule_id": scheduleID, "date": day}), 409)
 	expect(call("POST", "/attendance-sessions/"+sessionID+"/open", map[string]any{"reason": "Start"}), 200)
+	activeDevice := expect(call("POST", "/devices", map[string]string{"name": "Gate 2", "location": "Side"}), 201)["data"].(map[string]any)
+	pairing := expect(call("POST", "/devices/"+activeDevice["id"].(string)+"/pairing-token", nil), 201)["data"].(map[string]any)
+	pairBody := map[string]any{"pairing_token": pairing["pairing_token"], "session_id": sessionID}
+	login("deviceonly@example.test")
+	pairResponse := call("POST", "/kiosk/session", pairBody)
+	paired := expect(pairResponse, 201)["data"].(map[string]any)
+	expect(call("GET", "/auth/me", nil), 401)
+	login("deviceonly@example.test")
+	if paired["device_name"] != "Gate 2" || paired["session_name"] == nil {
+		t.Fatal("pairing labels missing", paired)
+	}
+	login("deviceonly@example.test")
+	options := expect(call("GET", "/kiosk/session-options", nil), 200)["data"].([]any)
+	if len(options) != 1 || options[0].(map[string]any)["id"] != sessionID {
+		t.Fatal("open options wrong", options)
+	}
+	login("owner@example.test")
+	deviceCookie := pairResponse.Result().Cookies()[0]
+	deviceCall := func(path string, token string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest("POST", "/api/v1"+path, nil)
+		r.Header.Set("Origin", "http://localhost:3000")
+		r.Header.Set("X-CSRF-Token", token)
+		r.AddCookie(deviceCookie)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w
+	}
+	expect(call("POST", "/kiosk/session", pairBody), 401)
+	expect(deviceCall("/kiosk/heartbeat", "wrong"), 403)
+	expect(deviceCall("/kiosk/heartbeat", paired["csrf_token"].(string)), 200)
+	expect(deviceCall("/kiosk/recognitions", paired["csrf_token"].(string)), 503)
+	var leaked int
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE metadata::text LIKE '%PRIVATE-%' OR metadata::text LIKE '%'||$1||'%'`, pairing["pairing_token"]).Scan(&leaked); err != nil || leaked != 0 {
+		t.Fatalf("sensitive audit leak %d %v", leaked, err)
+	}
+	expect(call("POST", "/devices/"+activeDevice["id"].(string)+"/revoke", map[string]string{"reason": "Compromised"}), 200)
+	expect(deviceCall("/kiosk/heartbeat", paired["csrf_token"].(string)), 401)
 	for _, st := range []map[string]any{student, student2, student3} {
 		expect(call("POST", "/attendance-sessions/"+sessionID+"/participants", map[string]any{"student_id": st["id"], "reason": "Administrative roster addition"}), 201)
 	}
@@ -244,6 +322,11 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 	manual2 := map[string]any{"event_id": "44444444-4444-4444-8444-444444444444", "session_id": sessionID, "student_id": student2["id"], "status": "sick", "reason": "Verified sickness"}
 	expect(call("POST", "/attendances/manual", manual2), 201)
 	login("teacher@example.test")
+	expect(call("GET", "/students/"+student["id"].(string)+"/guardians", nil), 403)
+	expect(call("GET", "/students/"+student["id"].(string)+"/consents", nil), 403)
+	expect(call("POST", "/devices", map[string]string{"name": "Denied", "location": "Denied"}), 403)
+	expect(call("POST", "/kiosk/session", pairBody), 403)
+
 	expect(call("GET", "/attendance-sessions/"+sessionID, nil), 200)
 	expect(call("POST", "/attendances/manual", manual), 403)
 	expect(call("POST", "/students/"+student["id"].(string)+"/placements", map[string]any{"class_id": class2["id"], "reason": "Denied"}), 403)
@@ -558,6 +641,72 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 	}
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE action='reports.attendance.exported'`).Scan(&auditAfter); err != nil || auditBefore != auditAfter {
 		t.Fatal("failed CSV audited as successful", auditBefore, auditAfter, err)
+	}
+
+	login("owner@example.test")
+	var outSession string
+	err = pool.QueryRow(ctx, `INSERT INTO attendance_sessions(school_id,schedule_id,class_id,date,name,timezone,starts_at,late_after,closes_at,status,opened_at) SELECT school_id,schedule_id,class_id,date+200,'Checkout fixture',timezone,clock_timestamp()-interval '1 hour',clock_timestamp()+interval '1 minute',clock_timestamp()+interval '1 hour','open',clock_timestamp() FROM attendance_sessions WHERE id=$1 RETURNING id::text`, sessionID).Scan(&outSession)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = pool.Exec(ctx, `INSERT INTO attendance_session_participants(school_id,session_id,student_id,class_id,enrollment_id,nis,full_name) SELECT school_id,$2,student_id,class_id,enrollment_id,nis,full_name FROM attendance_session_participants WHERE session_id=$1 AND student_id=$3`, sessionID, outSession, student2["id"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	outBody := map[string]any{"event_id": "99999999-9999-4999-8999-999999999999", "session_id": outSession, "student_id": student2["id"], "reason": "Verified departure"}
+	expect(call("POST", "/attendances/check-out", outBody), 409)
+	expect(call("POST", "/attendances/manual", map[string]any{"event_id": "88888888-8888-4888-8888-888888888888", "session_id": outSession, "student_id": student2["id"], "status": "present", "reason": "Checkin"}), 201)
+	out := expect(call("POST", "/attendances/check-out", outBody), 201)["data"].(map[string]any)
+	if out["record"].(map[string]any)["check_out_at"] == nil {
+		t.Fatal(out)
+	}
+	expect(call("POST", "/attendances/check-out", outBody), 201)
+	outBody["reason"] = "Different reason"
+	expect(call("POST", "/attendances/check-out", outBody), 409)
+	var outs int
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM attendance_events e JOIN attendance_records ar ON ar.id=e.record_id WHERE ar.session_id=$1 AND e.event_type='check_out'`, outSession).Scan(&outs); err != nil || outs != 1 {
+		t.Fatal("duplicate checkout", outs, err)
+	}
+
+	wsServer := httptest.NewServer(h)
+	defer wsServer.Close()
+	wsURL := "ws" + strings.TrimPrefix(wsServer.URL, "http") + "/api/v1/ws/attendance?session_id=" + outSession
+	conn, res, err := websocket.DefaultDialer.Dial(wsURL, http.Header{"Origin": {"http://localhost:3000"}, "Cookie": {cookie.String()}})
+	if err != nil {
+		t.Fatalf("websocket: %v status=%v", err, res)
+	}
+	defer conn.Close()
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	var notification map[string]any
+	if err = conn.ReadJSON(&notification); err != nil || notification["event"] != "attendance.changed" {
+		t.Fatalf("initial refetch: %v %v", notification, err)
+	}
+	if strings.Contains(fmt.Sprint(notification), "Imported Student") {
+		t.Fatal("PII in notification")
+	}
+	_, res, err = websocket.DefaultDialer.Dial(wsURL, http.Header{"Origin": {"https://wrong.example"}, "Cookie": {cookie.String()}})
+	if err == nil || res == nil || res.StatusCode != 403 {
+		t.Fatalf("bad origin websocket: %v %v", err, res)
+	}
+	_, err = pool.Exec(ctx, `UPDATE attendance_sessions SET starts_at=clock_timestamp()-interval '1 hour',late_after=clock_timestamp()-interval '30 minutes',closes_at=clock_timestamp()-interval '1 minute',status='closed',closed_at=clock_timestamp() WHERE id=$1`, outSession)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	if err = conn.ReadJSON(&notification); err != nil {
+		t.Fatal("closed notification missing", err)
+	}
+	expect(call("POST", "/attendance-sessions/"+outSession+"/reconcile", map[string]string{"reason": "All present verified"}), 200)
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	if err = conn.ReadJSON(&notification); err != nil {
+		t.Fatal("reconciliation notification missing", err)
+	}
+	if _, err = pool.Exec(ctx, `DELETE FROM user_sessions WHERE school_id=$1`, schoolID); err != nil {
+		t.Fatal(err)
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	if err = conn.ReadJSON(&notification); err == nil {
+		t.Fatal("websocket survived session revocation")
 	}
 
 }

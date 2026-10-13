@@ -6,6 +6,7 @@ WORKDIR /app
 COPY pyproject.toml uv.lock .python-version ./
 RUN uv sync --locked --no-dev
 COPY app ./app
+COPY models/manifest.json ./models/manifest.json
 RUN useradd --system --uid 10001 --create-home app
 USER app
 ENV PATH="/app/.venv/bin:$PATH"

@@ -28,11 +28,18 @@ func New(pool *pgxpool.Pool, schoolID string, a *auth.Service) *Service {
 	return &Service{pool, strings.ToLower(schoolID), a}
 }
 func (s *Service) Register(m *http.ServeMux) {
+	m.HandleFunc("/api/v1/students/{id}/guardians", s.guardians)
+	m.HandleFunc("/api/v1/students/{id}/consents", s.consents)
+	m.HandleFunc("/api/v1/consents/{id}/withdraw", s.withdraw)
+	m.HandleFunc("/api/v1/students/{id}/face-status", s.faceStatus)
+	m.HandleFunc("/api/v1/students/{id}/enrollments", s.faceStatus)
 	m.HandleFunc("/api/v1/academic-years", s.years)
 	m.HandleFunc("/api/v1/academic-years/{id}", s.year)
 	m.HandleFunc("/api/v1/classes", s.classes)
 	m.HandleFunc("/api/v1/classes/{id}", s.class)
 	m.HandleFunc("/api/v1/students", s.students)
+	m.HandleFunc("/api/v1/students/imports/dry-run", s.importDry)
+	m.HandleFunc("/api/v1/students/imports/{id}/commit", s.importCommit)
 	m.HandleFunc("/api/v1/students/{id}", s.student)
 	m.HandleFunc("/api/v1/students/{id}/placements", s.placement)
 	m.HandleFunc("/api/v1/teacher-assignments", s.assignments)

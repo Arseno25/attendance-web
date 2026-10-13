@@ -2,9 +2,9 @@
 
 Fondasi aplikasi absensi satu sekolah. Nuxt 4 untuk web admin/kiosk, Go untuk API dan transaksi, Python FastAPI/ONNX Runtime untuk service AI internal, serta PostgreSQL sebagai resource terpisah.
 
-Status: **WP-02 autentikasi dan UI-01 admin**. Login/logout, sesi server-side, pengelolaan pengguna/peran/izin, serta audit aktivitas sudah tersedia. CRUD siswa, absensi, enrollment dan recognition produksi belum diimplementasikan. Halaman awal menunjukkan koneksi API/DB sebenarnya. AI mengembalikan `503` sampai model, liveness dan evaluasi WP-06 selesai.
+Status lokal: **core WP-01–05 + consent, perangkat/kiosk dan P1**. Master data, manual/koreksi/laporan, wali/consent withdrawal, pairing/revoke/heartbeat, import CSV atomik, checkout dan notifikasi live tersedia. `/absensi` terpisah dari panel dan menyediakan preview kamera lokal. Baseline YuNet/SFace dipasang dengan checksum terpin dan dapat dimuat ONNX CPU. Enrollment/recognition tetap503 sampai dataset hold-out, liveness, kalibrasi dan lifecycle terenkripsi memenuhi G2/G3; tidak ada absensi wajah otomatis yang diklaim siap. Lihat [status seluruh paket](docs/LOCAL-COMPLETION-PROGRESS.md) dan [runbook lokal](docs/LOCAL-RUNBOOK.md).
 
-Panel admin memakai block resmi shadcn-vue `dashboard-01` dengan sidebar inset, menu akun, breadcrumb dan komponen shadcn untuk forms/tables. Halaman pencatatan absensi/kiosk nantinya memakai route/layout mandiri di luar panel. Detail CLI, penyesuaian dan pembagian route ada di [desain panel](docs/PANEL-DESIGN.md).
+Panel admin memakai block resmi shadcn-vue `dashboard-01` dengan sidebar inset, menu akun, breadcrumb dan komponen shadcn untuk forms/tables. Halaman kiosk `/absensi` memakai route/layout mandiri di luar panel. Detail CLI, penyesuaian dan pembagian route ada di [desain panel](docs/PANEL-DESIGN.md).
 
 ## Mulai di lokal
 
@@ -104,7 +104,7 @@ Dokumen kebutuhan tetap berada di root. Lihat [rencana induk](07-IMPLEMENTATION-
 | GET `/internal/v1/health/ready` | 503 `MODEL_NOT_CONFIGURED` pada fondasi |
 | POST `/internal/v1/recognize` | 401 tanpa token sah; 503 `RECOGNITION_DISABLED` dengan token sah |
 
-Go mengembalikan error JSON, generated request ID, exact-origin CORS dan no-store headers. Log Go hanya metadata request, bukan body, URL query atau secret. Production AI mematikan access log Uvicorn; FastAPI dev CLI hanya dipakai untuk data dummy lokal. UI kamera belum diaktifkan.
+Go mengembalikan error JSON, generated request ID, exact-origin CORS dan no-store headers. Log Go hanya metadata request, bukan body, URL query atau secret. Production AI mematikan access log Uvicorn; FastAPI dev CLI hanya dipakai untuk data dummy lokal. Preview kamera lokal tersedia setelah device pairing; belum ada upload atau automatic attendance.
 
 ## Deployment Coolify
 
@@ -117,6 +117,17 @@ Go mengembalikan error JSON, generated request ID, exact-origin CORS dan no-stor
 7. Buat administrator pertama menggunakan `bootstrap` dengan password stdin privat, lalu verifikasi login, origin, cookie Secure dan pengelolaan pengguna. Verifikasi health, runtime config dan backup/restore. Health AI di Compose menggunakan liveness; readiness model masih 503 dan bukan readiness biometrik produksi.
 
 Belum ada deployment ke akun/server Coolify pada tahap ini. Domain, credential production, legal policy, model license dan pilot mengikuti gate pada rencana induk.
+
+## Model dan alur lokal
+
+```bash
+cd services/ai
+../../.tools/uv run python -m app.models --directory ../../.tools/models
+```
+
+Installer memverifikasi ukuran dan SHA256 dari OpenCV Zoo sebelum memuat model. Directory model ignored dan license disimpan bersama model. CLI evaluator `python -m app.evaluation /private/authorized-holdout.json` merangkum trace anonim; tidak menghasilkan persetujuan otomatis.
+
+Panel: `/admin/devices` untuk device, detail siswa untuk officer consent, `/admin/students/import` untuk CSV, detail sesi untuk pulang/live. Pairing memakai token5menit sekali pakai dan cookie device10menit. Import preview15menit, maks500baris. Kontrak endpoint baru [lifecycle.json](docs/openapi/lifecycle.json). Tetap lokal sesuai instruksi; Coolify/pilot belum dijalankan.
 
 ## Audit dependency
 
