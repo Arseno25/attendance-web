@@ -1,0 +1,45 @@
+<script setup lang="ts">
+import { Plus } from '@lucide/vue'
+import type { Result } from '~/types/auth'
+import { statusLabels, type Student, type SchoolClass } from '~/types/master'
+definePageMeta({ layout: 'admin', middleware: ['auth', 'academics'] })
+const { request, options, canWrite } = useMasterData()
+const students = ref<Student[]>([])
+const classes = ref<SchoolClass[]>([])
+const page = ref(1)
+const total = ref(0)
+const search = ref('')
+const classFilter = ref('all')
+const status = ref('all')
+const loading = ref(false)
+const message = ref('')
+const success = ref('')
+const open = ref(false)
+async function load() {
+  loading.value = true; message.value = ''
+  try {
+    const result = await request<Result<Student[]>>('/students', { query: { page: page.value, page_size: 20, search: search.value, class_id: classFilter.value === 'all' ? '' : classFilter.value, status: status.value === 'all' ? '' : status.value } })
+    students.value = result.data; total.value = result.pagination?.total ?? 0
+  }
+  catch (error) { message.value = apiMessage(error) }
+  finally { loading.value = false }
+}
+async function filter() { page.value = 1; await load() }
+async function changePage(value: number) { page.value = value; await load() }
+async function saved() { success.value = 'Siswa berhasil ditambahkan.'; page.value = 1; await load() }
+try { classes.value = await options<SchoolClass>('/classes', { active: 'true' }) }
+catch (error) { message.value = apiMessage(error) }
+await load()
+</script>
+<template>
+  <div class="flex min-w-0 flex-col gap-6">
+    <div class="flex flex-wrap items-start justify-between gap-4"><div><h1 class="text-2xl font-semibold tracking-tight">Siswa</h1><p class="mt-2 text-sm text-muted-foreground">{{ canWrite ? 'Data siswa dan histori penempatan kelas.' : 'Siswa aktif pada kelas yang ditugaskan kepada Anda.' }}</p></div><Button v-if="canWrite" @click="open = true"><Plus />Tambah siswa</Button></div>
+    <Alert v-if="message" variant="destructive"><AlertDescription>{{ message }}</AlertDescription></Alert><Alert v-if="success" role="status"><AlertDescription>{{ success }}</AlertDescription></Alert>
+    <Card class="min-w-0"><CardHeader><CardTitle>Daftar siswa</CardTitle><CardDescription>{{ total }} siswa sesuai filter.</CardDescription></CardHeader><CardContent class="min-w-0 space-y-4">
+      <form class="grid gap-3 sm:grid-cols-2 xl:flex" @submit.prevent="filter"><Label for="student-search" class="sr-only">Cari nama atau NIS</Label><Input id="student-search" v-model="search" class="xl:max-w-sm" placeholder="Cari nama atau NIS" maxlength="100" /><Select v-model="classFilter" :disabled="loading" @update:model-value="filter"><SelectTrigger aria-label="Filter kelas" class="w-full xl:w-48"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua kelas</SelectItem><SelectItem v-for="item in classes" :key="item.id" :value="item.id">{{ item.name }}</SelectItem></SelectContent></Select><Select v-if="canWrite" v-model="status" :disabled="loading" @update:model-value="filter"><SelectTrigger aria-label="Filter status" class="w-full xl:w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua status</SelectItem><SelectItem v-for="(label, value) in statusLabels" :key="value" :value="value">{{ label }}</SelectItem></SelectContent></Select><Button variant="outline" type="submit" :disabled="loading">Cari</Button></form>
+      <div v-if="loading" class="space-y-3" role="status"><span class="sr-only">Memuat siswa</span><Skeleton v-for="n in 5" :key="n" class="h-10" /></div>
+      <Table v-else class="min-w-[640px]"><TableCaption class="sr-only">Daftar siswa sekolah</TableCaption><TableHeader><TableRow><TableHead>Nama siswa</TableHead><TableHead>NIS</TableHead><TableHead>Kelas terakhir</TableHead><TableHead>Status</TableHead><TableHead class="text-right">Tindakan</TableHead></TableRow></TableHeader><TableBody><TableRow v-for="student in students" :key="student.id"><TableCell class="font-medium"><NuxtLink :to="`/admin/students/${student.id}`" class="hover:underline">{{ student.full_name }}</NuxtLink></TableCell><TableCell>{{ student.nis }}</TableCell><TableCell>{{ student.class_name ?? 'Belum ditempatkan' }}<div class="text-xs text-muted-foreground">{{ student.academic_year_name }}</div></TableCell><TableCell><Badge :variant="student.status === 'active' ? 'secondary' : 'outline'">{{ statusLabels[student.status] }}</Badge></TableCell><TableCell class="text-right"><Button as-child variant="ghost" size="sm"><NuxtLink :to="`/admin/students/${student.id}`">Detail</NuxtLink></Button></TableCell></TableRow><TableRow v-if="!students.length"><TableCell colspan="5"><Empty><EmptyHeader><EmptyTitle>Tidak ada siswa sesuai filter</EmptyTitle><EmptyDescription>Coba pencarian lain atau tambahkan siswa pada kelas aktif.</EmptyDescription></EmptyHeader></Empty></TableCell></TableRow></TableBody></Table>
+    </CardContent><CardFooter class="block border-t"><TablePagination :page="page" :total="total" label="siswa" :disabled="loading" @update:page="changePage" /></CardFooter></Card>
+    <StudentEditor v-if="canWrite" v-model:open="open" @saved="saved" />
+  </div>
+</template>

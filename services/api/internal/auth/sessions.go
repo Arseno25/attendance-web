@@ -29,7 +29,14 @@ func (s *Service) grants(ctx context.Context, u *User) error {
 		}
 		u.Grants = append(u.Grants, grant)
 	}
-	return rows.Err()
+	if err = rows.Err(); err != nil {
+		return err
+	}
+	rows.Close()
+	if u.Role == "teacher" {
+		err = s.pool.QueryRow(ctx, `SELECT ARRAY(SELECT DISTINCT a.class_id::text FROM teacher_assignments a JOIN classes c ON c.school_id=a.school_id AND c.id=a.class_id JOIN academic_years y ON y.school_id=c.school_id AND y.id=c.academic_year_id JOIN users t ON t.id=a.teacher_id AND t.school_id=a.school_id WHERE a.school_id=$1 AND a.teacher_id=$2 AND t.is_active AND t.role='teacher' AND a.is_active AND c.is_active AND y.is_active AND a.starts_at<=statement_timestamp() AND a.ends_at>statement_timestamp())`, s.schoolID, u.ID).Scan(&u.ClassIDs)
+	}
+	return err
 }
 
 func (s *Service) session(ctx context.Context, token string) (User, error) {
@@ -37,8 +44,8 @@ func (s *Service) session(ctx context.Context, token string) (User, error) {
 	err := s.pool.QueryRow(ctx, `UPDATE user_sessions AS sess SET last_seen_at=now()
  FROM users u, schools sc WHERE sess.token_hash=$1 AND sess.school_id=$2
  AND u.id=sess.user_id AND u.school_id=sess.school_id AND sc.id=u.school_id
- AND u.is_active AND sc.is_active AND sess.expires_at>now()
- AND sess.last_seen_at>now()-interval '30 minutes'
+ AND u.is_active AND sc.is_active AND sess.expires_at>statement_timestamp()
+ AND sess.last_seen_at>statement_timestamp()-interval '30 minutes'
  RETURNING u.id::text,u.school_id::text,u.email,u.full_name,u.role,u.is_active`, tokenHash(token), s.schoolID).
 		Scan(&u.ID, &u.SchoolID, &u.Email, &u.FullName, &u.Role, &u.Active)
 	if err == nil {
@@ -61,7 +68,7 @@ func (s *Service) sessionData(w http.ResponseWriter, r *http.Request, u User, to
 }
 
 func (s *Service) me(w http.ResponseWriter, r *http.Request) {
-	if !method(w, r, "GET") {
+	if !httpresponse.Method(w, r, "GET") {
 		return
 	}
 	u, token, ok := s.current(w, r, false, "")
@@ -72,7 +79,7 @@ func (s *Service) me(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) login(w http.ResponseWriter, r *http.Request) {
-	if !method(w, r, "POST") || !s.writeOrigin(w, r) {
+	if !httpresponse.Method(w, r, "POST") || !s.writeOrigin(w, r) {
 		return
 	}
 	ip, _, err := net.SplitHostPort(r.RemoteAddr)
@@ -87,7 +94,7 @@ func (s *Service) login(w http.ResponseWriter, r *http.Request) {
 		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
-	if !decode(w, r, &input) {
+	if !httpresponse.Decode(w, r, &input) {
 		return
 	}
 	email, err := normalizeEmail(input.Email)
@@ -161,7 +168,7 @@ func (s *Service) login(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	_, err = tx.Exec(r.Context(), "DELETE FROM user_sessions WHERE school_id=$1 AND (expires_at<=now() OR last_seen_at<=now()-interval '30 minutes')", s.schoolID)
+	_, err = tx.Exec(r.Context(), "DELETE FROM user_sessions WHERE school_id=$1 AND (expires_at<=statement_timestamp() OR last_seen_at<=statement_timestamp()-interval '30 minutes')", s.schoolID)
 	if err == nil {
 		_, err = tx.Exec(r.Context(), "INSERT INTO user_sessions(token_hash,school_id,user_id,expires_at) VALUES($1,$2,$3,now()+interval '8 hours')", tokenHash(token), s.schoolID, u.ID)
 	}
@@ -184,7 +191,7 @@ func (s *Service) login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) logout(w http.ResponseWriter, r *http.Request) {
-	if !method(w, r, "POST") {
+	if !httpresponse.Method(w, r, "POST") {
 		return
 	}
 	u, token, ok := s.current(w, r, true, "")
@@ -214,7 +221,7 @@ func (s *Service) logout(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) Bootstrap(ctx context.Context, email, name, password, schoolName string) error {
 	email, err := normalizeEmail(email)
-	if err != nil || !validName(name) || !validName(schoolName) || !validID(s.schoolID) {
+	if err != nil || !validName(name) || !validName(schoolName) || !httpresponse.ValidID(s.schoolID) {
 		return errors.New("invalid bootstrap input")
 	}
 	hash, err := HashPassword(password)

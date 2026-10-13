@@ -102,7 +102,7 @@ await load()
       </CardContent>
     </Card>
     <Card class="min-w-0 shadow-none">
-      <CardHeader class="gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <CardHeader class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div><CardTitle>Daftar pengguna</CardTitle><CardDescription class="mt-1.5">Cari dan perbarui akun petugas sekolah.</CardDescription></div>
         <form class="flex w-full gap-2 sm:max-w-sm" @submit.prevent="page = 1; load()"><Label for="user-search" class="sr-only">Cari pengguna</Label><Input id="user-search" v-model="search" placeholder="Cari nama atau email" maxlength="100" /><Button variant="outline" type="submit" :disabled="loading">Cari</Button></form>
       </CardHeader>

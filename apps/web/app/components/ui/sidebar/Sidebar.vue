@@ -42,8 +42,8 @@ const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
       }"
     >
       <SheetHeader class="sr-only">
-        <SheetTitle>Navigasi panel</SheetTitle>
-        <SheetDescription>Menu pengelolaan sekolah.</SheetDescription>
+        <SheetTitle>Navigasi</SheetTitle>
+        <SheetDescription>Navigasi panel sekolah.</SheetDescription>
       </SheetHeader>
       <div class="flex h-full w-full flex-col">
         <slot />

@@ -15,8 +15,8 @@ watch(() => route.path, () => setOpenMobile(false))
       <nav aria-label="Navigasi admin">
         <SidebarMenu>
           <SidebarMenuItem v-for="item in items" :key="item.url">
-            <SidebarMenuButton as-child :is-active="route.path === item.url" :tooltip="item.title">
-              <NuxtLink :to="item.url" :aria-current="route.path === item.url ? 'page' : undefined">
+            <SidebarMenuButton as-child :is-active="(route.path === item.url || (item.url !== '/admin' && route.path.startsWith(`${item.url}/`)))" :tooltip="item.title">
+              <NuxtLink :to="item.url" :aria-current="(route.path === item.url || (item.url !== '/admin' && route.path.startsWith(`${item.url}/`))) ? 'page' : undefined">
                 <component :is="item.icon" />
                 <span>{{ item.title }}</span>
               </NuxtLink>

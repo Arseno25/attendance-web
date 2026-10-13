@@ -4,7 +4,7 @@ import SiteHeader from '~/components/SiteHeader.vue'
 </script>
 
 <template>
-  <SidebarProvider :style="{ '--sidebar-width': 'calc(var(--spacing) * 72)', '--header-height': 'calc(var(--spacing) * 14)' }">
+  <SidebarProvider :style="{ '--sidebar-width': 'calc(var(--spacing) * 72)', '--header-height': 'calc(var(--spacing) * 12)' }">
     <AppSidebar variant="inset" />
     <SidebarInset class="min-w-0">
       <SiteHeader />

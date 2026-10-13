@@ -21,7 +21,7 @@ func scanUser(row pgx.Row) (User, error) {
 }
 
 func (s *Service) users(w http.ResponseWriter, r *http.Request) {
-	if !method(w, r, "GET", "POST") {
+	if !httpresponse.Method(w, r, "GET", "POST") {
 		return
 	}
 	permission := "users.read"
@@ -36,7 +36,7 @@ func (s *Service) users(w http.ResponseWriter, r *http.Request) {
 		s.createUser(w, r, actor)
 		return
 	}
-	page, size, ok := pagination(w, r)
+	page, size, ok := httpresponse.Pagination(w, r)
 	if !ok {
 		return
 	}
@@ -113,7 +113,7 @@ func (s *Service) createUser(w http.ResponseWriter, r *http.Request, actor User)
 		Password string   `json:"password"`
 		Grants   []string `json:"grants"`
 	}
-	if !decode(w, r, &input) {
+	if !httpresponse.Decode(w, r, &input) {
 		return
 	}
 	email, err := normalizeEmail(input.Email)
@@ -164,7 +164,7 @@ func (s *Service) createUser(w http.ResponseWriter, r *http.Request, actor User)
 }
 
 func (s *Service) updateUser(w http.ResponseWriter, r *http.Request) {
-	if !method(w, r, "PATCH") {
+	if !httpresponse.Method(w, r, "PATCH") {
 		return
 	}
 	actor, _, ok := s.current(w, r, true, "users.write")
@@ -172,7 +172,7 @@ func (s *Service) updateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
-	if !validID(id) {
+	if !httpresponse.ValidID(id) {
 		httpresponse.Error(w, 404, "NOT_FOUND", "Pengguna tidak ditemukan")
 		return
 	}
@@ -183,7 +183,7 @@ func (s *Service) updateUser(w http.ResponseWriter, r *http.Request) {
 		Active   *bool     `json:"is_active"`
 		Grants   *[]string `json:"grants"`
 	}
-	if !decode(w, r, &input) {
+	if !httpresponse.Decode(w, r, &input) {
 		return
 	}
 	if input.Email == nil && input.FullName == nil && input.Role == nil && input.Active == nil && input.Grants == nil {
@@ -262,31 +262,32 @@ func (s *Service) updateUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) auditLogs(w http.ResponseWriter, r *http.Request) {
-	if !method(w, r, "GET") {
+	if !httpresponse.Method(w, r, "GET") {
 		return
 	}
 	if _, _, ok := s.current(w, r, false, "audit.read"); !ok {
 		return
 	}
-	page, size, ok := pagination(w, r)
+	page, size, ok := httpresponse.Pagination(w, r)
 	if !ok {
 		return
 	}
 	type entry struct {
-		ID         int64     `json:"id"`
-		ActorID    *string   `json:"actor_id"`
-		Action     string    `json:"action"`
-		TargetType string    `json:"target_type"`
-		TargetID   *string   `json:"target_id"`
-		RequestID  string    `json:"request_id"`
-		OccurredAt time.Time `json:"occurred_at"`
+		ID         int64          `json:"id"`
+		ActorID    *string        `json:"actor_id"`
+		Action     string         `json:"action"`
+		TargetType string         `json:"target_type"`
+		TargetID   *string        `json:"target_id"`
+		RequestID  string         `json:"request_id"`
+		OccurredAt time.Time      `json:"occurred_at"`
+		Metadata   map[string]any `json:"metadata"`
 	}
 	var total int
 	if err := s.pool.QueryRow(r.Context(), "SELECT count(*) FROM audit_logs WHERE school_id=$1", s.schoolID).Scan(&total); err != nil {
 		databaseError(w, err)
 		return
 	}
-	rows, err := s.pool.Query(r.Context(), "SELECT id,actor_id::text,action,target_type,target_id::text,request_id,occurred_at FROM audit_logs WHERE school_id=$1 ORDER BY id DESC LIMIT $2 OFFSET $3", s.schoolID, size, (page-1)*size)
+	rows, err := s.pool.Query(r.Context(), "SELECT id,actor_id::text,action,target_type,target_id::text,request_id,occurred_at,metadata FROM audit_logs WHERE school_id=$1 ORDER BY id DESC LIMIT $2 OFFSET $3", s.schoolID, size, (page-1)*size)
 	if err != nil {
 		databaseError(w, err)
 		return
@@ -295,7 +296,7 @@ func (s *Service) auditLogs(w http.ResponseWriter, r *http.Request) {
 	entries := []entry{}
 	for rows.Next() {
 		var e entry
-		if err = rows.Scan(&e.ID, &e.ActorID, &e.Action, &e.TargetType, &e.TargetID, &e.RequestID, &e.OccurredAt); err != nil {
+		if err = rows.Scan(&e.ID, &e.ActorID, &e.Action, &e.TargetType, &e.TargetID, &e.RequestID, &e.OccurredAt, &e.Metadata); err != nil {
 			databaseError(w, err)
 			return
 		}

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"attendance.local/api/internal/auth"
+	"attendance.local/api/internal/masterdata"
 	"attendance.local/api/internal/platform/config"
 	"attendance.local/api/internal/platform/httpserver"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -41,8 +42,11 @@ func run() error {
 		return errors.New("authentication initialization failed")
 	}
 	server := &http.Server{
-		Addr:              cfg.Address,
-		Handler:           httpserver.NewHandler(pool.Ping, cfg.WebOrigin, authService.Register),
+		Addr: cfg.Address,
+		Handler: httpserver.NewHandler(pool.Ping, cfg.WebOrigin, func(m *http.ServeMux) {
+			authService.Register(m)
+			masterdata.New(pool, cfg.SchoolID, authService).Register(m)
+		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,

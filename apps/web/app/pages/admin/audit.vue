@@ -10,7 +10,7 @@ const page = ref(1)
 const total = ref(0)
 const loading = ref(false)
 const message = ref('')
-const labels: Record<string, string> = { 'auth.bootstrap': 'Admin pertama dibuat', 'auth.login': 'Masuk', 'auth.login_failed': 'Percobaan masuk gagal', 'auth.logout': 'Keluar', 'users.created': 'Pengguna dibuat', 'users.updated': 'Pengguna diperbarui' }
+const labels: Record<string, string> = { 'auth.bootstrap': 'Admin pertama dibuat', 'auth.login': 'Masuk', 'auth.login_failed': 'Percobaan masuk gagal', 'auth.logout': 'Keluar', 'users.created': 'Pengguna dibuat', 'users.updated': 'Pengguna diperbarui', 'students.created': 'Siswa ditambahkan', 'students.updated': 'Siswa diperbarui', 'students.placed': 'Siswa ditempatkan', 'academics.years.created': 'Tahun ajaran dibuat', 'academics.years.updated': 'Tahun ajaran diperbarui', 'academics.classes.created': 'Kelas dibuat', 'academics.classes.updated': 'Kelas diperbarui', 'academics.assignments.created': 'Guru ditugaskan', 'academics.assignments.revoked': 'Penugasan dicabut' }
 const date = (value: string) => new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium', timeStyle: 'short', timeZone: auth.session.value?.school.timezone ?? 'Asia/Jakarta' }).format(new Date(value))
 async function load() {
   loading.value = true
@@ -29,10 +29,10 @@ await load()
 
 <template>
   <div class="flex min-w-0 flex-col gap-6">
-    <div><h1 class="text-2xl font-semibold tracking-tight">Audit aktivitas</h1><p class="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">Histori perubahan akun dan sesi, tanpa password atau data biometrik.</p></div>
+    <div><h1 class="text-2xl font-semibold tracking-tight">Audit aktivitas</h1><p class="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">Histori perubahan akun, data akademik, siswa, dan sesi, tanpa password atau data biometrik.</p></div>
     <Alert v-if="message" variant="destructive" role="alert"><AlertDescription>{{ message }}</AlertDescription></Alert>
     <Card class="min-w-0 shadow-none">
-      <CardHeader class="flex-row flex-wrap items-center justify-between gap-4"><div><CardTitle>Aktivitas sekolah</CardTitle><CardDescription class="mt-1.5">Catatan terbaru ditampilkan lebih dahulu.</CardDescription></div><Button variant="outline" :disabled="loading" @click="load"><Spinner v-if="loading" />Muat ulang</Button></CardHeader>
+      <CardHeader class="flex flex-row flex-wrap items-center justify-between gap-4"><div><CardTitle>Aktivitas sekolah</CardTitle><CardDescription class="mt-1.5">Catatan terbaru ditampilkan lebih dahulu.</CardDescription></div><Button variant="outline" :disabled="loading" @click="load"><Spinner v-if="loading" />Muat ulang</Button></CardHeader>
       <CardContent class="min-w-0">
         <div v-if="loading" class="space-y-3" role="status"><span class="sr-only">Memuat aktivitas…</span><Skeleton v-for="row in 5" :key="row" class="h-10 w-full" /></div>
         <Table v-else class="min-w-[760px]">

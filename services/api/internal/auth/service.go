@@ -5,14 +5,10 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
-	"io"
-	"mime"
 	"net/http"
 	"net/mail"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -51,34 +47,6 @@ func (s *Service) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/audit-logs", s.auditLogs)
 }
 
-func method(w http.ResponseWriter, r *http.Request, allowed ...string) bool {
-	if slices.Contains(allowed, r.Method) {
-		return true
-	}
-	w.Header().Set("Allow", strings.Join(allowed, ", "))
-	httpresponse.Error(w, 405, "METHOD_NOT_ALLOWED", "Method tidak diizinkan")
-	return false
-}
-
-func decode(w http.ResponseWriter, r *http.Request, target any) bool {
-	media, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-	if err != nil || media != "application/json" {
-		httpresponse.Error(w, 400, "VALIDATION_ERROR", "Gunakan JSON yang valid")
-		return false
-	}
-	r.Body = http.MaxBytesReader(w, r.Body, 8<<10)
-	d := json.NewDecoder(r.Body)
-	d.DisallowUnknownFields()
-	if err = d.Decode(target); err == nil {
-		err = d.Decode(new(any))
-		if err == io.EOF {
-			return true
-		}
-	}
-	httpresponse.Error(w, 400, "VALIDATION_ERROR", "Request tidak valid atau terlalu besar")
-	return false
-}
-
 func normalizeEmail(email string) (string, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	a, err := mail.ParseAddress(email)
@@ -89,13 +57,7 @@ func normalizeEmail(email string) (string, error) {
 }
 
 func validName(name string) bool { return len(strings.TrimSpace(name)) > 0 && len([]rune(name)) <= 120 }
-func validID(id string) bool {
-	if len(id) != 36 || id[8] != '-' || id[13] != '-' || id[18] != '-' || id[23] != '-' {
-		return false
-	}
-	b, err := hex.DecodeString(strings.ReplaceAll(id, "-", ""))
-	return err == nil && len(b) == 16
-}
+
 func validRole(role string) bool { _, ok := rolePermissions[role]; return ok }
 func validGrants(grants []string) bool {
 	for i, grant := range grants {
@@ -181,29 +143,13 @@ func databaseError(w http.ResponseWriter, err error) {
 	httpresponse.Error(w, 503, "DATABASE_UNAVAILABLE", "Layanan belum tersedia; coba kembali")
 }
 
-func pagination(w http.ResponseWriter, r *http.Request) (int, int, bool) {
-	page, size := 1, 20
-	var err error
-	if q := r.URL.Query().Get("page"); q != "" {
-		page, err = strconv.Atoi(q)
-		if err != nil {
-			page = 0
-		}
-	}
-	if q := r.URL.Query().Get("page_size"); q != "" {
-		size, err = strconv.Atoi(q)
-		if err != nil {
-			size = 0
-		}
-	}
-	if page < 1 || page > 100000 || size < 1 || size > 100 {
-		httpresponse.Error(w, 400, "VALIDATION_ERROR", "Pagination tidak valid")
-		return 0, 0, false
-	}
-	return page, size, true
-}
-
 func audit(ctx context.Context, tx pgx.Tx, school, actor, action, target, id, requestID string) error {
 	_, err := tx.Exec(ctx, `INSERT INTO audit_logs(school_id,actor_id,action,target_type,target_id,request_id) VALUES($1,NULLIF($2,'')::uuid,$3,$4,NULLIF($5,'')::uuid,$6)`, school, actor, action, target, id, requestID)
 	return err
+}
+
+// Authenticate shares the session, Origin and CSRF boundary with domain handlers.
+func (s *Service) Authenticate(w http.ResponseWriter, r *http.Request, write bool) (User, bool) {
+	u, _, ok := s.current(w, r, write, "")
+	return u, ok
 }
