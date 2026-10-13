@@ -1,6 +1,7 @@
 package config
 
 import (
+	"attendance.local/api/internal/platform/aiclient"
 	"encoding/hex"
 	"errors"
 	"net"
@@ -9,10 +10,10 @@ import (
 	"strconv"
 )
 
-type Config struct{ Address, DatabaseURL, WebOrigin, SchoolID string }
+type Config struct{ Address, DatabaseURL, WebOrigin, SchoolID, AIBaseURL, AIServiceToken string }
 
 func Load() (Config, error) {
-	c := Config{Address: os.Getenv("API_ADDRESS"), DatabaseURL: os.Getenv("DATABASE_URL"), WebOrigin: os.Getenv("WEB_ORIGIN"), SchoolID: os.Getenv("SCHOOL_ID")}
+	c := Config{Address: os.Getenv("API_ADDRESS"), DatabaseURL: os.Getenv("DATABASE_URL"), WebOrigin: os.Getenv("WEB_ORIGIN"), SchoolID: os.Getenv("SCHOOL_ID"), AIBaseURL: os.Getenv("AI_BASE_URL"), AIServiceToken: os.Getenv("AI_SERVICE_TOKEN")}
 	if c.Address == "" {
 		c.Address = "127.0.0.1:8080"
 	}
@@ -38,6 +39,11 @@ func Load() (Config, error) {
 	}
 	if _, err := hex.DecodeString(id[:8] + id[9:13] + id[14:18] + id[19:23] + id[24:]); err != nil {
 		return c, errors.New("SCHOOL_ID must be a UUID")
+	}
+	if c.AIBaseURL != "" {
+		if _, err := aiclient.New(c.AIBaseURL, c.AIServiceToken); err != nil {
+			return c, err
+		}
 	}
 	return c, nil
 }

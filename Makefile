@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 -include .env
-export DATABASE_URL API_ADDRESS WEB_ORIGIN SCHOOL_ID NUXT_PUBLIC_API_BASE NUXT_PORT AI_SERVICE_TOKEN POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD
+export DATABASE_URL API_ADDRESS WEB_ORIGIN SCHOOL_ID NUXT_PUBLIC_API_BASE NUXT_PORT AI_BASE_URL AI_MODELS_DIR AI_SERVICE_TOKEN POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD
 
 UV := $(CURDIR)/.tools/uv
 GOOSE := $(CURDIR)/.tools/goose
@@ -30,6 +30,7 @@ setup: tools env
 
 lint:
 	npm --prefix apps/web run lint
+	npm --prefix apps/web run format:check
 	npm --prefix apps/web run typecheck
 	cd services/api && go vet ./... && test -z "$$(gofmt -l cmd internal)"
 	cd services/ai && $(UV) run ruff check . && $(UV) run ruff format --check .
@@ -39,7 +40,7 @@ test:
 	cd services/api && go test -race ./...
 	cd services/ai && $(UV) run pytest -q
 	python3 -m unittest discover -s scripts -p 'test_*.py'
-	node --test scripts/test_ui_flows.mjs
+	node --test scripts/test_*.mjs
 
 check: lint test
 
@@ -65,7 +66,7 @@ migration-status: $(GOOSE)
 
 db-test:
 	psql "$$DATABASE_URL" -f services/api/tests/foundation.sql
-	cd services/api && TEST_DATABASE_URL="$$DATABASE_URL" go test -race ./internal/auth ./internal/masterdata ./internal/attendance -run Database -count=1
+	cd services/api && TEST_DATABASE_URL="$$DATABASE_URL" go test -race ./internal/auth ./internal/masterdata ./internal/attendance -count=1
 
 seed:
 	@test "$$SEED_DEVELOPMENT" = 1 || { echo 'Dummy data only: run SEED_DEVELOPMENT=1 make seed on a development DB'; exit 1; }
@@ -77,6 +78,8 @@ dev-web:
 dev-api:
 	cd services/api && go run ./cmd/api
 
+dev-ai: export AI_TEMPLATE_KEY_BASE64 := $(AI_TEMPLATE_KEY_BASE64)
+dev-ai: export AI_TEMPLATE_KEY_ID := $(AI_TEMPLATE_KEY_ID)
 dev-ai:
 	cd services/ai && $(UV) run fastapi dev --host 127.0.0.1 --port 8001
 

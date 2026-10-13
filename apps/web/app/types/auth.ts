@@ -14,16 +14,19 @@ export interface User {
 export interface Session {
   user: User
   permissions: string[]
-  school: { id: string, name: string, timezone: string }
+  school: { id: string; name: string; timezone: string }
   csrf_token: string
 }
 
 export interface Result<T> {
   data: T
   request_id: string
-  pagination?: { page: number, page_size: number, total: number }
+  pagination?: { page: number; page_size: number; total: number }
 }
 
 export const roleLabels: Record<Role, string> = {
-  super_admin: 'Super admin', admin: 'Admin', teacher: 'Guru', operator: 'Operator',
+  super_admin: 'Super admin',
+  admin: 'Admin',
+  teacher: 'Guru',
+  operator: 'Operator',
 }

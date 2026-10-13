@@ -2,6 +2,7 @@ package masterdata
 
 import (
 	"attendance.local/api/internal/auth"
+	"attendance.local/api/internal/platform/aiclient"
 	"attendance.local/api/internal/platform/httpresponse"
 	"context"
 	"encoding/json"
@@ -22,17 +23,22 @@ type Service struct {
 	pool     *pgxpool.Pool
 	schoolID string
 	auth     *auth.Service
+	ai       *aiclient.Client
 }
 
 func New(pool *pgxpool.Pool, schoolID string, a *auth.Service) *Service {
-	return &Service{pool, strings.ToLower(schoolID), a}
+	return &Service{pool: pool, schoolID: strings.ToLower(schoolID), auth: a}
 }
+func (s *Service) SetAI(client *aiclient.Client) { s.ai = client }
 func (s *Service) Register(m *http.ServeMux) {
 	m.HandleFunc("/api/v1/students/{id}/guardians", s.guardians)
 	m.HandleFunc("/api/v1/students/{id}/consents", s.consents)
 	m.HandleFunc("/api/v1/consents/{id}/withdraw", s.withdraw)
 	m.HandleFunc("/api/v1/students/{id}/face-status", s.faceStatus)
-	m.HandleFunc("/api/v1/students/{id}/enrollments", s.faceStatus)
+	m.HandleFunc("/api/v1/biometrics/students", s.biometricStudents)
+	m.HandleFunc("/api/v1/students/{id}/enrollments", s.enrollFace)
+	m.HandleFunc("/api/v1/students/{id}/face-revoke", s.revokeFace)
+	m.HandleFunc("/api/v1/students/{id}/biometrics/revoke", s.revokeFace)
 	m.HandleFunc("/api/v1/academic-years", s.years)
 	m.HandleFunc("/api/v1/academic-years/{id}", s.year)
 	m.HandleFunc("/api/v1/classes", s.classes)

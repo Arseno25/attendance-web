@@ -1,5 +1,6 @@
 """Create ignored local development secrets without overwriting an existing .env."""
 
+import base64
 import secrets
 from pathlib import Path
 
@@ -16,6 +17,10 @@ def main():
         "NUXT_PUBLIC_API_BASE=http://localhost:8080/api/v1\n"
         "NUXT_PORT=3000\n"
         f"AI_SERVICE_TOKEN={secrets.token_hex(32)}\n"
+        "AI_BASE_URL=http://127.0.0.1:8001\n"
+        "AI_MODELS_DIR=../../.tools/models\n"
+        f"AI_TEMPLATE_KEY_BASE64={base64.b64encode(secrets.token_bytes(32)).decode()}\n"
+        "AI_TEMPLATE_KEY_ID=local-v1\n"
     )
     try:
         with path.open("x") as file:

@@ -201,7 +201,7 @@ func (s *Service) kioskSession(w http.ResponseWriter, r *http.Request) {
 	_, err = tx.Exec(r.Context(), `DELETE FROM device_sessions WHERE school_id=$1 AND (device_id=$2 OR expires_at<=clock_timestamp())`, s.schoolID, device)
 	var expires time.Time
 	if err == nil {
-		err = tx.QueryRow(r.Context(), `INSERT INTO device_sessions(token_hash,school_id,device_id,session_id,expires_at) VALUES($1,$2,$3,$4,clock_timestamp()+interval '10 minutes') RETURNING expires_at`, deviceHash(token), s.schoolID, device, in.Session).Scan(&expires)
+		err = tx.QueryRow(r.Context(), `INSERT INTO device_sessions(token_hash,school_id,device_id,session_id,paired_by,expires_at) VALUES($1,$2,$3,$4,$5,clock_timestamp()+interval '10 minutes') RETURNING expires_at`, deviceHash(token), s.schoolID, device, in.Session, u.ID).Scan(&expires)
 	}
 	if err == nil {
 		err = s.auth.EndCurrentSession(r.Context(), tx, r)
@@ -289,15 +289,4 @@ func (s *Service) heartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpresponse.Data(w, 200, data)
-}
-func (s *Service) recognize(w http.ResponseWriter, r *http.Request) {
-	if !httpresponse.Method(w, r, "POST") {
-		return
-	}
-	tx, _, ok := s.kioskAuth(w, r, true)
-	if !ok {
-		return
-	}
-	defer tx.Rollback(context.Background())
-	httpresponse.Error(w, 503, "RECOGNITION_DISABLED", "Recognition menunggu evaluasi model, liveness dan kalibrasi; gunakan absensi manual")
 }

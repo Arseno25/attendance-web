@@ -153,24 +153,3 @@ func (s *Service) withdraw(w http.ResponseWriter, r *http.Request) {
 	}
 	s.finish(w, r, sc, 200, entity, "consents.withdrawn", "consent", nil)
 }
-func (s *Service) faceStatus(w http.ResponseWriter, r *http.Request) {
-	if !httpresponse.Method(w, r, "GET", "POST") {
-		return
-	}
-	sc, id, ok := s.consentStudent(w, r, "biometrics.enroll", r.Method == "POST")
-	if !ok {
-		return
-	}
-	defer sc.tx.Rollback(context.Background())
-	if r.Method == "POST" {
-		httpresponse.Error(w, 503, "BIOMETRIC_NOT_EVALUATED", "Pendaftaran wajah menunggu evaluasi model, liveness dan kalibrasi")
-		return
-	}
-	var eligible bool
-	err := sc.tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM biometric_consents c JOIN students st ON st.school_id=c.school_id AND st.id=c.student_id WHERE c.school_id=$1 AND c.student_id=$2 AND st.status='active' AND c.withdrawn_at IS NULL AND c.valid_until>clock_timestamp())`, s.schoolID, id).Scan(&eligible)
-	if err != nil {
-		dbError(w, err)
-		return
-	}
-	httpresponse.Data(w, 200, map[string]any{"consent_eligible": eligible, "recognition_enabled": false, "enrolled": false, "block_reason": "MODEL_LIVENESS_NOT_EVALUATED"})
-}

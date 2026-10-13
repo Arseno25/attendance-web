@@ -6,6 +6,12 @@ export function useAttendance() {
   const canApprove = computed(() => has('attendance.approve'))
   const canConfigure = computed(() => has('academics.write'))
   const canRequest = computed(() => has('corrections.request') || canManual.value)
-  const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: auth.session.value?.school.timezone ?? 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+  const today = () =>
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: auth.session.value?.school.timezone ?? 'Asia/Jakarta',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date())
   return { request, options, dateTime, canManual, canApprove, canConfigure, canRequest, today }
 }

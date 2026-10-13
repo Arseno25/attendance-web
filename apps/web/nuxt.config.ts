@@ -1,7 +1,8 @@
 import tailwindcss from '@tailwindcss/vite'
 
 export default defineNuxtConfig({
-  modules: ['shadcn-nuxt', '@nuxt/eslint'],
+  modules: ['shadcn-nuxt', '@nuxt/eslint', '@nuxtjs/color-mode'],
+  colorMode: { classSuffix: '', preference: 'system', fallback: 'light' },
   compatibilityDate: '2026-10-12',
   devtools: { enabled: false },
   css: ['~/assets/css/main.css'],
@@ -15,7 +16,12 @@ export default defineNuxtConfig({
     head: {
       htmlAttrs: { lang: 'id' },
       title: 'Absensi Sekolah',
-      meta: [{ name: 'description', content: 'Sistem absensi sekolah dengan pencatatan dan laporan terpusat.' }],
+      meta: [
+        {
+          name: 'description',
+          content: 'Sistem absensi sekolah dengan pencatatan dan laporan terpusat.',
+        },
+      ],
     },
   },
 })

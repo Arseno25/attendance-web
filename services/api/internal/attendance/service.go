@@ -2,6 +2,7 @@ package attendance
 
 import (
 	"attendance.local/api/internal/auth"
+	"attendance.local/api/internal/platform/aiclient"
 	"attendance.local/api/internal/platform/httpresponse"
 	"context"
 	"encoding/json"
@@ -20,11 +21,13 @@ type Service struct {
 	schoolID  string
 	auth      *auth.Service
 	liveSlots chan struct{}
+	ai        *aiclient.Client
 }
 
 func New(p *pgxpool.Pool, school string, a *auth.Service) *Service {
 	return &Service{pool: p, schoolID: strings.ToLower(school), auth: a, liveSlots: make(chan struct{}, 32)}
 }
+func (s *Service) SetAI(client *aiclient.Client) { s.ai = client }
 func (s *Service) Register(m *http.ServeMux) {
 	m.HandleFunc("/api/v1/devices", s.devices)
 	m.HandleFunc("/api/v1/devices/{id}/revoke", s.deviceRevoke)
@@ -34,6 +37,7 @@ func (s *Service) Register(m *http.ServeMux) {
 	m.HandleFunc("/api/v1/kiosk/me", s.kioskMe)
 	m.HandleFunc("/api/v1/kiosk/heartbeat", s.heartbeat)
 	m.HandleFunc("/api/v1/kiosk/recognitions", s.recognize)
+	m.HandleFunc("/api/v1/kiosk/recognize", s.recognize)
 	m.HandleFunc("/api/v1/ws/attendance", s.live)
 	m.HandleFunc("/api/v1/reports/attendance", s.report)
 	m.HandleFunc("/api/v1/dashboard/summary", s.dashboard)

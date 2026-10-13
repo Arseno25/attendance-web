@@ -13,6 +13,7 @@ import (
 	"attendance.local/api/internal/attendance"
 	"attendance.local/api/internal/auth"
 	"attendance.local/api/internal/masterdata"
+	"attendance.local/api/internal/platform/aiclient"
 	"attendance.local/api/internal/platform/config"
 	"attendance.local/api/internal/platform/httpserver"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -42,13 +43,23 @@ func run() error {
 	if err != nil {
 		return errors.New("authentication initialization failed")
 	}
+	var aiClient *aiclient.Client
+	if cfg.AIBaseURL != "" {
+		aiClient, err = aiclient.New(cfg.AIBaseURL, cfg.AIServiceToken)
+		if err != nil {
+			return err
+		}
+	}
+	masterService := masterdata.New(pool, cfg.SchoolID, authService)
+	masterService.SetAI(aiClient)
 	attendanceService := attendance.New(pool, cfg.SchoolID, authService)
+	attendanceService.SetAI(aiClient)
 	go attendanceService.Run(ctx)
 	server := &http.Server{
 		Addr: cfg.Address,
 		Handler: httpserver.NewHandler(pool.Ping, cfg.WebOrigin, func(m *http.ServeMux) {
 			authService.Register(m)
-			masterdata.New(pool, cfg.SchoolID, authService).Register(m)
+			masterService.Register(m)
 			attendanceService.Register(m)
 		}),
 		ReadHeaderTimeout: 5 * time.Second,

@@ -4,12 +4,16 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 
-def test_liveness_and_readiness_do_not_claim_a_missing_model_is_ready():
+def test_liveness_and_readiness_do_not_claim_a_missing_model_is_ready(monkeypatch):
+    monkeypatch.setenv("AI_MODELS_DIR", "/missing-models")
+    from app.pipeline import get_pipeline
+
+    get_pipeline.cache_clear()
     with TestClient(app) as client:
         assert client.get("/internal/v1/health/live").status_code == 200
         result = client.get("/internal/v1/health/ready")
         assert result.status_code == 503
-        assert result.json()["error"]["code"] == "MODEL_NOT_CONFIGURED"
+        assert result.json()["error"]["code"] == "PIPELINE_NOT_CONFIGURED"
         assert result.json()["request_id"] == result.headers["x-request-id"]
 
 
@@ -29,8 +33,8 @@ def test_authenticated_recognition_is_fail_closed_until_model_evaluated(monkeypa
         result = client.post(
             "/internal/v1/recognize", headers={"Authorization": "Bearer " + "a" * 48}
         )
-        assert result.status_code == 503
-        assert result.json()["error"]["code"] == "RECOGNITION_DISABLED"
+        assert result.status_code == 422
+        assert result.json()["error"]["code"] == "VALIDATION_ERROR"
         assert "candidate_student_id" not in result.text
 
 

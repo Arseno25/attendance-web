@@ -2,7 +2,7 @@
 
 Fondasi aplikasi absensi satu sekolah. Nuxt 4 untuk web admin/kiosk, Go untuk API dan transaksi, Python FastAPI/ONNX Runtime untuk service AI internal, serta PostgreSQL sebagai resource terpisah.
 
-Status lokal: **core WP-01–05 + consent, perangkat/kiosk dan P1**. Master data, manual/koreksi/laporan, wali/consent withdrawal, pairing/revoke/heartbeat, import CSV atomik, checkout dan notifikasi live tersedia. `/absensi` terpisah dari panel dan menyediakan preview kamera lokal. Baseline YuNet/SFace dipasang dengan checksum terpin dan dapat dimuat ONNX CPU. Enrollment/recognition tetap503 sampai dataset hold-out, liveness, kalibrasi dan lifecycle terenkripsi memenuhi G2/G3; tidak ada absensi wajah otomatis yang diklaim siap. Lihat [status seluruh paket](docs/LOCAL-COMPLETION-PROGRESS.md) dan [runbook lokal](docs/LOCAL-RUNBOOK.md).
+Status lokal: **core WP-01–05 + consent, perangkat/kiosk, P1 dan enrollment provisional**. Semua form menggunakan aturan Zod modular; panel menyediakan edit akun, tema terang/gelap/sistem, pagination bernomor dan aksi halaman di kanan atas. Model YuNet/SFace terpin menjalankan deteksi CPU dan pendaftaran template AES-GCM. `/absensi` memproses frame untuk kotak deteksi; nama hanya tampil setelah keputusan server diterima dan kehadiran terkonfirmasi. Akurasi/liveness **belum dievaluasi**, sehingga absensi wajah otomatis tetap tertutup. Lihat [perubahan UI, akun dan wajah](docs/UI-ACCOUNT-BIOMETRICS-PROGRESS.md), [status paket sebelumnya](docs/LOCAL-COMPLETION-PROGRESS.md) dan [runbook lokal](docs/LOCAL-RUNBOOK.md).
 
 Panel admin memakai block resmi shadcn-vue `dashboard-01` dengan sidebar inset, menu akun, breadcrumb dan komponen shadcn untuk forms/tables. Halaman kiosk `/absensi` memakai route/layout mandiri di luar panel. Detail CLI, penyesuaian dan pembagian route ada di [desain panel](docs/PANEL-DESIGN.md).
 
@@ -96,15 +96,21 @@ Dokumen kebutuhan tetap berada di root. Lihat [rencana induk](07-IMPLEMENTATION-
 | GET `/api/v1/health/ready` | 200 bila DB dapat di-ping, 503 bila tidak; bukan bukti seluruh schema/domain siap |
 | POST `/api/v1/auth/login` | Login JSON dengan exact Origin; membuat cookie HttpOnly |
 | GET `/api/v1/auth/me` | Profil, school scope, izin dan CSRF sesi aktif |
+| PATCH `/api/v1/auth/profile` | Edit akun sendiri; perubahan email/password memerlukan password saat ini dan merotasi seluruh sesi |
 | POST `/api/v1/auth/logout` | Origin + CSRF; mencabut sesi |
 | GET/POST `/api/v1/users` | Super admin: pencarian/pagination dan pembuatan akun |
 | PATCH `/api/v1/users/{id}` | Super admin: perubahan profil/akses dan pencabutan sesi terkait |
 | GET `/api/v1/audit-logs` | Super admin: audit per sekolah, pagination |
 | GET `/internal/v1/health/live` | 200 bila runtime CPU ONNX tersedia |
-| GET `/internal/v1/health/ready` | 503 `MODEL_NOT_CONFIGURED` pada fondasi |
-| POST `/internal/v1/recognize` | 401 tanpa token sah; 503 `RECOGNITION_DISABLED` dengan token sah |
+| GET `/internal/v1/health/ready` | 200 saat model dan kunci enrollment siap; recognition tetap false sampai evaluasi |
+| GET `/api/v1/biometrics/students` | Seleksi siswa terbatas untuk petugas enroll/revoke |
+| GET `/api/v1/students/{id}/face-status` | Status pendaftaran, consent dan evaluasi tanpa template plaintext |
+| POST `/api/v1/students/{id}/enrollments` | 3–5 JPEG; consent, kualitas dan konsistensi; template terenkripsi |
+| POST `/api/v1/students/{id}/face-revoke` | Izin revoke + alasan; hapus template |
+| POST `/api/v1/kiosk/recognize` | Cookie device + Origin/CSRF; kotak deteksi tanpa nama kandidat |
+| POST `/internal/v1/recognize` | Token internal wajib; deteksi nyata, identitas otomatis masih tertutup |
 
-Go mengembalikan error JSON, generated request ID, exact-origin CORS dan no-store headers. Log Go hanya metadata request, bukan body, URL query atau secret. Production AI mematikan access log Uvicorn; FastAPI dev CLI hanya dipakai untuk data dummy lokal. Preview kamera lokal tersedia setelah device pairing; belum ada upload atau automatic attendance.
+Go mengembalikan error JSON, generated request ID, exact-origin CORS dan no-store headers. Log Go hanya metadata request, bukan body, URL query atau secret. Production AI mematikan access log Uvicorn; FastAPI dev CLI hanya dipakai untuk data dummy lokal. Kamera aktif hanya melalui tindakan petugas setelah pairing/consent. Frame diproses tanpa menyimpan foto, dan automatic attendance masih tertutup.
 
 ## Deployment Coolify
 
@@ -114,7 +120,7 @@ Go mengembalikan error JSON, generated request ID, exact-origin CORS dan no-stor
 4. Hubungkan Compose ke predefined destination network yang sama dengan DB, lalu verifikasi private DNS/port. Baca [networking resmi Coolify](https://github.com/coollabsio/coolify-docs/blob/main/content/docs/core/networking-in-coolify.mdx).
 5. Publikasikan domain HTTPS hanya untuk web dan API, masing-masing port 3000/8080. AI port 8001 dan DB tidak memiliki domain/published host port.
 6. Jalankan migration **sekali sebagai release task**, sebelum trafik aplikasi. Di container API gunakan goose dengan `GOOSE_DRIVER=postgres`, `GOOSE_DBSTRING` dari secret migration role, `GOOSE_MIGRATION_DIR=/app/migrations`, lalu `goose up`.
-7. Buat administrator pertama menggunakan `bootstrap` dengan password stdin privat, lalu verifikasi login, origin, cookie Secure dan pengelolaan pengguna. Verifikasi health, runtime config dan backup/restore. Health AI di Compose menggunakan liveness; readiness model masih 503 dan bukan readiness biometrik produksi.
+7. Buat administrator pertama menggunakan `bootstrap` dengan password stdin privat, lalu verifikasi login, origin, cookie Secure dan pengelolaan pengguna. Verifikasi health, runtime config dan backup/restore. Health AI di Compose menggunakan liveness; readiness model/enrollment dipisahkan dari gate recognition dan bukan persetujuan biometrik produksi.
 
 Belum ada deployment ke akun/server Coolify pada tahap ini. Domain, credential production, legal policy, model license dan pilot mengikuti gate pada rencana induk.
 
@@ -127,7 +133,7 @@ cd services/ai
 
 Installer memverifikasi ukuran dan SHA256 dari OpenCV Zoo sebelum memuat model. Directory model ignored dan license disimpan bersama model. CLI evaluator `python -m app.evaluation /private/authorized-holdout.json` merangkum trace anonim; tidak menghasilkan persetujuan otomatis.
 
-Panel: `/admin/devices` untuk device, detail siswa untuk officer consent, `/admin/students/import` untuk CSV, detail sesi untuk pulang/live. Pairing memakai token5menit sekali pakai dan cookie device10menit. Import preview15menit, maks500baris. Kontrak endpoint baru [lifecycle.json](docs/openapi/lifecycle.json). Tetap lokal sesuai instruksi; Coolify/pilot belum dijalankan.
+Panel: `/admin/account` untuk akun sendiri, `/admin/biometrics` untuk petugas enroll/revoke, `/admin/devices` untuk device, detail siswa untuk officer consent, `/admin/students/import` untuk CSV, detail sesi untuk pulang/live. Pairing memakai token5menit sekali pakai dan cookie device10menit. Import preview15menit, maks500baris. Kontrak endpoint baru [lifecycle.json](docs/openapi/lifecycle.json). Tetap lokal sesuai instruksi; Coolify/pilot belum dijalankan.
 
 ## Audit dependency
 

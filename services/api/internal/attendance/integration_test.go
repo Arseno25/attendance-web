@@ -177,7 +177,7 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 	guardian := expect(call("POST", "/students/"+student["id"].(string)+"/guardians", map[string]any{"full_name": "Guardian", "relationship": "parent", "verification_ref": "PRIVATE-REF-001"}), 201)["data"].(map[string]any)
 	consent := expect(call("POST", "/students/"+student["id"].(string)+"/consents", map[string]any{"guardian_id": guardian["id"], "policy_version": "v1", "evidence_ref": "PRIVATE-CONSENT-001", "valid_until": time.Now().Add(24 * time.Hour).UTC().Format(time.RFC3339)}), 201)["data"].(map[string]any)
 	expect(call("POST", "/students/"+student["id"].(string)+"/consents", map[string]any{"guardian_id": guardian["id"], "policy_version": "v1", "evidence_ref": "duplicate", "valid_until": time.Now().Add(24 * time.Hour).UTC().Format(time.RFC3339)}), 409)
-	expect(call("POST", "/students/"+student["id"].(string)+"/enrollments", nil), 503)
+	expect(call("POST", "/students/"+student["id"].(string)+"/enrollments", nil), 400)
 	expect(call("POST", "/consents/"+consent["id"].(string)+"/withdraw", map[string]string{"reason": "Withdrawn by guardian"}), 200)
 	face := expect(call("GET", "/students/"+student["id"].(string)+"/face-status", nil), 200)["data"].(map[string]any)
 	if face["consent_eligible"] != false || face["recognition_enabled"] != false {
@@ -239,7 +239,7 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 	expect(call("POST", "/kiosk/session", pairBody), 401)
 	expect(deviceCall("/kiosk/heartbeat", "wrong"), 403)
 	expect(deviceCall("/kiosk/heartbeat", paired["csrf_token"].(string)), 200)
-	expect(deviceCall("/kiosk/recognitions", paired["csrf_token"].(string)), 503)
+	expect(deviceCall("/kiosk/recognitions", paired["csrf_token"].(string)), 400)
 	var leaked int
 	if err = pool.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE metadata::text LIKE '%PRIVATE-%' OR metadata::text LIKE '%'||$1||'%'`, pairing["pairing_token"]).Scan(&leaked); err != nil || leaked != 0 {
 		t.Fatalf("sensitive audit leak %d %v", leaked, err)

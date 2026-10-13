@@ -1,0 +1,694 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Local provisional biometric workflow",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/v1/biometrics/students": {
+      "get": {
+        "summary": "Select students for biometric management",
+        "description": "School-only, live biometrics.enroll OR biometrics.revoke permission. Minimal identity metadata; broader academic/student permissions are unchanged.",
+        "security": [
+          {
+            "UserCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success; existing data/request_id envelope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Student"
+                      }
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "page": {
+                          "type": "integer"
+                        },
+                        "page_size": {
+                          "type": "integer"
+                        },
+                        "total": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "page",
+                        "page_size",
+                        "total"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "request_id",
+                    "pagination"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Strict payload validation error"
+          },
+          "401": {
+            "description": "Session unauthenticated/expired"
+          },
+          "403": {
+            "description": "Permission, Origin or CSRF rejected"
+          },
+          "503": {
+            "description": "Service unavailable; no automatic attendance"
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "description": "Trimmed search, <=100 UTF-8 bytes."
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/students/{id}/face-status": {
+      "get": {
+        "summary": "Read face registration and evaluation status",
+        "description": "Live biometrics.enroll OR biometrics.revoke, current school/student. Never returns ciphertext, nonce, key or plaintext embedding.",
+        "security": [
+          {
+            "UserCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success; existing data/request_id envelope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/FaceStatus"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "request_id"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Strict payload validation error"
+          },
+          "401": {
+            "description": "Session unauthenticated/expired"
+          },
+          "403": {
+            "description": "Permission, Origin or CSRF rejected"
+          },
+          "503": {
+            "description": "Service unavailable; no automatic attendance"
+          }
+        }
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "id",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ]
+    },
+    "/api/v1/students/{id}/enrollments": {
+      "post": {
+        "summary": "Enroll provisional face template",
+        "description": "Live biometrics.enroll, active student and current guardian consent. 3–5 distinct quality-checked JPEGs; JSON <=2 MiB. Frames/vectors ephemeral; only AES-GCM ciphertext stored. Registration does not approve automatic attendance.",
+        "security": [
+          {
+            "UserCookie": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Success; existing data/request_id envelope."
+          },
+          "400": {
+            "description": "Strict payload validation error"
+          },
+          "401": {
+            "description": "Session unauthenticated/expired"
+          },
+          "403": {
+            "description": "Permission, Origin or CSRF rejected"
+          },
+          "503": {
+            "description": "Service unavailable; no automatic attendance"
+          },
+          "409": {
+            "description": "Student inactive"
+          },
+          "410": {
+            "description": "Consent unavailable, expired or withdrawn"
+          },
+          "422": {
+            "description": "Quality, face count, duplicate frame or identity consistency rejected"
+          }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Enrollment"
+              }
+            }
+          }
+        }
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "id",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ]
+    },
+    "/api/v1/students/{id}/face-revoke": {
+      "post": {
+        "summary": "Delete a face template",
+        "description": "Live biometrics.revoke + nonempty reason. Ciphertext removal, gallery revision and audit commit together. Attendance history remains.",
+        "security": [
+          {
+            "UserCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success; existing data/request_id envelope."
+          },
+          "400": {
+            "description": "Strict payload validation error"
+          },
+          "401": {
+            "description": "Session unauthenticated/expired"
+          },
+          "403": {
+            "description": "Permission, Origin or CSRF rejected"
+          },
+          "503": {
+            "description": "Service unavailable; no automatic attendance"
+          }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Revocation"
+              }
+            }
+          }
+        }
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "id",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ]
+    },
+    "/api/v1/kiosk/recognize": {
+      "post": {
+        "summary": "Detect faces from a paired device",
+        "description": "Device cookie + Origin/CSRF, current school/session/roster. JSON <=512 KiB. Current unevaluated pipeline returns real boxes and no candidate identities. Compatible alias /api/v1/kiosk/recognitions.",
+        "security": [
+          {
+            "DeviceCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success; existing data/request_id envelope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Recognition"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "request_id"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Strict payload validation error"
+          },
+          "401": {
+            "description": "Session unauthenticated/expired"
+          },
+          "403": {
+            "description": "Permission, Origin or CSRF rejected"
+          },
+          "503": {
+            "description": "Service unavailable; no automatic attendance"
+          }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Capture"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "UserCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "attendance_session",
+        "description": "__Host-attendance_session on HTTPS"
+      },
+      "DeviceCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "attendance_device",
+        "description": "Configured development device cookie; __Host- variant is used under HTTPS."
+      }
+    },
+    "schemas": {
+      "Student": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "full_name": {
+            "type": "string"
+          },
+          "nis": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "inactive",
+              "graduated",
+              "transferred"
+            ]
+          },
+          "class_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "full_name",
+          "nis",
+          "status",
+          "class_name"
+        ],
+        "additionalProperties": false
+      },
+      "Template": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "model_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "frame_count": {
+            "type": "integer",
+            "minimum": 3,
+            "maximum": 5
+          },
+          "status": {
+            "const": "provisional"
+          }
+        },
+        "required": [
+          "id",
+          "created_at",
+          "model_sha256",
+          "frame_count",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "FaceStatus": {
+        "type": "object",
+        "properties": {
+          "enrolled": {
+            "type": "boolean"
+          },
+          "consent_eligible": {
+            "type": "boolean"
+          },
+          "pipeline_ready": {
+            "type": "boolean"
+          },
+          "recognition_enabled": {
+            "type": "boolean"
+          },
+          "block_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "template": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Template"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "evaluation": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "const": "not_evaluated"
+              },
+              "required": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "automatic_attendance_approved": {
+                "const": false
+              }
+            }
+          }
+        },
+        "required": [
+          "enrolled",
+          "consent_eligible",
+          "pipeline_ready",
+          "recognition_enabled",
+          "block_reason",
+          "template",
+          "evaluation"
+        ],
+        "additionalProperties": false
+      },
+      "Enrollment": {
+        "type": "object",
+        "properties": {
+          "frames": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 524288,
+              "description": "Raw base64 JPEG; decoded <=384 KiB; header dimensions 160–1280 per axis, no data URL."
+            },
+            "minItems": 3,
+            "maxItems": 5
+          }
+        },
+        "required": [
+          "frames"
+        ],
+        "additionalProperties": false
+      },
+      "Revocation": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "Capture": {
+        "type": "object",
+        "properties": {
+          "image": {
+            "type": "string",
+            "maxLength": 524288,
+            "description": "Raw base64 JPEG; decoded <=384 KiB; header dimensions 160–1280 per axis, no data URL."
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "track_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "captured_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Within 30 seconds of server time."
+          }
+        },
+        "required": [
+          "image",
+          "event_id",
+          "track_id",
+          "captured_at"
+        ],
+        "additionalProperties": false
+      },
+      "Recognition": {
+        "type": "object",
+        "required": [
+          "decision",
+          "faces",
+          "recognition_enabled",
+          "block_reason"
+        ],
+        "properties": {
+          "decision": {
+            "enum": [
+              "no_face",
+              "unknown",
+              "inconclusive",
+              "accepted"
+            ]
+          },
+          "faces": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "box": {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "y": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "width": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "height": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    }
+                  },
+                  "required": [
+                    "x",
+                    "y",
+                    "width",
+                    "height"
+                  ],
+                  "additionalProperties": false
+                },
+                "label": {
+                  "type": "string"
+                },
+                "student_id": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "required": [
+                "box"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "recognition_enabled": {
+            "type": "boolean"
+          },
+          "block_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "attendance": {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "enum": [
+                  "recorded",
+                  "already_recorded"
+                ]
+              },
+              "record": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "description": "Current pipeline never emits accepted identity. Labels/IDs require evaluated evidence and committed attendance; unknown/inconclusive responses omit identities."
+      }
+    }
+  }
+}

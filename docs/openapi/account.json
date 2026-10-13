@@ -1,0 +1,232 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Self-account editing",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/v1/auth/profile": {
+      "patch": {
+        "summary": "Edit the authenticated account",
+        "description": "All active authenticated roles may edit only their own name, email and password. Name is trimmed and must contain 1\u2013120 Unicode code points after trimming. Email is trimmed, lowercased and validated. Email changes and nonempty new_password require current_password; passwords are never trimmed. Sensitive changes rotate the HttpOnly cookie and CSRF token and revoke all prior user sessions. Name-only changes preserve the current cookie and other sessions. Audit metadata contains change booleans only. An account change and its session/audit changes commit atomically.",
+        "security": [
+          {
+            "UserCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must match the configured web origin."
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Current session CSRF token."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "full_name",
+                  "email"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "full_name": {
+                    "type": "string",
+                    "description": "Trimmed name must contain 1\u2013120 Unicode code points."
+                  },
+                  "email": {
+                    "type": "string",
+                    "description": "Valid email address; normalized value is at most 254 bytes."
+                  },
+                  "current_password": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Required for normalized email changes or a nonempty new_password; maximum 128 bytes. Never trimmed."
+                  },
+                  "new_password": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Omit or use empty string to retain current password. Otherwise 12\u2013128 bytes, with no trimming."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Same session envelope as GET /api/v1/auth/me. Adopt returned csrf_token and any rotated cookie.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_ERROR for invalid/unknown fields, CURRENT_PASSWORD_REQUIRED for missing reauthentication, CURRENT_PASSWORD_INVALID for wrong current password. Wrong current password never returns 401."
+          },
+          "401": {
+            "description": "UNAUTHENTICATED: missing, expired, revoked or inactive live user/school/session."
+          },
+          "403": {
+            "description": "FORBIDDEN for missing/wrong Origin, CSRF_INVALID for a bad CSRF token."
+          },
+          "405": {
+            "description": "METHOD_NOT_ALLOWED; only PATCH is accepted."
+          },
+          "409": {
+            "description": "CONFLICT for duplicate school email; ACCOUNT_CHANGED for concurrent changes to the email or password snapshot. Reload before retrying."
+          },
+          "429": {
+            "description": "RATE_LIMITED: reauthentication limit (10 attempts per account per 15 minutes) or the shared hashing capacity is busy."
+          },
+          "503": {
+            "description": "DATABASE_UNAVAILABLE for database, transaction, audit or secure random generation failure."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "UserCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "attendance_session",
+        "description": "__Host-attendance_session on HTTPS"
+      }
+    },
+    "schemas": {
+      "User": {
+        "type": "object",
+        "required": [
+          "id",
+          "school_id",
+          "email",
+          "full_name",
+          "role",
+          "is_active",
+          "grants",
+          "class_ids"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "school_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string"
+          },
+          "full_name": {
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "super_admin",
+              "admin",
+              "teacher",
+              "operator"
+            ]
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "grants": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "class_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "SessionResult": {
+        "type": "object",
+        "required": [
+          "data",
+          "request_id"
+        ],
+        "properties": {
+          "request_id": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "required": [
+              "user",
+              "permissions",
+              "school",
+              "csrf_token"
+            ],
+            "properties": {
+              "user": {
+                "$ref": "#/components/schemas/User"
+              },
+              "permissions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "csrf_token": {
+                "type": "string"
+              },
+              "school": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "name",
+                  "timezone"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "timezone": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

@@ -8,8 +8,8 @@ import (
 	"slices"
 )
 
-// BeginAuthorized serializes school writes and checks live permissions after acquiring the lock.
-func (s *Service) BeginAuthorized(w http.ResponseWriter, r *http.Request, permission string, write bool) (pgx.Tx, User, bool) {
+// BeginAuthorized serializes school writes and checks live permissions after acquiring the lock. Alternatives allow any explicitly named permission.
+func (s *Service) BeginAuthorized(w http.ResponseWriter, r *http.Request, permission string, write bool, alternatives ...string) (pgx.Tx, User, bool) {
 	actor, ok := s.Authenticate(w, r, write)
 	if !ok {
 		return nil, User{}, false
@@ -61,6 +61,9 @@ func (s *Service) BeginAuthorized(w http.ResponseWriter, r *http.Request, permis
 		return nil, User{}, false
 	}
 	allowed := slices.Contains(actor.Permissions(), permission)
+	for _, alternative := range alternatives {
+		allowed = allowed || slices.Contains(actor.Permissions(), alternative)
+	}
 	// Manual operators need the scoped roster and may request corrections of their entries.
 	if (permission == "attendance.read" || permission == "corrections.request") && slices.Contains(actor.Permissions(), "attendance.manual") {
 		allowed = true

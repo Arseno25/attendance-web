@@ -1,14 +1,26 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { createRequire } from 'node:module'
-import { readFileSync, writeFileSync, mkdirSync, symlinkSync, rmSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, symlinkSync, rmSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const requireWeb = createRequire(resolve('apps/web/package.json'))
-const { parse, compileScript } = requireWeb('@vue/compiler-sfc')
+const { parse, compileScript, compileTemplate } = requireWeb('@vue/compiler-sfc')
 const { ref, nextTick, watch } = requireWeb('vue')
 const flush = async () => { await nextTick(); await new Promise(r => setImmediate(r)); await nextTick() }
+
+test('all authored Vue templates compile after formatting', () => {
+  for (const file of readdirSync('apps/web/app', { recursive: true })) {
+    if (!file.endsWith('.vue') || file.startsWith('components/ui/')) continue
+    const filename = resolve('apps/web/app', file)
+    const { descriptor, errors } = parse(readFileSync(filename, 'utf8'), { filename })
+    assert.deepEqual(errors, [], file)
+    if (!descriptor.template) continue
+    const compiled = compileTemplate({ source: descriptor.template.content, filename, id: file, isProd: true, compilerOptions: { expressionPlugins: ['typescript'] } })
+    assert.deepEqual(compiled.errors, [], file)
+  }
+})
 
 test('status badges distinguish attendance, review and revoked states', async () => {
   const { statusVariant } = await import('../apps/web/app/lib/status.ts')
@@ -45,7 +57,7 @@ let mounted, unmounted
 function context(request) {
   mounted = undefined; unmounted = undefined
   Object.assign(globalThis, { ref, watch, nextTick, onMounted: f => { mounted = f }, onBeforeUnmount: f => { unmounted = f }, useApi: () => request, useMasterData: () => ({ options: async path => (await request(path)).data }), useRuntimeConfig: () => ({ public: { apiBase: 'http://localhost:8080/api/v1' } }), definePageMeta: () => {}, useHead: () => {}, useAuth: () => ({ session: ref({ permissions: ['devices.health'] }), load: async () => true }) })
-  globalThis.document = Object.assign(new EventTarget(), { hidden: false })
+  globalThis.document = Object.assign(new EventTarget(), { hidden: false, querySelector: () => null, querySelectorAll: () => [] })
   globalThis.window = new EventTarget()
   Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: true } })
 }
@@ -57,7 +69,7 @@ async function kioskSetup() {
   const { descriptor } = parse(source)
   const compiled = compileScript(descriptor, { id: 'kiosk-regression' })
   const file = directory + '/kiosk.ts'
-  writeFileSync(file, compiled.content)
+  writeFileSync(file, compiled.content.replaceAll('../lib/validation/consent-devices.ts', pathToFileURL(resolve('apps/web/app/lib/validation/consent-devices.ts')).href).replaceAll('../composables/useFormValidation.ts', pathToFileURL(resolve('apps/web/app/composables/useFormValidation.ts')).href).replaceAll('../lib/biometrics.ts', pathToFileURL(resolve('apps/web/app/lib/biometrics.ts')).href))
   const module = await import(pathToFileURL(file).href + '?' + Math.random())
   return module.default.setup({}, { expose() {} })
 }
@@ -125,6 +137,54 @@ test('successful pairing clears operator identity while retaining device session
     throw new Error('unexpected endpoint')
   })
   const page = await kioskSetup()
-  try { await mounted(); page.pairingToken.value = 'a'.repeat(64); page.sessionId.value = 'open'; await page.pair(); assert.equal(page.auth.session.value, null); assert.equal(page.kiosk.value.device_name, 'Gate') }
+  try { await mounted(); page.pairingToken.value = 'a'.repeat(64); page.sessionId.value = '11111111-1111-4111-8111-111111111111'; await page.pair(); assert.equal(page.auth.session.value, null); assert.equal(page.kiosk.value.device_name, 'Gate') }
   finally { unmounted() }
+})
+
+test('invalid pairing does not call the API and corrected fields clear errors', async () => {
+  let calls = 0
+  context(async () => { calls++; return { data: session } })
+  const page = await kioskSetup()
+  try {
+    await page.pair(); assert.equal(calls, 0); assert.ok(page.errors.value.pairing_token); assert.ok(page.errors.value.session_id)
+    page.pairingToken.value = 'a'.repeat(64); page.sessionId.value = '11111111-1111-4111-8111-111111111111'; await flush()
+    assert.deepEqual(page.errors.value, {}); await page.pair(); assert.equal(calls, 1)
+  }
+  finally { unmounted() }
+})
+
+test('a failed old heartbeat cannot discard a newly paired device session', async () => {
+  context(async () => ({ data: session }))
+  const originalInterval = globalThis.setInterval; const originalFetch = globalThis.$fetch
+  const callbacks = []; let reject
+  globalThis.setInterval = fn => { callbacks.push(fn); return 0 }
+  globalThis.$fetch = () => new Promise((_, failure) => { reject = failure })
+  const page = await kioskSetup()
+  try {
+    await mounted(); const oldHeartbeat = callbacks[0]()
+    page.arm({ ...session, csrf_token: 'new-csrf' })
+    reject(new Error('old session expired')); await oldHeartbeat
+    assert.equal(page.kiosk.value.csrf_token, 'new-csrf')
+    assert.equal(page.message.value, '')
+  }
+  finally { unmounted(); globalThis.setInterval = originalInterval; globalThis.$fetch = originalFetch }
+})
+
+test('late recognition cannot render names after camera stops and uses device CSRF', async () => {
+  context(async () => ({ data: session }))
+  let finish, options
+  const originalFetch = globalThis.$fetch
+  globalThis.$fetch = (_url, input) => { options = input; return new Promise(resolve => { finish = resolve }) }
+  const page = await kioskSetup()
+  try {
+    await mounted(); page.camera.value = { capture: () => '/9j/AA==', stop() {} }
+    page.cameraChanged(true)
+    assert.equal(options.headers['X-CSRF-Token'], 'csrf')
+    assert.equal(options.credentials, 'include')
+    assert.match(options.body.event_id, /^[0-9a-f-]{36}$/)
+    page.stopCamera()
+    finish({ data: { decision: 'accepted', recognition_enabled: true, attendance: { outcome: 'recorded' }, faces: [{ box: { x: 0, y: 0, width: 0.5, height: 0.5 }, label: 'Old identity', student_id: 'old' }] } })
+    await flush(); assert.deepEqual(page.faces.value, []); assert.equal(page.cameraActive.value, false)
+  }
+  finally { unmounted(); globalThis.$fetch = originalFetch }
 })

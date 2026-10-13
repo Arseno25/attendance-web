@@ -23,6 +23,8 @@ services:
       DATABASE_URL: ${DATABASE_URL:?Set private PostgreSQL URL}
       WEB_ORIGIN: ${WEB_ORIGIN:?Set exact HTTPS web origin}
       SCHOOL_ID: ${SCHOOL_ID:?Set school UUID}
+      AI_BASE_URL: ${AI_BASE_URL:-http://ai:8001}
+      AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:?Set strong service-to-service token}
     expose:
       - "8080"
     healthcheck:
@@ -37,10 +39,15 @@ services:
       context: ../services/ai
     environment:
       AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:?Set strong service-to-service token}
+      AI_MODELS_DIR: /models
+      AI_TEMPLATE_KEY_BASE64: ${AI_TEMPLATE_KEY_BASE64:?Set private template encryption key}
+      AI_TEMPLATE_KEY_ID: ${AI_TEMPLATE_KEY_ID:?Set template key identifier}
+    volumes:
+      - ${AI_MODELS_HOST_PATH:-../.tools/models}:/models:ro
     expose:
       - "8001"
     healthcheck:
-      # Runtime health only; model readiness intentionally remains 503 in foundation.
+      # Readiness covers detection/enrollment; automatic attendance has a separate evaluation gate.
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/internal/v1/health/live', timeout=3)"]
       interval: 30s
       timeout: 5s

@@ -36,8 +36,13 @@ func (s *Service) Tick(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// Expiry denies immediately in gallery queries; ciphertext is purged by this minute worker.
+	_, err = tx.Exec(ctx, `DELETE FROM face_templates f USING biometric_consents c WHERE f.school_id=$1 AND c.school_id=f.school_id AND c.id=f.consent_id AND c.valid_until<=clock_timestamp()`, s.schoolID)
+	if err != nil {
+		return err
+	}
 	if !active {
-		return nil
+		return tx.Commit(ctx)
 	}
 	schedules, err := rows(ctx, tx, `SELECT a.id::text AS id,(statement_timestamp() AT TIME ZONE a.timezone)::date::text AS date FROM attendance_schedules a JOIN classes c ON c.school_id=a.school_id AND c.id=a.class_id JOIN academic_years y ON y.school_id=c.school_id AND y.id=c.academic_year_id WHERE a.school_id=$1 AND a.is_active AND c.is_active AND y.is_active AND (statement_timestamp() AT TIME ZONE a.timezone)::date BETWEEN y.starts_on AND y.ends_on`, s.schoolID)
 	if err != nil {
