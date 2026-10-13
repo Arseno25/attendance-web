@@ -1,0 +1,929 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Attendance reporting WP-05",
+    "version": "1.0.0",
+    "description": "Range <=366 inclusive days; date cannot combine with from/to. Default school-local today. Dashboard date only; reports accept date shorthand or from/to. One row per session/student frozen roster; cancelled excluded. Teachers current assigned class IDs. Rate = (present+late)/roster. CSV UTF-8 BOM/CRLF, every cell quoted, internal quotes doubled, formula-like text prefixed apostrophe (initial import mitigation; resave may remove escaping), dates/checkin school local plus timezone column. Export permission reports.export and audit atomic; fails without partial file over cap. JSON request_id also X-Request-ID on CSV."
+  },
+  "servers": [
+    {
+      "url": "/api/v1"
+    }
+  ],
+  "security": [
+    {
+      "session": []
+    }
+  ],
+  "paths": {
+    "/reports/attendance": {
+      "get": {
+        "summary": "Scoped roster report and CSV",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "class_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "academic_year_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "student_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "present",
+                "late",
+                "excused",
+                "sick",
+                "absent",
+                "not_recorded",
+                "pending_review"
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "csv"
+              ],
+              "default": "json"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100000
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "JSON report; CSV is full filtered report without pagination, max 10,000 rows, audited before response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Report"
+                }
+              },
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dashboard/summary": {
+      "get": {
+        "summary": "Date totals, seven-day trend and recent recorded rows",
+        "parameters": [
+          {
+            "name": "date",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "class_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "academic_year_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "student_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "present",
+                "late",
+                "excused",
+                "sick",
+                "absent",
+                "not_recorded",
+                "pending_review"
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "JSON report; CSV is full filtered report without pagination, max 10,000 rows, audited before response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Dashboard"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/audit-logs": {
+      "get": {
+        "summary": "Super admin audit filters; dates use school local timezone; actor names current, anonymous/system nullable",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "actor_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "target_type",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100000
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Filtered audit list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "session": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "attendance_session"
+      }
+    },
+    "schemas": {
+      "Totals": {
+        "type": "object",
+        "properties": {
+          "roster_total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "students_total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sessions_total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "present": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "late": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "attended": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "excused": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sick": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "absent": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "not_recorded": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pending_review": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "recorded": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "attendance_rate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "roster_total",
+          "students_total",
+          "sessions_total",
+          "present",
+          "late",
+          "attended",
+          "excused",
+          "sick",
+          "absent",
+          "not_recorded",
+          "pending_review",
+          "recorded",
+          "attendance_rate"
+        ]
+      },
+      "Row": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "student_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "class_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "class_name": {
+            "type": "string"
+          },
+          "academic_year_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "academic_year_name": {
+            "type": "string"
+          },
+          "session_name": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "session_status": {
+            "type": "string"
+          },
+          "nis": {
+            "type": "string"
+          },
+          "full_name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "present",
+              "late",
+              "excused",
+              "sick",
+              "absent",
+              "not_recorded",
+              "pending_review"
+            ]
+          },
+          "check_in_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "session_id",
+          "student_id",
+          "class_id",
+          "class_name",
+          "academic_year_id",
+          "academic_year_name",
+          "session_name",
+          "date",
+          "timezone",
+          "session_status",
+          "nis",
+          "full_name",
+          "status",
+          "check_in_at",
+          "reason",
+          "updated_at"
+        ]
+      },
+      "Pagination": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000
+          },
+          "page_size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "page",
+          "page_size",
+          "total"
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ]
+          },
+          "request_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "request_id"
+        ]
+      },
+      "Filters": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date"
+          },
+          "to": {
+            "type": "string",
+            "format": "date"
+          },
+          "class_id": {
+            "type": "string"
+          },
+          "academic_year_id": {
+            "type": "string"
+          },
+          "student_id": {
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "search": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "class_id",
+          "academic_year_id",
+          "student_id",
+          "session_id",
+          "status",
+          "search"
+        ]
+      },
+      "Report": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Row"
+            }
+          },
+          "totals": {
+            "$ref": "#/components/schemas/Totals"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/Filters"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          },
+          "request_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "data",
+          "totals",
+          "filters",
+          "pagination",
+          "request_id"
+        ]
+      },
+      "TrendDay": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "roster_total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "students_total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sessions_total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "present": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "late": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "attended": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "excused": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sick": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "absent": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "not_recorded": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pending_review": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "recorded": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "attendance_rate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "date",
+          "roster_total",
+          "students_total",
+          "sessions_total",
+          "present",
+          "late",
+          "attended",
+          "excused",
+          "sick",
+          "absent",
+          "not_recorded",
+          "pending_review",
+          "recorded",
+          "attendance_rate"
+        ]
+      },
+      "Dashboard": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "totals": {
+                "$ref": "#/components/schemas/Totals"
+              },
+              "trend": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/TrendDay"
+                }
+              },
+              "recent": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Row"
+                }
+              },
+              "filters": {
+                "$ref": "#/components/schemas/Filters"
+              }
+            },
+            "required": [
+              "totals",
+              "trend",
+              "recent",
+              "filters"
+            ]
+          },
+          "request_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "data",
+          "request_id"
+        ]
+      },
+      "AuditEntry": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "actor_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "actor_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "action": {
+            "type": "string"
+          },
+          "target_type": {
+            "type": "string"
+          },
+          "target_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "metadata": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "actor_id",
+          "actor_name",
+          "action",
+          "target_type",
+          "target_id",
+          "request_id",
+          "occurred_at",
+          "metadata"
+        ]
+      },
+      "AuditResult": {
+        "type": "object",
+        "required": [
+          "data",
+          "pagination",
+          "request_id"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditEntry"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          },
+          "request_id": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

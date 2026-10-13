@@ -7,7 +7,7 @@ Arahan pengguna: panel memakai block `dashboard-01`, seluruh kontrol memakai kom
 - `/admin/**` memakai layout `admin`: `SidebarProvider`, `AppSidebar` variant inset, `SidebarInset`, `SiteHeader` dan breadcrumb. Sidebar responsif memakai Sheet di mobile, menutup setelah navigasi, dan dapat dibuka/tutup melalui trigger atau shortcut bawaan.
 - Komponen block resmi `AppSidebar`, `NavMain`, `NavUser`, `SiteHeader`, `SectionCards` diadaptasi untuk identitas sekolah, sesi aktual dan menu yang tersedia. Users/audit tetap hanya untuk super admin. Logout memakai API dan cookie/session yang sama.
 - Forms memakai Field, Input, Select, Checkbox, Switch; feedback memakai Alert, Skeleton, Spinner, Empty; tabel memakai Table, Badge dan Pagination. UI menggunakan token reka-vega neutral yang dipasang ulang lewat CLI resmi, font Inter lokal dan ikon Lucide yang sudah menjadi dependency project.
-- Data contoh block, menu billing/notification, grafik revenue dan tabel dokumen demo tidak diterbitkan sebagai data sekolah. Kartu memakai total siswa, kelas, guru dan tahun ajaran aktual; grafik kehadiran menunggu data WP-04/05. Dependencies chart/TanStack demo dibuang karena tidak dipakai pada tahap ini.
+- Data contoh block, menu billing/notification, grafik revenue dan tabel dokumen demo tidak diterbitkan sebagai data sekolah. WP-05 kartu memakai roster sesi, hadir termasuk late, late subset, dan not_recorded aktual; grafik kehadiran menunggu data WP-04/05. Dependencies chart/TanStack demo dibuang karena tidak dipakai pada tahap ini.
 - SidebarInset sudah menyediakan satu landmark main; konten di dalamnya menggunakan div. Form/tabel mempunyai label, caption, loading/error/empty/disabled states. Header, menu dan pagination berbahasa Indonesia. Sidebar offcanvas yang ditutup diberi inert agar tautan tersembunyi tidak menerima fokus keyboard.
 
 ## CLI dan dokumentasi
@@ -50,3 +50,8 @@ Lint, typecheck, build Nuxt, checks lokal dan build image dijalankan. Browser me
 ## WP-04
 
 Menu Jadwal & kalender, Sesi absensi dan Koreksi absensi menggunakan layout/preset Vega yang sama. Tahun/kelas/siswa tetap melalui master data. Form jadwal dan pencatatan memakai Sheet/Field/Input/Select/Checkbox/Switch/Textarea; tindakan sesi dan keputusan koreksi memakai Dialog dengan title/description. API menghitung waktu hadir/grace; panel menampilkan not_recorded sebagai Belum tercatat sampai rekonsiliasi. Pencatatan manual panel ini terpisah dari route kiosk /absensi yang baru masuk WP-08. Audit aktivitas menerjemahkan tindakan sesi, kalender, roster, manual dan koreksi ke Bahasa Indonesia.
+
+
+## WP-05
+
+Dashboard memiliki filter tanggal/tahun/kelas, kartu KPI, trend tujuh hari yang dapat dibaca sebagai tabel, dan catatan terbaru dengan NIS masked. `/admin/reports` memakai Field/Input/Select untuk tahun/kelas/periode/status/search, server pagination, totals shared dengan dashboard dan CSV, serta link riwayat dari profil siswa. CSV hanya enabled sesudah filter canonical diterapkan; semua hasil filter diekspor dan diaudit. Audit super admin menambah filter date/actor/action/target dan nama pelaku current. Semua primitives tetap Vega; tidak menambah dependency chart pada P0 sesuai plan. Snapshot roster menentukan siswa historis, bukan kelas siswa saat ini.

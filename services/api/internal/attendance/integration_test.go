@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"github.com/jackc/pgx/v5"
@@ -113,13 +114,29 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 		}
 		return result
 	}
+	cachedSessions := map[string]struct {
+		cookie *http.Cookie
+		csrf   string
+	}{}
 	login := func(email string) {
+		if cached, exists := cachedSessions[email]; exists {
+			cookie = cached.cookie
+			csrf = cached.csrf
+			if call("GET", "/auth/me", nil).Code == 200 {
+				return
+			}
+		}
 		w := call("POST", "/auth/login", map[string]string{"email": email, "password": password})
 		data := expect(w, 200)["data"].(map[string]any)
 		cookie = w.Result().Cookies()[0]
 		csrf = data["csrf_token"].(string)
+		cachedSessions[email] = struct {
+			cookie *http.Cookie
+			csrf   string
+		}{cookie, csrf}
 	}
 	login("owner@example.test")
+	expect(call("GET", "/reports/attendance", nil), 200)
 	expect(call("GET", "/attendance-schedules", nil), 200)
 	now := time.Now()
 	start := now.AddDate(0, -6, 0).Format("2006-01-02")
@@ -127,8 +144,8 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 	year := expect(call("POST", "/academic-years", map[string]any{"name": "Attendance year", "starts_on": start, "ends_on": end, "is_active": true}), 201)["data"].(map[string]any)
 	class := expect(call("POST", "/classes", map[string]any{"academic_year_id": year["id"], "code": "A", "name": "A"}), 201)["data"].(map[string]any)
 	class2 := expect(call("POST", "/classes", map[string]any{"academic_year_id": year["id"], "code": "B", "name": "B"}), 201)["data"].(map[string]any)
-	student := expect(call("POST", "/students", map[string]any{"nis": "001", "full_name": "Student one", "class_id": class["id"]}), 201)["data"].(map[string]any)
-	student2 := expect(call("POST", "/students", map[string]any{"nis": "002", "full_name": "Student two", "class_id": class["id"]}), 201)["data"].(map[string]any)
+	student := expect(call("POST", "/students", map[string]any{"nis": "001", "full_name": "=SUM(1,2)", "class_id": class["id"]}), 201)["data"].(map[string]any)
+	student2 := expect(call("POST", "/students", map[string]any{"nis": "002", "full_name": "Student;=1+2", "class_id": class["id"]}), 201)["data"].(map[string]any)
 	student3 := expect(call("POST", "/students", map[string]any{"nis": "003", "full_name": "Student three", "class_id": class["id"]}), 201)["data"].(map[string]any)
 	teacher := expect(call("POST", "/users", map[string]any{"email": "teacher@example.test", "full_name": "Teacher", "role": "teacher", "password": password}), 201)["data"].(map[string]any)
 	assignment := expect(call("POST", "/teacher-assignments", map[string]any{"teacher_id": teacher["id"], "class_id": class["id"]}), 201)["data"].(map[string]any)
@@ -164,6 +181,14 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 		if v.(map[string]any)["status"] != "not_recorded" {
 			t.Fatal("premature absence")
 		}
+	}
+	beforeReport := expect(call("GET", "/reports/attendance?date="+day, nil), 200)
+	if beforeReport["totals"].(map[string]any)["not_recorded"] != float64(3) {
+		t.Fatal("report made early absence", beforeReport)
+	}
+	beforeDashboard := expect(call("GET", "/dashboard/summary?date="+day, nil), 200)["data"].(map[string]any)
+	if len(beforeDashboard["trend"].([]any)) != 7 || beforeDashboard["totals"].(map[string]any)["attended"] != float64(0) {
+		t.Fatal("initial dashboard invalid", beforeDashboard)
 	}
 	manual := map[string]any{"event_id": "11111111-1111-4111-8111-111111111111", "session_id": sessionID, "student_id": student["id"], "status": "present", "reason": "Verified by staff"}
 	first := expect(call("POST", "/attendances/manual", manual), 201)["data"].(map[string]any)
@@ -212,6 +237,10 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 		}
 	}
 
+	lateSummary := expect(call("GET", "/dashboard/summary?date="+day, nil), 200)["data"].(map[string]any)["totals"].(map[string]any)
+	if lateSummary["late"] != float64(1) || lateSummary["attended"] != float64(1) || lateSummary["present"] != float64(0) || lateSummary["roster_total"] != float64(3) || lateSummary["attendance_rate"] != 33.3 {
+		t.Fatal("late double-counted", lateSummary)
+	}
 	manual2 := map[string]any{"event_id": "44444444-4444-4444-8444-444444444444", "session_id": sessionID, "student_id": student2["id"], "status": "sick", "reason": "Verified sickness"}
 	expect(call("POST", "/attendances/manual", manual2), 201)
 	login("teacher@example.test")
@@ -291,8 +320,92 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 	if count < 10 {
 		t.Fatal("attendance audit missing", count)
 	}
+	fullReport := expect(call("GET", "/reports/attendance?date="+day+"&page_size=1", nil), 200)
+	if len(fullReport["data"].([]any)) != 1 || fullReport["pagination"].(map[string]any)["total"] != float64(3) || fullReport["totals"].(map[string]any)["roster_total"] != float64(3) {
+		t.Fatal("report totals depended on page", fullReport)
+	}
+	perStudent := expect(call("GET", "/reports/attendance?date="+day+"&student_id="+student["id"].(string), nil), 200)
+	if perStudent["totals"].(map[string]any)["roster_total"] != float64(1) {
+		t.Fatal("student filter drift", perStudent)
+	}
+	filtered := expect(call("GET", "/reports/attendance?date="+day+"&status=sick", nil), 200)
+	if filtered["totals"].(map[string]any)["roster_total"] != float64(1) || filtered["data"].([]any)[0].(map[string]any)["student_id"] != student2["id"] {
+		t.Fatal("status filter drift", filtered)
+	}
+	expect(call("GET", "/reports/attendance?from=2026-01-01&to=2027-02-01", nil), 400)
+	expect(call("GET", "/reports/attendance?from=2026-02-02&to=2026-02-01", nil), 400)
+	expect(call("GET", "/reports/attendance?class_id=invalid", nil), 400)
+	expect(call("GET", "/reports/attendance?date="+day+"&from="+day+"&to="+day, nil), 400)
+	if _, err := pool.Exec(ctx, `INSERT INTO teacher_assignments(school_id,teacher_id,class_id,academic_year_id,starts_at,ends_at) SELECT $1,$2,$3,id,clock_timestamp(),(ends_on+1)::timestamp AT TIME ZONE timezone FROM academic_years WHERE school_id=$1 AND id=$4`, schoolID, teacher["id"], class["id"], year["id"]); err != nil {
+		t.Fatal(err)
+	}
+	login("teacher@example.test")
+	scoped := expect(call("GET", "/reports/attendance?date="+day+"&class_id="+class["id"].(string), nil), 200)
+	if len(scoped["data"].([]any)) != 3 {
+		t.Fatal("historical scope lost after transfer", scoped)
+	}
+	exported := call("GET", "/reports/attendance?date="+day+"&format=csv&page_size=1", nil)
+	if exported.Code != 200 || !strings.HasPrefix(exported.Header().Get("Content-Type"), "text/csv") || !strings.Contains(exported.Header().Get("Content-Disposition"), "attachment;") {
+		t.Fatal("CSV failed", exported.Code, exported.Body.String())
+	}
+	csvRows, err := csv.NewReader(strings.NewReader(strings.TrimPrefix(exported.Body.String(), "\ufeff"))).ReadAll()
+	if err != nil || len(csvRows) != 4 {
+		t.Fatal("CSV was paginated", csvRows, err)
+	}
+	formulaEscaped := false
+	for _, row := range csvRows[1:] {
+		if row[5] == "'=SUM(1,2)" {
+			formulaEscaped = true
+		}
+	}
+	if !strings.Contains(exported.Body.String(), `"Student;=1+2"`) {
+		t.Fatal("semicolon field not quoted for spreadsheet locales")
+	}
+	if !formulaEscaped {
+		t.Fatal("formula-like CSV value not escaped", csvRows)
+	}
+	var exportedRows int
+	if err := pool.QueryRow(ctx, `SELECT (metadata->>'row_count')::int FROM audit_logs WHERE action='reports.attendance.exported' ORDER BY id DESC LIMIT 1`).Scan(&exportedRows); err != nil || exportedRows != 3 {
+		t.Fatal("CSV audit not committed", exportedRows, err)
+	}
+	for _, path := range []string{"/reports/attendance?class_id=" + class2["id"].(string), "/dashboard/summary?class_id=" + class2["id"].(string)} {
+		result := expect(call("GET", path, nil), 200)
+		if path[1] == 'r' {
+			if len(result["data"].([]any)) != 0 {
+				t.Fatal("teacher saw other class")
+			}
+		} else if result["data"].(map[string]any)["totals"].(map[string]any)["roster_total"] != float64(0) {
+			t.Fatal("teacher dashboard leak")
+		}
+	}
+	login("operator@example.test")
+	expect(call("GET", "/reports/attendance", nil), 403)
+	expect(call("GET", "/reports/attendance?format=csv", nil), 403)
+	login("owner@example.test")
+	auditExport := expect(call("GET", "/audit-logs?action=reports.attendance.exported&actor_id="+teacher["id"].(string)+"&from="+day+"&to="+day, nil), 200)["data"].([]any)
+	if len(auditExport) != 1 || auditExport[0].(map[string]any)["actor_name"] != "Teacher" {
+		t.Fatal("audit filters drift", auditExport)
+	}
+	expect(call("GET", "/audit-logs?actor_id=bad", nil), 400)
+	var reassignment string
+	if err := pool.QueryRow(ctx, `SELECT id::text FROM teacher_assignments WHERE school_id=$1 AND teacher_id=$2 AND is_active`, schoolID, teacher["id"]).Scan(&reassignment); err != nil {
+		t.Fatal(err)
+	}
+	expect(call("PATCH", "/teacher-assignments/"+reassignment, map[string]any{"is_active": false}), 200)
+	login("teacher@example.test")
+	revokedReport := expect(call("GET", "/reports/attendance?date="+day, nil), 200)
+	if len(revokedReport["data"].([]any)) != 0 {
+		t.Fatal("report survived assignment revocation")
+	}
+	revokedCSV := call("GET", "/reports/attendance?format=csv&date="+day, nil)
+	revokedRows, err := csv.NewReader(strings.NewReader(strings.TrimPrefix(revokedCSV.Body.String(), "\ufeff"))).ReadAll()
+	if revokedCSV.Code != 200 || err != nil || len(revokedRows) != 1 {
+		t.Fatal("CSV leaked after revocation", revokedCSV.Code, err)
+	}
+	login("owner@example.test")
 	// Existing session eligibility is frozen; editing the calendar must not silently cancel it.
-	tomorrow := now.AddDate(0, 0, 1).Format("2006-01-02")
+	schoolDay, _ := time.Parse("2006-01-02", day)
+	tomorrow := schoolDay.AddDate(0, 0, 1).Format("2006-01-02")
 	future := expect(call("POST", "/attendance-sessions", map[string]any{"schedule_id": scheduleID, "date": tomorrow}), 201)["data"].(map[string]any)
 	expect(call("PUT", "/school/calendar/"+tomorrow, map[string]any{"is_school_day": false, "reason": "Changed after creation"}), 200)
 	if err := attendance.New(pool, schoolID, a).Tick(ctx); err != nil {
@@ -404,6 +517,7 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 	}
 	expect(call("GET", "/attendance-sessions/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", nil), 404)
 
+	expect(call("GET", "/reports/attendance?class_id=bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", nil), 200)
 	// Worker retry does not generate duplicates or finalize absence.
 	engine := attendance.New(pool, schoolID, a)
 	if err := engine.Tick(ctx); err != nil {
@@ -420,4 +534,30 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE action='attendance.sessions.created' AND metadata->>'source'='lifecycle_worker'`).Scan(&workerCreations); err != nil || workerCreations != 1 {
 		t.Fatal("worker retry duplicated creation audit", workerCreations, err)
 	}
+	// 10k cap applies before CSV headers/audit, without truncation or a partial file.
+	_, err = pool.Exec(ctx, `WITH st AS (
+ INSERT INTO students(school_id,nis,full_name) SELECT $1,'CAP-'||g,'Cap fixture '||g FROM generate_series(1,335) g RETURNING school_id,id,nis,full_name
+ ), e AS (
+ INSERT INTO student_enrollments(school_id,student_id,class_id,academic_year_id,joined_at,left_at,reason) SELECT st.school_id,st.id,$2,y.id,y.starts_on::timestamp AT TIME ZONE y.timezone,(y.ends_on+1)::timestamp AT TIME ZONE y.timezone,'Cap fixture' FROM st JOIN academic_years y ON y.school_id=st.school_id AND y.id=$3 RETURNING school_id,id,student_id,class_id
+ ), sched AS (
+ INSERT INTO attendance_schedules(school_id,class_id,name,timezone,weekdays,checkin_start,checkin_cutoff,close_time,is_active) SELECT $1,$2,'Cap '||g,'Asia/Jakarta',ARRAY[1,2,3,4,5,6,7],'00:00','00:01','00:03',false FROM generate_series(1,31) g RETURNING school_id,id,class_id
+ ), se AS (
+ INSERT INTO attendance_sessions(school_id,schedule_id,class_id,date,name,timezone,starts_at,late_after,closes_at,status,opened_at,closed_at) SELECT school_id,id,class_id,$4::date,'Cap','Asia/Jakarta',$4::date::timestamp AT TIME ZONE 'Asia/Jakarta',($4::date+time '00:01') AT TIME ZONE 'Asia/Jakarta',($4::date+time '00:03') AT TIME ZONE 'Asia/Jakarta','closed',clock_timestamp(),clock_timestamp() FROM sched RETURNING school_id,id,class_id
+ ) INSERT INTO attendance_session_participants(school_id,session_id,student_id,class_id,enrollment_id,nis,full_name) SELECT se.school_id,se.id,e.student_id,se.class_id,e.id,st.nis,st.full_name FROM se CROSS JOIN e JOIN st ON st.id=e.student_id`, schoolID, class2["id"], year["id"], day)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var auditBefore, auditAfter int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE action='reports.attendance.exported'`).Scan(&auditBefore); err != nil {
+		t.Fatal(err)
+	}
+	capped := call("GET", "/reports/attendance?format=csv&date="+day+"&class_id="+class2["id"].(string), nil)
+	capError := expect(capped, 400)
+	if capError["error"].(map[string]any)["code"] != "EXPORT_LIMIT_EXCEEDED" || capped.Header().Get("Content-Disposition") != "" {
+		t.Fatal("partial CSV on cap", capError)
+	}
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE action='reports.attendance.exported'`).Scan(&auditAfter); err != nil || auditBefore != auditAfter {
+		t.Fatal("failed CSV audited as successful", auditBefore, auditAfter, err)
+	}
+
 }

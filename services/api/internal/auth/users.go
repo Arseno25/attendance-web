@@ -265,16 +265,41 @@ func (s *Service) auditLogs(w http.ResponseWriter, r *http.Request) {
 	if !httpresponse.Method(w, r, "GET") {
 		return
 	}
-	if _, _, ok := s.current(w, r, false, "audit.read"); !ok {
+	tx, _, ok := s.BeginAuthorized(w, r, "audit.read", false)
+	if !ok {
 		return
 	}
+	defer tx.Rollback(context.Background())
 	page, size, ok := httpresponse.Pagination(w, r)
 	if !ok {
 		return
 	}
+	q := r.URL.Query()
+	actor, action, target := strings.ToLower(q.Get("actor_id")), strings.TrimSpace(q.Get("action")), strings.TrimSpace(q.Get("target_type"))
+	from, to := q.Get("from"), q.Get("to")
+	if (actor != "" && !httpresponse.ValidID(actor)) || len(action) > 100 || len(target) > 100 {
+		httpresponse.Error(w, 400, "VALIDATION_ERROR", "Filter audit tidak valid")
+		return
+	}
+	for _, day := range []string{from, to} {
+		if day != "" {
+			date, err := time.Parse("2006-01-02", day)
+			if err != nil || date.Year() < 1 || date.Year() >= 9999 {
+				httpresponse.Error(w, 400, "VALIDATION_ERROR", "Tanggal audit tidak valid")
+				return
+			}
+		}
+	}
+	if from != "" && to != "" && from > to {
+		httpresponse.Error(w, 400, "VALIDATION_ERROR", "Rentang audit tidak valid")
+		return
+	}
+	where := ` FROM audit_logs a JOIN schools sc ON sc.id=a.school_id LEFT JOIN users u ON u.school_id=a.school_id AND u.id=a.actor_id WHERE a.school_id=$1 AND ($2='' OR a.actor_id=NULLIF($2,'')::uuid) AND ($3='' OR a.action=$3) AND ($4='' OR a.occurred_at>=NULLIF($4,'')::date::timestamp AT TIME ZONE sc.timezone) AND ($5='' OR a.occurred_at<(NULLIF($5,'')::date+1)::timestamp AT TIME ZONE sc.timezone) AND ($6='' OR a.target_type=$6)`
+	args := []any{s.schoolID, actor, action, from, to, target}
 	type entry struct {
 		ID         int64          `json:"id"`
 		ActorID    *string        `json:"actor_id"`
+		ActorName  *string        `json:"actor_name"`
 		Action     string         `json:"action"`
 		TargetType string         `json:"target_type"`
 		TargetID   *string        `json:"target_id"`
@@ -283,11 +308,12 @@ func (s *Service) auditLogs(w http.ResponseWriter, r *http.Request) {
 		Metadata   map[string]any `json:"metadata"`
 	}
 	var total int
-	if err := s.pool.QueryRow(r.Context(), "SELECT count(*) FROM audit_logs WHERE school_id=$1", s.schoolID).Scan(&total); err != nil {
+	if err := tx.QueryRow(r.Context(), "SELECT count(*)"+where, args...).Scan(&total); err != nil {
 		databaseError(w, err)
 		return
 	}
-	rows, err := s.pool.Query(r.Context(), "SELECT id,actor_id::text,action,target_type,target_id::text,request_id,occurred_at,metadata FROM audit_logs WHERE school_id=$1 ORDER BY id DESC LIMIT $2 OFFSET $3", s.schoolID, size, (page-1)*size)
+	args = append(args, size, (page-1)*size)
+	rows, err := tx.Query(r.Context(), `SELECT a.id,a.actor_id::text,u.full_name,a.action,a.target_type,a.target_id::text,a.request_id,a.occurred_at,a.metadata`+where+` ORDER BY a.id DESC LIMIT $7 OFFSET $8`, args...)
 	if err != nil {
 		databaseError(w, err)
 		return
@@ -296,7 +322,7 @@ func (s *Service) auditLogs(w http.ResponseWriter, r *http.Request) {
 	entries := []entry{}
 	for rows.Next() {
 		var e entry
-		if err = rows.Scan(&e.ID, &e.ActorID, &e.Action, &e.TargetType, &e.TargetID, &e.RequestID, &e.OccurredAt, &e.Metadata); err != nil {
+		if err = rows.Scan(&e.ID, &e.ActorID, &e.ActorName, &e.Action, &e.TargetType, &e.TargetID, &e.RequestID, &e.OccurredAt, &e.Metadata); err != nil {
 			databaseError(w, err)
 			return
 		}

@@ -25,6 +25,8 @@ func New(p *pgxpool.Pool, school string, a *auth.Service) *Service {
 	return &Service{p, strings.ToLower(school), a}
 }
 func (s *Service) Register(m *http.ServeMux) {
+	m.HandleFunc("/api/v1/reports/attendance", s.report)
+	m.HandleFunc("/api/v1/dashboard/summary", s.dashboard)
 	m.HandleFunc("/api/v1/attendance-schedules", s.schedules)
 	m.HandleFunc("/api/v1/attendance-schedules/{id}", s.schedule)
 	m.HandleFunc("/api/v1/school/calendar", s.calendarList)
