@@ -153,80 +153,54 @@ await load({ ...form })
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <DataTableToolbar
-          class="gap-4"
+        <form
+          novalidate
+          aria-label="Filter laporan"
+          class="space-y-4"
           @submit.prevent="load({ ...form })"
         >
-          <FieldError
-            v-if="errors.student_id || errors.session_id"
-            class="w-full"
-          >
+          <FieldError v-if="errors.student_id || errors.session_id">
             {{ errors.student_id || errors.session_id }}
           </FieldError>
-          <div class="grid w-full gap-4 sm:w-72">
-            <Field :data-invalid="!!errors.search">
-              <FieldLabel for="report-search">Cari siswa</FieldLabel>
+          <FieldGroup class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <Field :data-invalid="!!errors.from">
+              <FieldLabel for="report-from">Dari tanggal</FieldLabel>
               <Input
-                id="report-search"
-                v-model="form.search"
-                :aria-invalid="!!errors.search"
-                :aria-describedby="errors.search ? 'report-search-error' : undefined"
-                placeholder="Nama atau NIS"
-                maxlength="100"
+                id="report-from"
+                v-model="form.from"
+                :aria-invalid="!!errors.from"
+                :aria-describedby="errors.from ? 'report-from-error' : undefined"
+                type="date"
+                required
                 :disabled="loading || exporting"
               />
               <FieldError
-                v-if="errors.search"
-                id="report-search-error"
+                v-if="errors.from"
+                id="report-from-error"
               >
-                {{ errors.search }}
+                {{ errors.from }}
               </FieldError>
             </Field>
-            <FieldGroup class="grid grid-cols-2 gap-3">
-              <Field :data-invalid="!!errors.from">
-                <FieldLabel for="report-from">Dari tanggal</FieldLabel>
-                <Input
-                  id="report-from"
-                  v-model="form.from"
-                  :aria-invalid="!!errors.from"
-                  :aria-describedby="errors.from ? 'report-from-error' : undefined"
-                  type="date"
-                  required
-                  :disabled="loading || exporting"
-                />
-                <FieldError
-                  v-if="errors.from"
-                  id="report-from-error"
-                >
-                  {{ errors.from }}
-                </FieldError>
-              </Field>
-              <Field :data-invalid="!!errors.to">
-                <FieldLabel for="report-to">Sampai tanggal</FieldLabel>
-                <Input
-                  id="report-to"
-                  v-model="form.to"
-                  :aria-invalid="!!errors.to"
-                  :aria-describedby="errors.to ? 'report-to-error' : undefined"
-                  type="date"
-                  required
-                  :min="form.from"
-                  :disabled="loading || exporting"
-                />
-                <FieldError
-                  v-if="errors.to"
-                  id="report-to-error"
-                >
-                  {{ errors.to }}
-                </FieldError>
-              </Field>
-            </FieldGroup>
-          </div>
-          <template #filters>
-            <Field
-              class="w-full sm:w-44"
-              :data-invalid="!!errors.academic_year_id"
-            >
+            <Field :data-invalid="!!errors.to">
+              <FieldLabel for="report-to">Sampai tanggal</FieldLabel>
+              <Input
+                id="report-to"
+                v-model="form.to"
+                :aria-invalid="!!errors.to"
+                :aria-describedby="errors.to ? 'report-to-error' : undefined"
+                type="date"
+                required
+                :min="form.from"
+                :disabled="loading || exporting"
+              />
+              <FieldError
+                v-if="errors.to"
+                id="report-to-error"
+              >
+                {{ errors.to }}
+              </FieldError>
+            </Field>
+            <Field :data-invalid="!!errors.academic_year_id">
               <FieldLabel for="report-year">Tahun ajaran</FieldLabel>
               <Select
                 v-model="yearSelection"
@@ -258,10 +232,7 @@ await load({ ...form })
                 {{ errors.academic_year_id }}
               </FieldError>
             </Field>
-            <Field
-              class="w-full sm:w-44"
-              :data-invalid="!!errors.class_id"
-            >
+            <Field :data-invalid="!!errors.class_id">
               <FieldLabel for="report-class">Kelas</FieldLabel>
               <Select
                 v-model="classSelection"
@@ -293,10 +264,7 @@ await load({ ...form })
                 {{ errors.class_id }}
               </FieldError>
             </Field>
-            <Field
-              class="w-full sm:w-44"
-              :data-invalid="!!errors.status"
-            >
+            <Field :data-invalid="!!errors.status">
               <FieldLabel for="report-status">Status kehadiran</FieldLabel>
               <Select
                 v-model="statusSelection"
@@ -328,24 +296,26 @@ await load({ ...form })
                 {{ errors.status }}
               </FieldError>
             </Field>
-          </template>
-          <template #footer>
-            <Button
-              type="submit"
-              :disabled="loading || exporting"
-            >
-              <Spinner v-if="loading" />
-              Terapkan filter
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              :disabled="loading || exporting"
-              @click="reset"
-            >
-              <RotateCcw />
-              Reset
-            </Button>
+            <Field :data-invalid="!!errors.search">
+              <FieldLabel for="report-search">Cari siswa</FieldLabel>
+              <Input
+                id="report-search"
+                v-model="form.search"
+                :aria-invalid="!!errors.search"
+                :aria-describedby="errors.search ? 'report-search-error' : undefined"
+                placeholder="Nama atau NIS"
+                maxlength="100"
+                :disabled="loading || exporting"
+              />
+              <FieldError
+                v-if="errors.search"
+                id="report-search-error"
+              >
+                {{ errors.search }}
+              </FieldError>
+            </Field>
+          </FieldGroup>
+          <div class="flex flex-wrap items-center justify-end gap-3">
             <Badge
               v-if="form.student_id"
               variant="outline"
@@ -358,8 +328,26 @@ await load({ ...form })
             >
               Terapkan perubahan filter sebelum mengekspor.
             </span>
-          </template>
-        </DataTableToolbar>
+            <div class="ml-auto flex gap-2">
+              <Button
+                type="submit"
+                :disabled="loading || exporting"
+              >
+                <Spinner v-if="loading" />
+                Terapkan filter
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                :disabled="loading || exporting"
+                @click="reset"
+              >
+                <RotateCcw />
+                Reset
+              </Button>
+            </div>
+          </div>
+        </form>
       </CardContent>
     </Card>
     <div

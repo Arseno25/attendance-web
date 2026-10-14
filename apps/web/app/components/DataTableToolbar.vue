@@ -12,12 +12,5 @@
     >
       <slot name="filters" />
     </div>
-    <div
-      v-if="$slots.footer"
-      data-slot="data-table-toolbar-footer"
-      class="flex w-full flex-wrap items-center gap-2"
-    >
-      <slot name="footer" />
-    </div>
   </form>
 </template>

@@ -117,14 +117,12 @@ test('table follows new server pages and visible columns without filtering or sl
   assert.match(empty, /colspan="1"/)
   assert.match(empty, /Tidak ada hasil filter/)
 })
-test('toolbar separates filter dropdowns from search and keeps the footer after both groups', async () => {
+test('toolbar separates filter dropdowns from search without adding an empty filter group', async () => {
   const html = await render(components.Toolbar, {}, {
     default: () => h('input', { id: 'search', 'aria-label': 'Cari siswa' }),
     filters: () => h('button', { id: 'status' }, 'Semua status'),
-    footer: () => h('button', { id: 'apply' }, 'Terapkan filter'),
   })
   assert.ok(html.indexOf('id="search"') < html.indexOf('data-slot="data-table-filters"'))
-  assert.ok(html.indexOf('id="status"') < html.indexOf('data-slot="data-table-toolbar-footer"'))
   assert.match(html, /ml-auto/)
   assert.match(html, /justify-end/)
   assert.match(html, /novalidate/)
