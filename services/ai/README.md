@@ -35,3 +35,35 @@ After obtaining authorized evaluation inputs:
 4. Run `../../.tools/uv run --locked python -m app.evaluation /private/path/to/authorized-hold-out-trace.json`. The report separates known FNIR/wrong identity, unknown FPIR, attack pass rate, p95 latency and the 95% upper bound when unknown false accepts are zero. The report deliberately does not approve automatic attendance. Review model/license/calibration/liveness/latency evidence and implement the validated runtime pipeline before enabling it.
 
 Current API acceptance wiring additionally requires every evaluated gate, a report SHA and matching evaluated-model SHA, then rechecks live consent, roster, active student and open session before using server time and recording an idempotent check-in. Browser track UUID is a correlation hint, never liveness or identity evidence. The present AI endpoint never emits this accepted contract.
+
+## Reusable recognition engine
+
+`app.face_engine.FaceRecognitionEngine` is an internal recognition-only engine separate from the public attendance endpoint. It reuses the SHA-verified CPU YuNet/SFace pipeline. `FaceDetector`, `FaceRecognizer`, `FaceMatcher` and `RecognitionSession` handle detection, normalized 128-dimensional features, vectorized exact cosine matching and temporal confirmation. Gallery scores aggregate the best of 1–5 templates per identity; the runner-up is a different identity. Threshold and margin must be supplied explicitly after calibration.
+
+The default session requires three consistent observations within five frames, samples at most every 200 ms, resets on disappearance, multiple faces, quality/identity changes, errors and gallery mutations, invalid/stale frames, and never repeats a cached identity during cooldown. Session count, frame age and timeouts are bounded. The optional trusted PAD hook reports evidence; rejection or exceptions clear confirmation. Missing PAD remains `None`, never a liveness pass. A caller must isolate galleries by school and maintain live consent/eligibility when loading encrypted templates. `load_embeddings`, `update_student_embeddings`, `remove_student` and `reset_session` are explicit operations; this module does not own a database, HTTP authentication or attendance.
+
+`AI_OPENCV_THREADS` bounds OpenCV CPU threads (integer 1–16, default 2). The shared detector serializes threshold/input-size changes across callers. Enrollment/preview retain their existing detection threshold and quality rules; preview never extracts embeddings. `POST /internal/v1/face-preview` is service-token protected and returns only boxes, count and quality. The public Go bridge additionally checks current student, role, consent, Origin and CSRF.
+
+```bash
+# From services/ai. Synthetic performance only, not accuracy or camera FPS.
+../../.tools/uv run --locked python -m app.engine_tools benchmark --models ../../.tools/models --identities 1000 --iterations 30
+# Requires an independently captured, authorized local dataset.
+../../.tools/uv run --locked python -m app.engine_tools calibrate --models ../../.tools/models --dataset /private/calibration.json --authorized-dataset --threshold 0.8 --margin 0.1
+../../.tools/uv run --locked python -m app.engine_tools evaluate --models ../../.tools/models --dataset /private/holdout.json --authorized-dataset --threshold 0.8 --margin 0.1
+```
+
+Threshold/margin values above demonstrate syntax only, not operating recommendations. Calibration runs an exploratory sweep; freeze chosen settings before evaluating a separate hold-out split. The JSON manifest uses paths relative to its directory:
+
+```json
+{
+  "split": "holdout",
+  "model_sha256": "<actual SFace SHA from model manifest>",
+  "gallery": {"anon-one": ["gallery/one-a.jpg", "gallery/one-b.jpg"]},
+  "probes": [
+    {"expected": "anon-one", "frames": ["holdout/one-1.jpg", "holdout/one-2.jpg", "holdout/one-3.jpg"]},
+    {"expected": null, "frames": ["unknown/1.jpg", "unknown/2.jpg", "unknown/3.jpg"]}
+  ]
+}
+```
+
+Use `split: calibration` for calibration. Each track requires 3–32 distinct frames; duplicate gallery images and gallery/probe overlap are rejected. Anonymous IDs are required. Reports derive actual engine decisions and stage timings, unknown rejection, FNIR/FPIR and latency; no result approves automatic attendance. Presentation attacks are rejected by this recognition-only evaluator and require a separate validated PAD evaluation. Sampling delay is disabled for supplied offline tracks; these timings cannot establish live-camera frame rate, timestamp tracking or resistance to replay. Enrollment and quality filters also still need representative real-camera calibration.

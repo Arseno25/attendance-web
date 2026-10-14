@@ -3,7 +3,10 @@ import { CameraOff } from '@lucide/vue'
 import { captureJpeg } from '../lib/biometrics.ts'
 import type { FaceOverlay } from '../types/biometrics.ts'
 
-withDefaults(defineProps<{ faces?: FaceOverlay[] }>(), { faces: () => [] })
+withDefaults(defineProps<{ faces?: FaceOverlay[]; guide?: boolean }>(), {
+  faces: () => [],
+  guide: false,
+})
 const emit = defineEmits<{ active: [value: boolean]; busy: [value: boolean] }>()
 const video = ref<HTMLVideoElement | null>(null)
 const active = ref(false)
@@ -114,10 +117,15 @@ defineExpose({ start, stop, capture })
       </div>
       <template v-if="active">
         <div
+          v-if="guide"
+          aria-hidden="true"
+          class="pointer-events-none absolute left-1/2 top-1/2 h-3/4 w-2/5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-dashed border-white/70"
+        />
+        <div
           v-for="(face, index) in faces"
           :key="index"
           class="absolute rounded border-2"
-          :class="face.accepted ? 'border-emerald-500' : 'border-amber-500'"
+          :class="face.tone === 'success' || face.accepted ? 'border-success' : 'border-warning'"
           :style="{
             left: `${face.box.x * 100}%`,
             top: `${face.box.y * 100}%`,
@@ -126,7 +134,7 @@ defineExpose({ start, stop, capture })
           }"
         >
           <Badge
-            :variant="face.accepted ? 'success' : 'warning'"
+            :variant="face.tone ?? (face.accepted ? 'success' : 'warning')"
             class="absolute left-0 top-0 max-w-full truncate rounded-sm"
           >
             {{ face.label }}

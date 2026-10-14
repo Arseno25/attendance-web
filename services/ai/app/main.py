@@ -1,5 +1,6 @@
 import hmac
 import os
+import threading
 from uuid import UUID, uuid4
 
 import cv2
@@ -15,6 +16,7 @@ from app.pipeline import ImageError, get_cipher, get_pipeline, status
 app = FastAPI(
     title="Attendance AI (internal)", docs_url=None, redoc_url=None, openapi_url=None
 )
+_preview_slot = threading.BoundedSemaphore(1)
 
 
 def error(request: Request, status_code: int, code: str, message: str):
@@ -53,7 +55,10 @@ async def request_metadata(request: Request, call_next):
         except HTTPException:
             return error(request, 401, "UNAUTHENTICATED", "Request tidak diizinkan")
     if request.method == "POST":
-        limit = 2 << 20 if request.url.path == "/internal/v1/enroll" else 6 << 20
+        limit = {
+            "/internal/v1/enroll": 2 << 20,
+            "/internal/v1/face-preview": 512 << 10,
+        }.get(request.url.path, 6 << 20)
         total, chunks = 0, []
         async for chunk in request.stream():
             total += len(chunk)
@@ -97,6 +102,10 @@ class Enrollment(StrictBody):
     student_id: UUID
     consent_id: UUID
     frames: list[str] = Field(min_length=3, max_length=5, repr=False)
+
+
+class FacePreview(StrictBody):
+    image: str = Field(min_length=1, max_length=524288, repr=False)
 
 
 class GalleryTemplate(StrictBody):
@@ -180,3 +189,21 @@ def recognize(body: Recognition, request: Request):
         gallery_revision=body.gallery_revision,
         model_sha256=pipeline.model_sha256,
     )
+
+
+@app.post("/internal/v1/face-preview", dependencies=[Depends(require_service)])
+def face_preview(body: FacePreview, request: Request):
+    if not _preview_slot.acquire(blocking=False):
+        return error(
+            request, 503, "INFERENCE_BUSY", "Kamera sedang diproses; coba lagi"
+        )
+    try:
+        return get_pipeline().preview(body.image)
+    except ImageError:
+        raise
+    except OSError, ValueError, cv2.error:
+        return error(
+            request, 503, "PIPELINE_NOT_CONFIGURED", "Model kamera belum tersedia"
+        )
+    finally:
+        _preview_slot.release()

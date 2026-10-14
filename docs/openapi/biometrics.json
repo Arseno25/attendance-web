@@ -169,7 +169,7 @@
     "/api/v1/students/{id}/enrollments": {
       "post": {
         "summary": "Enroll provisional face template",
-        "description": "Live biometrics.enroll, active student and current guardian consent. 3–5 distinct quality-checked JPEGs; JSON <=2 MiB. Frames/vectors ephemeral; only AES-GCM ciphertext stored. Registration does not approve automatic attendance.",
+        "description": "Live biometrics.enroll, active student and current guardian consent. 3\u20135 distinct quality-checked JPEGs; JSON <=2 MiB. Frames/vectors ephemeral; only AES-GCM ciphertext stored. Registration does not approve automatic attendance.",
         "security": [
           {
             "UserCookie": []
@@ -384,6 +384,112 @@
           }
         }
       }
+    },
+    "/api/v1/students/{id}/face-preview": {
+      "post": {
+        "summary": "Check enrollment camera frame quality",
+        "description": "Live biometrics.enroll, active student and eligible guardian consent, rechecked after inference. Strict JSON <=512 KiB; raw base64 JPEG <=384 KiB and dimensions 160\u20131280. Frames remain ephemeral; preview exposes only normalized geometry and quality, never identity or embeddings.",
+        "security": [
+          {
+            "UserCookie": []
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Strict payload validation error"
+          },
+          "401": {
+            "description": "Session unauthenticated/expired"
+          },
+          "403": {
+            "description": "Permission, Origin or CSRF rejected"
+          },
+          "503": {
+            "description": "Service unavailable; no automatic attendance"
+          },
+          "409": {
+            "description": "Student inactive"
+          },
+          "410": {
+            "description": "Consent unavailable, expired or withdrawn"
+          },
+          "422": {
+            "description": "JPEG validation or frame dimensions rejected"
+          },
+          "200": {
+            "description": "Success in existing data/request_id envelope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/FacePreview"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "request_id"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "image": {
+                    "type": "string",
+                    "maxLength": 524288
+                  }
+                },
+                "required": [
+                  "image"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "id",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ]
     }
   },
   "components": {
@@ -540,7 +646,7 @@
             "items": {
               "type": "string",
               "maxLength": 524288,
-              "description": "Raw base64 JPEG; decoded <=384 KiB; header dimensions 160–1280 per axis, no data URL."
+              "description": "Raw base64 JPEG; decoded <=384 KiB; header dimensions 160\u20131280 per axis, no data URL."
             },
             "minItems": 3,
             "maxItems": 5
@@ -571,7 +677,7 @@
           "image": {
             "type": "string",
             "maxLength": 524288,
-            "description": "Raw base64 JPEG; decoded <=384 KiB; header dimensions 160–1280 per axis, no data URL."
+            "description": "Raw base64 JPEG; decoded <=384 KiB; header dimensions 160\u20131280 per axis, no data URL."
           },
           "event_id": {
             "type": "string",
@@ -688,6 +794,80 @@
           }
         },
         "description": "Current pipeline never emits accepted identity. Labels/IDs require evaluated evidence and committed attendance; unknown/inconclusive responses omit identities."
+      },
+      "FacePreview": {
+        "type": "object",
+        "properties": {
+          "faces": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "box": {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "y": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "width": {
+                      "type": "number",
+                      "maximum": 1,
+                      "exclusiveMinimum": 0
+                    },
+                    "height": {
+                      "type": "number",
+                      "maximum": 1,
+                      "exclusiveMinimum": 0
+                    }
+                  },
+                  "required": [
+                    "x",
+                    "y",
+                    "width",
+                    "height"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "box"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 16
+          },
+          "face_count": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 16
+          },
+          "quality": {
+            "enum": [
+              "ready",
+              "no_face",
+              "multiple_faces",
+              "low_quality"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "description": "Fixed localized quality guidance; no candidate identity."
+          }
+        },
+        "required": [
+          "faces",
+          "face_count",
+          "quality",
+          "message"
+        ],
+        "additionalProperties": false
       }
     }
   }

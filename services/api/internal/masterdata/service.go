@@ -35,6 +35,7 @@ func (s *Service) Register(m *http.ServeMux) {
 	m.HandleFunc("/api/v1/students/{id}/consents", s.consents)
 	m.HandleFunc("/api/v1/consents/{id}/withdraw", s.withdraw)
 	m.HandleFunc("/api/v1/students/{id}/face-status", s.faceStatus)
+	m.HandleFunc("/api/v1/students/{id}/face-preview", s.facePreview)
 	m.HandleFunc("/api/v1/biometrics/students", s.biometricStudents)
 	m.HandleFunc("/api/v1/students/{id}/enrollments", s.enrollFace)
 	m.HandleFunc("/api/v1/students/{id}/face-revoke", s.revokeFace)

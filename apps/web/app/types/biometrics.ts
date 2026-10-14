@@ -8,6 +8,7 @@ export interface FaceOverlay {
   box: FaceBox
   label: string
   accepted: boolean
+  tone?: 'success' | 'warning'
 }
 export interface FaceStatus {
   enrolled: boolean

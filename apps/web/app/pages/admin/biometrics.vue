@@ -189,6 +189,7 @@ await load()
         <StudentFaceEnrollment
           v-if="selected"
           :student-id="selected.id"
+          :student-name="selected.full_name"
         />
       </DialogContent>
     </Dialog>

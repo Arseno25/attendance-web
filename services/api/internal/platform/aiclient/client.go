@@ -8,6 +8,7 @@ import (
 	"errors"
 	"image/jpeg"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strings"
@@ -78,6 +79,75 @@ type Face struct {
 	StudentID string `json:"student_id,omitempty"`
 	Label     string `json:"label,omitempty"`
 }
+type PreviewFace struct {
+	Box Box `json:"box"`
+}
+type FacePreview struct {
+	Faces     []PreviewFace `json:"faces"`
+	FaceCount int           `json:"face_count"`
+	Quality   string        `json:"quality"`
+	Message   string        `json:"message"`
+}
+
+func (p FacePreview) Valid() bool {
+	if p.FaceCount != len(p.Faces) || p.FaceCount > 16 {
+		return false
+	}
+	switch p.Quality {
+	case "no_face":
+		if p.FaceCount != 0 {
+			return false
+		}
+	case "multiple_faces":
+		if p.FaceCount < 2 {
+			return false
+		}
+	case "ready", "low_quality":
+		if p.FaceCount != 1 {
+			return false
+		}
+	default:
+		return false
+	}
+	for _, face := range p.Faces {
+		b := face.Box
+		for _, value := range []float64{b.X, b.Y, b.Width, b.Height} {
+			if math.IsNaN(value) || math.IsInf(value, 0) || value < 0 || value > 1 {
+				return false
+			}
+		}
+		if b.Width == 0 || b.Height == 0 || b.X+b.Width > 1 || b.Y+b.Height > 1 {
+			return false
+		}
+	}
+	return true
+}
+
+func (c *Client) FacePreview(ctx context.Context, image string) (FacePreview, error) {
+	var out FacePreview
+	if err := c.call(ctx, "POST", "/internal/v1/face-preview", map[string]string{"image": image}, &out); err != nil {
+		return FacePreview{}, err
+	}
+	if !out.Valid() {
+		return FacePreview{}, ErrUnavailable
+	}
+	// Guidance comes from quality alone; upstream identity metadata must never reach enrollment previews.
+	switch out.Quality {
+	case "ready":
+		out.Message = "Wajah siap diambil"
+	case "no_face":
+		out.Message = "Posisikan wajah di depan kamera"
+	case "multiple_faces":
+		out.Message = "Pastikan hanya satu wajah di dalam kamera"
+	case "low_quality":
+		out.Message = "Perbaiki pencahayaan dan hadapkan wajah ke kamera"
+	}
+	if out.Faces == nil {
+		out.Faces = []PreviewFace{}
+	}
+	return out, nil
+}
+
 type Recognition struct {
 	Decision           string         `json:"decision"`
 	Faces              []Face         `json:"faces"`

@@ -164,6 +164,69 @@ func (s *Service) enrollFace(w http.ResponseWriter, r *http.Request) {
 	httpresponse.Data(w, 201, map[string]any{"enrolled": true, "status": "provisional", "frame_count": result.FrameCount, "recognition_enabled": false, "block_reason": aiclient.BlockReason, "template": metadata})
 }
 
+func (s *Service) facePreview(w http.ResponseWriter, r *http.Request) {
+	if !httpresponse.Method(w, r, "POST") {
+		return
+	}
+	// Preview needs the camera POST boundary while retaining shared read locks for concurrent previews.
+	if _, ok := s.auth.Authenticate(w, r, true); !ok {
+		return
+	}
+	sc, id, ok := s.consentStudent(w, r, "biometrics.enroll", false)
+	if !ok {
+		return
+	}
+	defer sc.tx.Rollback(context.Background())
+	var active bool
+	if err := sc.tx.QueryRow(r.Context(), `SELECT status='active' FROM students WHERE school_id=$1 AND id=$2`, s.schoolID, id).Scan(&active); err != nil {
+		dbError(w, err)
+		return
+	}
+	if !active {
+		httpresponse.Error(w, 409, "STUDENT_NOT_ACTIVE", "Siswa harus aktif untuk menggunakan kamera wajah")
+		return
+	}
+	var consent string
+	if err := sc.tx.QueryRow(r.Context(), consentEligibility, s.schoolID, id).Scan(&consent); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			httpresponse.Error(w, 410, "CONSENT_REQUIRED", "Consent wali belum tersedia, kedaluwarsa atau sudah dicabut")
+		} else {
+			dbError(w, err)
+		}
+		return
+	}
+	var in struct {
+		Image string `json:"image"`
+	}
+	if !httpresponse.DecodeLimit(w, r, &in, 512<<10) {
+		return
+	}
+	if !aiclient.ValidateImage(in.Image) {
+		httpresponse.Error(w, 422, "INVALID_IMAGE", "Gunakan base64 JPEG 160–1280 piksel, maksimal 384 KiB")
+		return
+	}
+	result, err := s.ai.FacePreview(r.Context(), in.Image)
+	if err != nil {
+		var validation *aiclient.ValidationError
+		if errors.As(err, &validation) {
+			httpresponse.Error(w, 422, "INVALID_IMAGE", "Gambar kamera tidak dapat diproses; ambil ulang")
+		} else {
+			httpresponse.Error(w, 503, "AI_UNAVAILABLE", "Layanan wajah belum tersedia; coba kembali")
+		}
+		return
+	}
+	// Consent can expire while inference is running even though revocations are serialized by the school lock.
+	if err := sc.tx.QueryRow(r.Context(), consentEligibility, s.schoolID, id).Scan(&consent); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			httpresponse.Error(w, 410, "CONSENT_REQUIRED", "Consent wali belum tersedia, kedaluwarsa atau sudah dicabut")
+		} else {
+			dbError(w, err)
+		}
+		return
+	}
+	httpresponse.Data(w, 200, result)
+}
+
 func (s *Service) revokeFace(w http.ResponseWriter, r *http.Request) {
 	if !httpresponse.Method(w, r, "POST") {
 		return

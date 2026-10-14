@@ -82,6 +82,10 @@ func TestBiometricEnrollmentConsentRevocationAndDevicePrivacy(t *testing.T) {
 		t.Fatal(err)
 	}
 	aiCalls := 0
+	previewCalls := 0
+	previewStatus := 200
+	previewResponse := `{"faces":[{"box":{"x":0.1,"y":0.2,"width":0.3,"height":0.4},"student_id":"PRIVATE-ID","label":"PRIVATE-CANDIDATE","embedding":[1]}],"face_count":1,"quality":"ready","message":"PRIVATE-CANDIDATE","similarity":0.99}`
+	var previewEntered, previewRelease chan struct{}
 	galleryCount := -1
 	decision := "unknown"
 	aiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -95,6 +99,20 @@ func TestBiometricEnrollmentConsentRevocationAndDevicePrivacy(t *testing.T) {
 		if r.URL.Path == "/internal/v1/enroll" {
 			aiCalls++
 			_ = json.NewEncoder(w).Encode(map[string]any{"ciphertext": base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{42}, 528)), "nonce": base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{43}, 12)), "key_id": "synthetic-test", "model_sha256": strings.Repeat("a", 64), "frame_count": 3, "status": "provisional"})
+			return
+		}
+		if r.URL.Path == "/internal/v1/face-preview" {
+			previewCalls++
+			var input map[string]string
+			if err := json.NewDecoder(r.Body).Decode(&input); err != nil || len(input) != 1 || input["image"] == "" {
+				t.Error("preview sent unexpected fields", input, err)
+			}
+			if previewEntered != nil {
+				close(previewEntered)
+				<-previewRelease
+			}
+			w.WriteHeader(previewStatus)
+			_, _ = w.Write([]byte(previewResponse))
 			return
 		}
 		if r.URL.Path == "/internal/v1/recognize" {
@@ -120,10 +138,11 @@ func TestBiometricEnrollmentConsentRevocationAndDevicePrivacy(t *testing.T) {
 	h := httpserver.NewHandler(pool.Ping, "http://localhost:3000", func(m *http.ServeMux) { a.Register(m); master.Register(m); attendanceService.Register(m) })
 	cookie := (*http.Cookie)(nil)
 	csrf := ""
+	origin := "http://localhost:3000"
 	call := func(method, path string, body any) *httptest.ResponseRecorder {
 		payload, _ := json.Marshal(body)
 		r := httptest.NewRequest(method, "/api/v1"+path, bytes.NewReader(payload))
-		r.Header.Set("Origin", "http://localhost:3000")
+		r.Header.Set("Origin", origin)
 		r.Header.Set("Content-Type", "application/json")
 		if cookie != nil {
 			r.AddCookie(cookie)
@@ -174,8 +193,11 @@ func TestBiometricEnrollmentConsentRevocationAndDevicePrivacy(t *testing.T) {
 		frames = append(frames, base64.StdEncoding.EncodeToString(encoded.Bytes()))
 	}
 	enroll := map[string]any{"frames": frames}
+	preview := map[string]string{"image": frames[0]}
+	previewPath := "/students/" + id + "/face-preview"
+	expect(call("POST", previewPath, preview), 410)
 	expect(call("POST", "/students/"+id+"/enrollments", enroll), 410)
-	if aiCalls != 0 {
+	if aiCalls != 0 || previewCalls != 0 {
 		t.Fatal("AI called without consent")
 	}
 	guardian := expect(call("POST", "/students/"+id+"/guardians", map[string]any{"full_name": "Synthetic guardian", "relationship": "parent", "verification_ref": "SYNTHETIC-TEST"}), 201)["data"].(map[string]any)
@@ -187,6 +209,10 @@ func TestBiometricEnrollmentConsentRevocationAndDevicePrivacy(t *testing.T) {
 	expect(call("POST", "/users", map[string]any{"email": "revoker@example.test", "full_name": "Synthetic revoker", "role": "admin", "password": password, "grants": []string{"biometrics.revoke"}}), 201)
 	expect(call("POST", "/users", map[string]any{"email": "unauthorized@example.test", "full_name": "Synthetic unauthorized", "role": "operator", "password": password}), 201)
 	login("enroller@example.test")
+	previewData := expect(call("POST", previewPath, preview), 200)["data"].(map[string]any)
+	if previewData["quality"] != "ready" || previewData["face_count"] != float64(1) || strings.Contains(stringMustJSON(previewData), "PRIVATE") || strings.Contains(stringMustJSON(previewData), "embedding") || strings.Contains(stringMustJSON(previewData), "similarity") {
+		t.Fatal("preview leaked private metadata or wrong quality", previewData)
+	}
 	selectRows := expect(call("GET", "/biometrics/students?search=bio-001", nil), 200)
 	selected := selectRows["data"].([]any)
 	if len(selected) != 1 {
@@ -210,15 +236,18 @@ func TestBiometricEnrollmentConsentRevocationAndDevicePrivacy(t *testing.T) {
 	expect(call("GET", "/classes", nil), 403)
 	expect(call("POST", "/students/"+id+"/face-revoke", map[string]string{"reason": "must deny"}), 403)
 	login("unauthorized@example.test")
+	expect(call("POST", previewPath, preview), 403)
 	expect(call("GET", "/biometrics/students", nil), 403)
 	expect(call("GET", "/students/"+id+"/face-status", nil), 403)
 	login("revoker@example.test")
+	expect(call("POST", previewPath, preview), 403)
 	expect(call("GET", "/biometrics/students", nil), 200)
 	expect(call("GET", "/students/"+id+"/face-status", nil), 200)
 	expect(call("POST", "/students/"+id+"/enrollments", enroll), 403)
 	login("owner@example.test")
 	expect(call("POST", "/users", map[string]any{"email": "teacher@example.test", "full_name": "Synthetic teacher", "role": "teacher", "password": password}), 201)
 	login("teacher@example.test")
+	expect(call("POST", previewPath, preview), 403)
 	expect(call("GET", "/biometrics/students", nil), 403)
 	expect(call("GET", "/students/"+id+"/face-status", nil), 403)
 	expect(call("POST", "/students/"+id+"/enrollments", enroll), 403)
@@ -226,8 +255,100 @@ func TestBiometricEnrollmentConsentRevocationAndDevicePrivacy(t *testing.T) {
 	login("owner@example.test")
 	saved := csrf
 	csrf = "wrong"
+	expect(call("POST", previewPath, preview), 403)
 	expect(call("POST", "/students/"+id+"/enrollments", enroll), 403)
 	csrf = saved
+	for _, value := range []string{"", "http://untrusted.test", "http://localhost:3000/"} {
+		origin = value
+		expect(call("POST", previewPath, preview), 403)
+	}
+	origin = "http://localhost:3000"
+	expect(call("GET", previewPath, nil), 405)
+	expect(call("POST", previewPath, map[string]any{"image": frames[0], "student_id": id}), 400)
+	expect(call("POST", previewPath, map[string]any{"image": strings.Repeat("a", 512<<10)}), 400)
+	for _, value := range []string{"", "not-jpeg", "data:image/jpeg;base64," + frames[0]} {
+		expect(call("POST", previewPath, map[string]string{"image": value}), 422)
+	}
+	if previewCalls != 1 {
+		t.Fatal("rejected preview reached AI", previewCalls)
+	}
+	validPreviewResponse := previewResponse
+	for _, value := range []string{
+		`{"faces":[],"face_count":1,"quality":"ready"}`,
+		`{"faces":[{"box":{"x":0.9,"y":0,"width":0.5,"height":0.5}}],"face_count":1,"quality":"ready"}`,
+		`{"faces":[],"face_count":0,"quality":"unrecognized"}`,
+	} {
+		previewResponse = value
+		expect(call("POST", previewPath, preview), 503)
+	}
+	previewResponse = validPreviewResponse
+	previewStatus = 422
+	previewResponse = `{"error":{"code":"PRIVATE-ID","message":"PRIVATE-CANDIDATE"}}`
+	if result := expect(call("POST", previewPath, preview), 422); strings.Contains(stringMustJSON(result), "PRIVATE") {
+		t.Fatal("preview validation error leaked AI metadata", result)
+	}
+	previewStatus, previewResponse = 200, validPreviewResponse
+	master.SetAI(nil)
+	expect(call("POST", previewPath, preview), 503)
+	master.SetAI(ai)
+	// Revocation waits behind the authorized read snapshot, then the next preview is refused.
+	previewEntered, previewRelease = make(chan struct{}), make(chan struct{})
+	previewDone := make(chan *httptest.ResponseRecorder, 1)
+	go func() { previewDone <- call("POST", previewPath, preview) }()
+	select {
+	case <-previewEntered:
+	case <-time.After(3 * time.Second):
+		close(previewRelease)
+		t.Fatal("preview did not reach AI")
+	}
+	withdrawDone := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		withdrawDone <- call("POST", "/consents/"+consent+"/withdraw", map[string]string{"reason": "Synthetic preview revocation"})
+	}()
+	select {
+	case <-withdrawDone:
+		close(previewRelease)
+		t.Fatal("revocation bypassed authorized read lock")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(previewRelease)
+	select {
+	case w := <-previewDone:
+		expect(w, 200)
+	case <-time.After(3 * time.Second):
+		t.Fatal("preview blocked")
+	}
+	select {
+	case w := <-withdrawDone:
+		expect(w, 200)
+	case <-time.After(3 * time.Second):
+		t.Fatal("revocation blocked")
+	}
+	previewEntered, previewRelease = nil, nil
+	expect(call("POST", previewPath, preview), 410)
+	consent = newConsent()
+	// A clock-based expiry during inference must also suppress the preview result.
+	if _, err := pool.Exec(ctx, `UPDATE biometric_consents SET created_at=clock_timestamp()-interval '1 hour',valid_until=clock_timestamp()+interval '200 milliseconds' WHERE id=$1`, consent); err != nil {
+		t.Fatal(err)
+	}
+	previewEntered, previewRelease = make(chan struct{}), make(chan struct{})
+	go func() { previewDone <- call("POST", previewPath, preview) }()
+	select {
+	case <-previewEntered:
+	case <-time.After(3 * time.Second):
+		close(previewRelease)
+		t.Fatal("expiring preview did not reach AI")
+	}
+	time.Sleep(250 * time.Millisecond)
+	close(previewRelease)
+	select {
+	case w := <-previewDone:
+		expect(w, 410)
+	case <-time.After(3 * time.Second):
+		t.Fatal("expiring preview blocked")
+	}
+	previewEntered, previewRelease = nil, nil
+	consent = newConsent()
 	expect(call("POST", "/students/"+id+"/enrollments", map[string]any{"frames": []string{frames[0]}}), 400)
 	expect(call("POST", "/students/"+id+"/enrollments", map[string]any{"frames": []string{"data:image/jpeg;base64," + frames[0], frames[1], frames[2]}}), 400)
 	expect(call("POST", "/students/"+id+"/enrollments", map[string]any{"frames": frames, "student_id": id}), 400)
@@ -261,6 +382,7 @@ func TestBiometricEnrollmentConsentRevocationAndDevicePrivacy(t *testing.T) {
 	expect(call("POST", "/consents/"+newerConsent+"/withdraw", map[string]string{"reason": "Synthetic overlapping-consent fixture cleanup"}), 200)
 	expect(call("POST", "/students/"+id+"/enrollments", enroll), 201)
 	expect(call("POST", "/consents/"+consent+"/withdraw", map[string]string{"reason": "Synthetic withdrawal"}), 200)
+	expect(call("POST", previewPath, preview), 410)
 	var count int
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM face_templates`).Scan(&count); err != nil || count != 0 {
 		t.Fatal("withdrawal retained ciphertext", count, err)
@@ -269,6 +391,7 @@ func TestBiometricEnrollmentConsentRevocationAndDevicePrivacy(t *testing.T) {
 	consent = newConsent()
 	expect(call("POST", "/students/"+id+"/enrollments", enroll), 201)
 	expect(call("PATCH", "/students/"+id, map[string]string{"status": "inactive"}), 200)
+	expect(call("POST", previewPath, preview), 409)
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM face_templates`).Scan(&count); err != nil || count != 0 {
 		t.Fatal("inactive retained ciphertext", count, err)
 	}
@@ -286,6 +409,7 @@ func TestBiometricEnrollmentConsentRevocationAndDevicePrivacy(t *testing.T) {
 	if _, err := pool.Exec(ctx, `UPDATE biometric_consents SET created_at=clock_timestamp()-interval '2 hours',valid_until=clock_timestamp()-interval '1 hour' WHERE id=$1`, consent); err != nil {
 		t.Fatal(err)
 	}
+	expect(call("POST", previewPath, preview), 410)
 	expect(call("POST", "/students/"+id+"/enrollments", enroll), 410)
 	consent = newConsent()
 	expect(call("POST", "/students/"+id+"/enrollments", enroll), 201)
@@ -298,6 +422,7 @@ func TestBiometricEnrollmentConsentRevocationAndDevicePrivacy(t *testing.T) {
 		t.Fatal(err)
 	}
 	expect(call("GET", "/students/"+other+"/face-status", nil), 404)
+	expect(call("POST", "/students/"+other+"/face-preview", preview), 404)
 	login("enroller@example.test")
 	expect(call("GET", "/students/"+other+"/face-status", nil), 404)
 	otherRows := expect(call("GET", "/biometrics/students?search=OTHER", nil), 200)["data"].([]any)
@@ -309,8 +434,10 @@ func TestBiometricEnrollmentConsentRevocationAndDevicePrivacy(t *testing.T) {
 	login("owner@example.test")
 	expect(call("PATCH", "/users/"+enrolledOfficer["id"].(string), map[string]any{"grants": []string{}}), 200)
 	cookie, csrf = oldCookie, oldCSRF
+	expect(call("POST", previewPath, preview), 401)
 	expect(call("GET", "/biometrics/students", nil), 401)
 	login("enroller@example.test")
+	expect(call("POST", previewPath, preview), 403)
 	expect(call("GET", "/biometrics/students", nil), 403)
 	expect(call("GET", "/students/"+id+"/face-status", nil), 403)
 	login("owner@example.test")

@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { Camera, CameraOff, RefreshCw, ScanFace, Trash2 } from '@lucide/vue'
+import { RefreshCw, ScanFace, Trash2 } from '@lucide/vue'
 import { enrollmentSchema, reasonSchema } from '~/lib/validation/consent-devices'
 import type { Result } from '~/types/auth'
 import type { FaceStatus } from '~/types/biometrics'
 
-const props = defineProps<{ studentId: string }>()
+const props = defineProps<{ studentId: string; studentName?: string }>()
 const request = useApi()
 const auth = useAuth()
 const canEnroll = computed(() => auth.session.value?.permissions.includes('biometrics.enroll'))
@@ -14,15 +14,11 @@ const open = ref(false)
 const revokeOpen = ref(false)
 const busy = ref(false)
 const loading = ref(false)
-const cameraActive = ref(false)
-const cameraBusy = ref(false)
 const error = ref('')
 const success = ref('')
 const frames = ref<string[]>([])
 const reason = ref('')
-const camera = ref<{ start: () => Promise<void>; stop: () => void; capture: () => string } | null>(
-  null,
-)
+const capturePanel = ref<{ stop: () => void } | null>(null)
 const { errors, validate, clear } = useFormValidation(
   () => (revokeOpen.value ? reasonSchema : enrollmentSchema),
   () => (revokeOpen.value ? { reason: reason.value } : { frames: frames.value }),
@@ -45,20 +41,10 @@ async function refresh() {
 
 async function register() {
   await refresh()
-  if (!status.value?.consent_eligible || !status.value.pipeline_ready) return
   frames.value = []
   clear()
   success.value = ''
   open.value = true
-}
-
-function capture() {
-  error.value = ''
-  try {
-    if (camera.value && frames.value.length < 5) frames.value.push(camera.value.capture())
-  } catch (cause) {
-    error.value = (cause as Error).message
-  }
 }
 
 async function save() {
@@ -70,7 +56,7 @@ async function save() {
       method: 'POST',
       body: { frames: frames.value },
     })
-    camera.value?.stop()
+    capturePanel.value?.stop()
     frames.value = []
     open.value = false
     success.value =
@@ -105,7 +91,7 @@ async function revoke() {
 
 watch(open, (value) => {
   if (!value) {
-    camera.value?.stop()
+    capturePanel.value?.stop()
     frames.value = []
     clear()
   }
@@ -117,10 +103,6 @@ function openRevocation() {
   reason.value = ''
   error.value = ''
   revokeOpen.value = true
-}
-function resetFrames() {
-  frames.value = []
-  clear()
 }
 </script>
 
@@ -160,7 +142,7 @@ function resetFrames() {
           <Button
             v-if="canEnroll"
             size="sm"
-            :disabled="busy || loading || !status?.consent_eligible || !status?.pipeline_ready"
+            :disabled="busy || loading"
             @click="register"
           >
             <ScanFace />
@@ -252,7 +234,7 @@ function resetFrames() {
       class="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl"
     >
       <DialogHeader>
-        <DialogTitle>Daftar wajah siswa</DialogTitle>
+        <DialogTitle>Daftar wajah{{ studentName ? ` · ${studentName}` : ' siswa' }}</DialogTitle>
         <DialogDescription>
           Ambil 3–5 frame berbeda dengan satu wajah, pencahayaan baik, dan posisi kepala sedikit
           bervariasi.
@@ -270,23 +252,22 @@ function resetFrames() {
         >
           <AlertDescription>{{ error }}</AlertDescription>
         </Alert>
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <Badge variant="secondary">{{ frames.length }} dari maksimal 5 frame</Badge>
-          <Button
-            type="button"
-            variant="outline"
-            :disabled="busy || cameraBusy"
-            @click="cameraActive ? camera?.stop() : camera?.start()"
-          >
-            <CameraOff v-if="cameraActive" />
-            <Camera v-else />
-            {{ cameraActive ? 'Hentikan kamera' : 'Aktifkan kamera' }}
-          </Button>
-        </div>
-        <FaceCamera
-          ref="camera"
-          @active="cameraActive = $event"
-          @busy="cameraBusy = $event"
+        <Alert v-if="!status?.consent_eligible || !status?.pipeline_ready">
+          <AlertTitle>Pendaftaran belum tersedia</AlertTitle>
+          <AlertDescription>
+            {{
+              !status?.consent_eligible
+                ? 'Persetujuan wali harus berlaku dan siswa harus aktif sebelum kamera dapat digunakan untuk pendaftaran.'
+                : 'Layanan model belum siap. Muat ulang status setelah layanan pulih.'
+            }}
+          </AlertDescription>
+        </Alert>
+        <FaceEnrollmentCapture
+          ref="capturePanel"
+          v-model:frames="frames"
+          :student-id="studentId"
+          :enabled="!!status?.consent_eligible && !!status?.pipeline_ready"
+          :busy="busy"
         />
         <Field :data-invalid="!!errors.frames">
           <FieldDescription>
@@ -300,24 +281,6 @@ function resetFrames() {
             {{ errors.frames }}
           </FieldError>
         </Field>
-        <div class="flex justify-end gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            :disabled="busy || !frames.length"
-            @click="resetFrames"
-          >
-            Ulangi frame
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            :disabled="busy || !cameraActive || frames.length >= 5"
-            @click="capture"
-          >
-            Ambil frame
-          </Button>
-        </div>
         <DialogFooter>
           <Button
             type="button"
@@ -329,7 +292,7 @@ function resetFrames() {
           </Button>
           <Button
             type="submit"
-            :disabled="busy || cameraBusy"
+            :disabled="busy || !status?.consent_eligible || !status?.pipeline_ready"
           >
             <Spinner v-if="busy" />
             Simpan wajah

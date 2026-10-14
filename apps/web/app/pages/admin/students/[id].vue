@@ -210,6 +210,7 @@ await load()
       <StudentConsent
         v-if="auth.session.value?.permissions.includes('consents.manage')"
         :student-id="student.id"
+        :student-name="student.full_name"
         @changed="faceEnrollment?.refresh()"
       />
       <StudentFaceEnrollment
@@ -219,6 +220,7 @@ await load()
         "
         ref="faceEnrollment"
         :student-id="student.id"
+        :student-name="student.full_name"
       />
       <StudentEditor
         v-if="canWrite"

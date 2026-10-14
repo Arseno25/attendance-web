@@ -38,7 +38,9 @@ def fake_pipeline(monkeypatch, faces=1, small=False):
     pipeline = object.__new__(Pipeline)
     pipeline.model_sha256 = "a" * 64
     row = np.array([30, 30, 20 if small else 160, 160] + [50] * 10 + [0.99], np.float32)
-    monkeypatch.setattr(pipeline, "detect", lambda frame: np.tile(row, (faces, 1)))
+    monkeypatch.setattr(
+        pipeline, "detect", lambda frame, **kwargs: np.tile(row, (faces, 1))
+    )
     monkeypatch.setattr(pipeline, "feature", lambda frame, face: vector())
     return pipeline
 

@@ -86,10 +86,15 @@ def decode_image(value):
 
 def normalize(vector):
     vector = np.asarray(vector, dtype=np.float32).reshape(-1)
-    norm = float(np.linalg.norm(vector))
-    if vector.size != 128 or not np.isfinite(vector).all() or norm <= 0:
+    norm = float(np.linalg.norm(vector.astype(np.float64)))
+    if (
+        vector.size != 128
+        or not np.isfinite(vector).all()
+        or not np.isfinite(norm)
+        or norm <= 0
+    ):
         raise ValueError("Invalid embedding")
-    return vector / norm
+    return (vector.astype(np.float64) / norm).astype(np.float32)
 
 
 def match_embedding(probe, gallery, *, threshold, margin, live, observations):
@@ -163,7 +168,10 @@ class Pipeline:
         detector_spec, recognizer_spec = manifest["models"]
         detector_path = verify_model(directory, detector_spec)
         recognizer_path = verify_model(directory, recognizer_spec)
-        cv2.setNumThreads(2)
+        threads = int(os.environ.get("AI_OPENCV_THREADS", "2"))
+        if not 1 <= threads <= 32:
+            raise ValueError("Invalid OpenCV thread count")
+        cv2.setNumThreads(threads)
         self.detector = cv2.FaceDetectorYN.create(
             str(detector_path), "", (320, 320), 0.9, 0.3, 100
         )
@@ -172,9 +180,10 @@ class Pipeline:
         self.detector_sha256 = detector_spec["sha256"]
         self.lock = threading.Lock()
 
-    def detect(self, frame):
+    def detect(self, frame, *, threshold=0.9):
         # OpenCV detector input size and inference buffers are mutable.
         with self.lock:
+            self.detector.setScoreThreshold(threshold)
             self.detector.setInputSize((frame.shape[1], frame.shape[0]))
             _, faces = self.detector.detect(frame)
             return faces.copy() if faces is not None else np.empty((0, 15), np.float32)
@@ -183,6 +192,74 @@ class Pipeline:
         with self.lock:
             aligned = self.recognizer.alignCrop(frame, face)
             return normalize(self.recognizer.feature(aligned).copy())
+
+    @staticmethod
+    def check_quality(frame, face, *, min_size=80):
+        x, y, width, height = face[:4]
+        if (
+            min(width, height) < min_size
+            or width * height / (frame.shape[0] * frame.shape[1]) < 0.04
+        ):
+            raise ImageError("FACE_TOO_SMALL", "Dekatkan wajah ke kamera")
+        x0, y0 = max(0, int(x)), max(0, int(y))
+        x1, y1 = (
+            min(frame.shape[1], int(x + width)),
+            min(frame.shape[0], int(y + height)),
+        )
+        crop = frame[y0:y1, x0:x1]
+        if (
+            crop.size == 0
+            or float(
+                cv2.Laplacian(cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY), cv2.CV_64F).var()
+            )
+            < 60
+        ):
+            raise ImageError(
+                "IMAGE_BLURRED", "Wajah buram; gunakan cahaya cukup dan tetap diam"
+            )
+
+    @staticmethod
+    def boxes(frame, faces):
+        boxes = []
+        for face in faces:
+            x, y, width, height = [float(v) for v in face[:4]]
+            left, top = max(0, x / frame.shape[1]), max(0, y / frame.shape[0])
+            right, bottom = (
+                min(1, (x + width) / frame.shape[1]),
+                min(1, (y + height) / frame.shape[0]),
+            )
+            if right > left and bottom > top:
+                boxes.append(
+                    {
+                        "box": {
+                            "x": left,
+                            "y": top,
+                            "width": right - left,
+                            "height": bottom - top,
+                        }
+                    }
+                )
+        return boxes
+
+    def preview(self, image):
+        frame, _ = decode_image(image)
+        faces = self.detect(frame)
+        quality, message = "ready", "Wajah siap; ambil 3–5 frame yang berbeda"
+        if len(faces) == 0:
+            quality, message = "no_face", "Posisikan wajah di depan kamera"
+        elif len(faces) > 1:
+            quality, message = "multiple_faces", "Hanya satu orang di depan kamera"
+        else:
+            try:
+                self.check_quality(frame, faces[0])
+            except ImageError as exc:
+                quality, message = "low_quality", exc.message
+        return {
+            "faces": self.boxes(frame, faces),
+            "face_count": len(faces),
+            "quality": quality,
+            "message": message,
+        }
 
     def enroll(self, frames, cipher, school_id, student_id, consent_id):
         if not 3 <= len(frames) <= 5:
@@ -198,30 +275,7 @@ class Pipeline:
                 raise ImageError(
                     "FACE_COUNT", "Setiap frame harus berisi tepat satu wajah"
                 )
-            x, y, width, height = faces[0][:4]
-            if (
-                min(width, height) < 80
-                or width * height / (frame.shape[0] * frame.shape[1]) < 0.04
-            ):
-                raise ImageError("FACE_TOO_SMALL", "Dekatkan wajah ke kamera")
-            x0, y0 = max(0, int(x)), max(0, int(y))
-            x1, y1 = (
-                min(frame.shape[1], int(x + width)),
-                min(frame.shape[0], int(y + height)),
-            )
-            crop = frame[y0:y1, x0:x1]
-            if (
-                crop.size == 0
-                or float(
-                    cv2.Laplacian(
-                        cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY), cv2.CV_64F
-                    ).var()
-                )
-                < 60
-            ):
-                raise ImageError(
-                    "IMAGE_BLURRED", "Wajah buram; gunakan cahaya cukup dan tetap diam"
-                )
+            self.check_quality(frame, faces[0])
             vector = self.feature(frame, faces[0])
             # shortcut: 0.6 is a provisional consistency filter, recalibrate with permitted camera data.
             if any(float(vector @ previous) < 0.6 for previous in vectors):
@@ -242,23 +296,7 @@ class Pipeline:
     def recognize(self, image):
         frame, _ = decode_image(image)
         faces = self.detect(frame)
-        boxes = []
-        for face in faces:
-            x, y, width, height = [float(v) for v in face[:4]]
-            left, top = max(0, x / frame.shape[1]), max(0, y / frame.shape[0])
-            right = min(1, (x + width) / frame.shape[1])
-            bottom = min(1, (y + height) / frame.shape[0])
-            if right > left and bottom > top:
-                boxes.append(
-                    {
-                        "box": {
-                            "x": left,
-                            "y": top,
-                            "width": right - left,
-                            "height": bottom - top,
-                        }
-                    }
-                )
+        boxes = self.boxes(frame, faces)
         # No liveness implementation or genuine camera hold-out report exists yet.
         return {
             "decision": "no_face"
@@ -273,8 +311,20 @@ class Pipeline:
 
 
 @lru_cache(maxsize=1)
-def get_pipeline():
+def _get_pipeline():
     return Pipeline(os.environ.get("AI_MODELS_DIR", "/models"))
+
+
+_model_lock = threading.Lock()
+
+
+def get_pipeline():
+    # Serialize first use too: functools cache alone permits duplicate construction.
+    with _model_lock:
+        return _get_pipeline()
+
+
+get_pipeline.cache_clear = _get_pipeline.cache_clear
 
 
 def get_cipher():

@@ -9,6 +9,7 @@ export function useApi() {
       method?: 'GET' | 'POST' | 'PATCH' | 'PUT'
       body?: object
       query?: Record<string, string | number>
+      signal?: AbortSignal
     } = {},
   ) => {
     try {
