@@ -380,7 +380,7 @@ await load()
               Cari siswa
             </Label>
             <Field
-              class="sm:max-w-xs"
+              class="min-w-0 flex-1 sm:max-w-sm"
               :data-invalid="!!filterErrors.search"
             >
               <Input
@@ -399,42 +399,6 @@ await load()
                 {{ filterErrors.search }}
               </FieldError>
             </Field>
-            <Field
-              class="sm:w-48"
-              :data-invalid="!!filterErrors.status"
-            >
-              <Select
-                v-model="statusFilter"
-                :disabled="loading"
-                @update:model-value="filter"
-              >
-                <SelectTrigger
-                  id="roster-status-filter"
-                  :aria-invalid="!!filterErrors.status"
-                  :aria-describedby="filterErrors.status ? 'roster-status-filter-error' : undefined"
-                  aria-label="Filter status absensi"
-                  class="w-full sm:w-48"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua status</SelectItem>
-                  <SelectItem
-                    v-for="(label, key) in attendanceLabels"
-                    :key="key"
-                    :value="key"
-                  >
-                    {{ label }}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              <FieldError
-                v-if="filterErrors.status"
-                id="roster-status-filter-error"
-              >
-                {{ filterErrors.status }}
-              </FieldError>
-            </Field>
             <Button
               type="submit"
               variant="outline"
@@ -442,6 +406,46 @@ await load()
             >
               Cari
             </Button>
+            <template #filters>
+              <Field
+                class="sm:w-48"
+                :data-invalid="!!filterErrors.status"
+              >
+                <Select
+                  v-model="statusFilter"
+                  :disabled="loading"
+                  @update:model-value="filter"
+                >
+                  <SelectTrigger
+                    id="roster-status-filter"
+                    :aria-invalid="!!filterErrors.status"
+                    :aria-describedby="
+                      filterErrors.status ? 'roster-status-filter-error' : undefined
+                    "
+                    aria-label="Filter status absensi"
+                    class="w-full sm:w-48"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua status</SelectItem>
+                    <SelectItem
+                      v-for="(label, key) in attendanceLabels"
+                      :key="key"
+                      :value="key"
+                    >
+                      {{ label }}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <FieldError
+                  v-if="filterErrors.status"
+                  id="roster-status-filter-error"
+                >
+                  {{ filterErrors.status }}
+                </FieldError>
+              </Field>
+            </template>
           </DataTableToolbar>
           <div
             v-if="loading"

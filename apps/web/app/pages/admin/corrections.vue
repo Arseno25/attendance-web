@@ -104,44 +104,46 @@ await load()
           aria-label="Filter koreksi"
           @submit.prevent="filter"
         >
-          <Field
-            class="sm:w-48"
-            :data-invalid="!!filterErrors.status"
-          >
-            <Select
-              v-model="status"
-              :disabled="loading"
-              @update:model-value="filter"
+          <template #filters>
+            <Field
+              class="sm:w-48"
+              :data-invalid="!!filterErrors.status"
             >
-              <SelectTrigger
-                id="correction-status-filter"
-                :aria-invalid="!!filterErrors.status"
-                :aria-describedby="
-                  filterErrors.status ? 'correction-status-filter-error' : undefined
-                "
-                aria-label="Filter status koreksi"
-                class="w-full sm:w-48"
+              <Select
+                v-model="status"
+                :disabled="loading"
+                @update:model-value="filter"
               >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua status</SelectItem>
-                <SelectItem
-                  v-for="(label, key) in correctionLabels"
-                  :key="key"
-                  :value="key"
+                <SelectTrigger
+                  id="correction-status-filter"
+                  :aria-invalid="!!filterErrors.status"
+                  :aria-describedby="
+                    filterErrors.status ? 'correction-status-filter-error' : undefined
+                  "
+                  aria-label="Filter status koreksi"
+                  class="w-full sm:w-48"
                 >
-                  {{ label }}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            <FieldError
-              v-if="filterErrors.status"
-              id="correction-status-filter-error"
-            >
-              {{ filterErrors.status }}
-            </FieldError>
-          </Field>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua status</SelectItem>
+                  <SelectItem
+                    v-for="(label, key) in correctionLabels"
+                    :key="key"
+                    :value="key"
+                  >
+                    {{ label }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <FieldError
+                v-if="filterErrors.status"
+                id="correction-status-filter-error"
+              >
+                {{ filterErrors.status }}
+              </FieldError>
+            </Field>
+          </template>
         </DataTableToolbar>
         <div
           v-if="loading"

@@ -107,10 +107,7 @@ await load()
         <CardDescription>{{ total }} siswa sesuai filter.</CardDescription>
       </CardHeader>
       <CardContent class="min-w-0 space-y-4">
-        <DataTableToolbar
-          class="grid sm:grid-cols-2 xl:flex"
-          @submit.prevent="filter"
-        >
+        <DataTableToolbar @submit.prevent="filter">
           <Label
             for="student-search"
             class="sr-only"
@@ -118,7 +115,7 @@ await load()
             Cari nama atau NIS
           </Label>
           <Field
-            class="xl:max-w-sm xl:flex-1"
+            class="min-w-0 flex-1 sm:max-w-sm"
             :data-invalid="!!errors.search"
           >
             <Input
@@ -126,7 +123,7 @@ await load()
               v-model="search"
               :aria-invalid="!!errors.search"
               :aria-describedby="errors.search ? 'student-search-error' : undefined"
-              class="xl:max-w-sm"
+              class="w-full"
               placeholder="Cari nama atau NIS"
               maxlength="100"
             />
@@ -137,79 +134,6 @@ await load()
               {{ errors.search }}
             </FieldError>
           </Field>
-          <Field
-            class="xl:w-48"
-            :data-invalid="!!errors.class_id"
-          >
-            <Select
-              v-model="classFilter"
-              :disabled="loading"
-              @update:model-value="filter"
-            >
-              <SelectTrigger
-                id="student-class-filter"
-                :aria-invalid="!!errors.class_id"
-                :aria-describedby="errors.class_id ? 'student-class-filter-error' : undefined"
-                aria-label="Filter kelas"
-                class="w-full xl:w-48"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua kelas</SelectItem>
-                <SelectItem
-                  v-for="item in classes"
-                  :key="item.id"
-                  :value="item.id"
-                >
-                  {{ item.name }}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            <FieldError
-              v-if="errors.class_id"
-              id="student-class-filter-error"
-            >
-              {{ errors.class_id }}
-            </FieldError>
-          </Field>
-          <Field
-            v-if="canWrite"
-            class="xl:w-40"
-            :data-invalid="!!errors.status"
-          >
-            <Select
-              v-model="status"
-              :disabled="loading"
-              @update:model-value="filter"
-            >
-              <SelectTrigger
-                id="student-status-filter"
-                :aria-invalid="!!errors.status"
-                :aria-describedby="errors.status ? 'student-status-filter-error' : undefined"
-                aria-label="Filter status"
-                class="w-full xl:w-40"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua status</SelectItem>
-                <SelectItem
-                  v-for="(label, value) in statusLabels"
-                  :key="value"
-                  :value="value"
-                >
-                  {{ label }}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            <FieldError
-              v-if="errors.status"
-              id="student-status-filter-error"
-            >
-              {{ errors.status }}
-            </FieldError>
-          </Field>
           <Button
             variant="outline"
             type="submit"
@@ -217,6 +141,81 @@ await load()
           >
             Cari
           </Button>
+          <template #filters>
+            <Field
+              class="sm:w-48"
+              :data-invalid="!!errors.class_id"
+            >
+              <Select
+                v-model="classFilter"
+                :disabled="loading"
+                @update:model-value="filter"
+              >
+                <SelectTrigger
+                  id="student-class-filter"
+                  :aria-invalid="!!errors.class_id"
+                  :aria-describedby="errors.class_id ? 'student-class-filter-error' : undefined"
+                  aria-label="Filter kelas"
+                  class="w-full sm:w-48"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua kelas</SelectItem>
+                  <SelectItem
+                    v-for="item in classes"
+                    :key="item.id"
+                    :value="item.id"
+                  >
+                    {{ item.name }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <FieldError
+                v-if="errors.class_id"
+                id="student-class-filter-error"
+              >
+                {{ errors.class_id }}
+              </FieldError>
+            </Field>
+            <Field
+              v-if="canWrite"
+              class="sm:w-40"
+              :data-invalid="!!errors.status"
+            >
+              <Select
+                v-model="status"
+                :disabled="loading"
+                @update:model-value="filter"
+              >
+                <SelectTrigger
+                  id="student-status-filter"
+                  :aria-invalid="!!errors.status"
+                  :aria-describedby="errors.status ? 'student-status-filter-error' : undefined"
+                  aria-label="Filter status"
+                  class="w-full sm:w-40"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua status</SelectItem>
+                  <SelectItem
+                    v-for="(label, value) in statusLabels"
+                    :key="value"
+                    :value="value"
+                  >
+                    {{ label }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <FieldError
+                v-if="errors.status"
+                id="student-status-filter-error"
+              >
+                {{ errors.status }}
+              </FieldError>
+            </Field>
+          </template>
         </DataTableToolbar>
         <div
           v-if="loading"

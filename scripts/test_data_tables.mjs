@@ -6,7 +6,7 @@ import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const requireWeb = createRequire(resolve('apps/web/package.json'))
-const { parse, compileScript, registerTS } = requireWeb('@vue/compiler-sfc')
+const { parse, compileScript, compileTemplate, registerTS } = requireWeb('@vue/compiler-sfc')
 registerTS(() => requireWeb('typescript'))
 const { build } = requireWeb('esbuild')
 const { computed, reactive, nextTick, createSSRApp, h } = requireWeb('vue')
@@ -19,6 +19,7 @@ catch (error) { if (error.code !== 'EEXIST') throw error }
 const web = resolve('apps/web/app')
 writeFileSync(directory + '/entry.ts', `
 export { default as Actions } from '${web}/components/TableActions.vue'
+export { default as Toolbar } from '${web}/components/DataTableToolbar.vue'
 export { default as DataTable } from '${web}/components/DataTable.vue'
 export * from '${web}/components/ui/table'
 export * from '${web}/components/ui/tooltip'
@@ -32,6 +33,11 @@ await build({
   plugins: [{ name: 'production-vue', setup(build) {
     build.onLoad({ filter: /\.vue$/ }, ({ path }) => {
       const { descriptor } = parse(readFileSync(path, 'utf8'), { filename: path })
+      if (!descriptor.script && !descriptor.scriptSetup) {
+        const template = compileTemplate({ source: descriptor.template.content, filename: path, id: path, ssr: true })
+        assert.deepEqual(template.errors, [])
+        return { contents: template.code + '\nexport default { ssrRender }', loader: 'js' }
+      }
       const script = compileScript(descriptor, { id: path, inlineTemplate: true, templateOptions: { ssr: true } })
       return { contents: `import { computed } from 'vue';\n${script.content}`, loader: 'ts' }
     })
@@ -110,5 +116,20 @@ test('table follows new server pages and visible columns without filtering or sl
   const empty = await render(components.DataTable, { ...props, data: [], columns: props.columns.slice(0, 1) }, { empty: () => 'Tidak ada hasil filter' })
   assert.match(empty, /colspan="1"/)
   assert.match(empty, /Tidak ada hasil filter/)
+})
+test('toolbar separates filter dropdowns from search and keeps the footer after both groups', async () => {
+  const html = await render(components.Toolbar, {}, {
+    default: () => h('input', { id: 'search', 'aria-label': 'Cari siswa' }),
+    filters: () => h('button', { id: 'status' }, 'Semua status'),
+    footer: () => h('button', { id: 'apply' }, 'Terapkan filter'),
+  })
+  assert.ok(html.indexOf('id="search"') < html.indexOf('data-slot="data-table-filters"'))
+  assert.ok(html.indexOf('id="status"') < html.indexOf('data-slot="data-table-toolbar-footer"'))
+  assert.match(html, /ml-auto/)
+  assert.match(html, /justify-end/)
+  assert.match(html, /novalidate/)
+  const simple = await render(components.Toolbar, {}, { default: () => h('input', { id: 'search' }) })
+  assert.match(simple, /id="search"/)
+  assert.doesNotMatch(simple, /data-table-filters|data-table-toolbar-footer/)
 })
 process.on('exit', () => rmSync(directory, { recursive: true, force: true }))

@@ -179,46 +179,53 @@ await load()
       </CardHeader>
       <CardContent class="min-w-0 space-y-4">
         <DataTableToolbar
-          class="flex-col gap-4"
+          class="gap-4"
           @submit.prevent="filter"
         >
-          <FieldGroup class="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            <Field :data-invalid="!!errors.from">
-              <FieldLabel for="audit-from">Dari tanggal</FieldLabel>
-              <Input
-                id="audit-from"
-                v-model="filters.from"
-                :aria-invalid="!!errors.from"
-                :aria-describedby="errors.from ? 'audit-from-error' : undefined"
-                type="date"
-                :disabled="loading"
-              />
-              <FieldError
-                v-if="errors.from"
-                id="audit-from-error"
-              >
-                {{ errors.from }}
-              </FieldError>
-            </Field>
-            <Field :data-invalid="!!errors.to">
-              <FieldLabel for="audit-to">Sampai tanggal</FieldLabel>
-              <Input
-                id="audit-to"
-                v-model="filters.to"
-                :aria-invalid="!!errors.to"
-                :aria-describedby="errors.to ? 'audit-to-error' : undefined"
-                type="date"
-                :min="filters.from"
-                :disabled="loading"
-              />
-              <FieldError
-                v-if="errors.to"
-                id="audit-to-error"
-              >
-                {{ errors.to }}
-              </FieldError>
-            </Field>
-            <Field :data-invalid="!!errors.actor_id">
+          <div class="grid w-full gap-4 sm:w-72">
+            <FieldGroup class="grid grid-cols-2 gap-3">
+              <Field :data-invalid="!!errors.from">
+                <FieldLabel for="audit-from">Dari tanggal</FieldLabel>
+                <Input
+                  id="audit-from"
+                  v-model="filters.from"
+                  :aria-invalid="!!errors.from"
+                  :aria-describedby="errors.from ? 'audit-from-error' : undefined"
+                  type="date"
+                  :disabled="loading"
+                />
+                <FieldError
+                  v-if="errors.from"
+                  id="audit-from-error"
+                >
+                  {{ errors.from }}
+                </FieldError>
+              </Field>
+              <Field :data-invalid="!!errors.to">
+                <FieldLabel for="audit-to">Sampai tanggal</FieldLabel>
+                <Input
+                  id="audit-to"
+                  v-model="filters.to"
+                  :aria-invalid="!!errors.to"
+                  :aria-describedby="errors.to ? 'audit-to-error' : undefined"
+                  type="date"
+                  :min="filters.from"
+                  :disabled="loading"
+                />
+                <FieldError
+                  v-if="errors.to"
+                  id="audit-to-error"
+                >
+                  {{ errors.to }}
+                </FieldError>
+              </Field>
+            </FieldGroup>
+          </div>
+          <template #filters>
+            <Field
+              class="w-full sm:w-44"
+              :data-invalid="!!errors.actor_id"
+            >
               <FieldLabel for="audit-actor">Pelaku</FieldLabel>
               <Select
                 v-model="filters.actor_id"
@@ -250,7 +257,10 @@ await load()
                 {{ errors.actor_id }}
               </FieldError>
             </Field>
-            <Field :data-invalid="!!errors.action">
+            <Field
+              class="w-full sm:w-44"
+              :data-invalid="!!errors.action"
+            >
               <FieldLabel for="audit-action">Aktivitas</FieldLabel>
               <Select
                 v-model="filters.action"
@@ -282,7 +292,10 @@ await load()
                 {{ errors.action }}
               </FieldError>
             </Field>
-            <Field :data-invalid="!!errors.target_type">
+            <Field
+              class="w-full sm:w-44"
+              :data-invalid="!!errors.target_type"
+            >
               <FieldLabel for="audit-target">Jenis target</FieldLabel>
               <Select
                 v-model="filters.target_type"
@@ -314,8 +327,8 @@ await load()
                 {{ errors.target_type }}
               </FieldError>
             </Field>
-          </FieldGroup>
-          <div class="flex flex-wrap gap-2">
+          </template>
+          <template #footer>
             <Button
               type="submit"
               :disabled="loading"
@@ -330,7 +343,7 @@ await load()
             >
               Reset
             </Button>
-          </div>
+          </template>
         </DataTableToolbar>
         <div
           v-if="loading"
