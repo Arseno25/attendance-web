@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { toast } from 'vue-sonner'
 import {
   academicYearSchema,
   classSchema,
@@ -18,7 +19,6 @@ const total = ref(0)
 const loading = ref(false)
 const saving = ref(false)
 const message = ref('')
-const success = ref('')
 const open = ref(false)
 const editing = ref('')
 const years = ref<AcademicYear[]>([])
@@ -90,7 +90,7 @@ watch(tab, async () => {
 async function show(item?: AcademicYear | SchoolClass) {
   clear()
   message.value = ''
-  success.value = ''
+
   editing.value = item?.id ?? ''
   Object.assign(
     form,
@@ -147,10 +147,10 @@ async function save() {
       body,
     })
     open.value = false
-    success.value = 'Data berhasil disimpan.'
+    toast.success('Data berhasil disimpan.')
     await load()
   } catch (error) {
-    message.value = apiMessage(error)
+    toast.error(apiMessage(error))
   } finally {
     saving.value = false
   }
@@ -165,10 +165,10 @@ async function revokeAssignment() {
       body: { is_active: false },
     })
     revoke.value = null
-    success.value = 'Penugasan dicabut. Akses kelas guru diperbarui segera.'
+    toast.success('Penugasan dicabut. Akses kelas guru diperbarui segera.')
     await load()
   } catch (error) {
-    message.value = apiMessage(error)
+    toast.error(apiMessage(error))
   } finally {
     saving.value = false
   }
@@ -209,12 +209,6 @@ function openRevocation(item: Assignment) {
       variant="destructive"
     >
       <AlertDescription>{{ message }}</AlertDescription>
-    </Alert>
-    <Alert
-      v-if="success"
-      role="status"
-    >
-      <AlertDescription>{{ success }}</AlertDescription>
     </Alert>
     <Tabs
       v-model="tab"

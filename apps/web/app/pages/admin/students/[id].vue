@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { toast } from 'vue-sonner'
 import { placementSchema } from '~/lib/validation/master'
 import { statusVariant } from '~/lib/status'
 import { ArrowLeft, ArrowRightLeft, Pencil } from '@lucide/vue'
@@ -11,7 +12,6 @@ const route = useRoute()
 const student = ref<Student | null>(null)
 const faceEnrollment = ref<{ refresh: () => Promise<void> } | null>(null)
 const message = ref('')
-const success = ref('')
 const editOpen = ref(false)
 const placementOpen = ref(false)
 const saving = ref(false)
@@ -33,7 +33,7 @@ async function load() {
 async function place() {
   clear()
   message.value = ''
-  success.value = ''
+
   form.class_id = ''
   form.reason = ''
   try {
@@ -50,16 +50,16 @@ async function savePlacement() {
   try {
     await request(`/students/${route.params.id}/placements`, { method: 'POST', body: form })
     placementOpen.value = false
-    success.value = 'Penempatan baru tersimpan; histori sebelumnya tetap tersedia.'
+    toast.success('Penempatan baru tersimpan; histori sebelumnya tetap tersedia.')
     await load()
   } catch (error) {
-    message.value = apiMessage(error)
+    toast.error(apiMessage(error))
   } finally {
     saving.value = false
   }
 }
 async function saved() {
-  success.value = 'Data siswa berhasil diperbarui.'
+  toast.success('Data siswa berhasil diperbarui.')
   await load()
   await faceEnrollment.value?.refresh()
 }
@@ -85,12 +85,6 @@ await load()
       variant="destructive"
     >
       <AlertDescription>{{ message }}</AlertDescription>
-    </Alert>
-    <Alert
-      v-if="success"
-      role="status"
-    >
-      <AlertDescription>{{ success }}</AlertDescription>
     </Alert>
     <template v-if="student">
       <PageHeader

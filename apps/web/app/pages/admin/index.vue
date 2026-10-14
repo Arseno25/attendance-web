@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { toast } from 'vue-sonner'
 import { dashboardSchema } from '~/lib/validation/attendance'
 import { statusVariant } from '~/lib/status'
 import { ClipboardCheck, Download, ScrollText, Users } from '@lucide/vue'
@@ -22,7 +23,6 @@ const summary = ref<AttendanceDashboard | null>(null)
 const loading = ref(false)
 const exporting = ref(false)
 const message = ref('')
-const success = ref('')
 const { errors, validate } = useFormValidation(
   () => dashboardSchema,
   () => ({
@@ -48,7 +48,7 @@ async function load() {
   if (!canView.value || !validate()) return
   loading.value = true
   message.value = ''
-  success.value = ''
+
   try {
     summary.value = (
       await request<Result<AttendanceDashboard>>('/dashboard/summary', {
@@ -72,9 +72,9 @@ async function exportCSV() {
   message.value = ''
   try {
     await download(summary.value.filters)
-    success.value = 'CSV siap diunduh. Ekspor tercatat di audit.'
+    toast.success('CSV siap diunduh. Ekspor tercatat di audit.')
   } catch (error) {
-    message.value = apiMessage(error)
+    toast.error(apiMessage(error))
   } finally {
     exporting.value = false
   }
@@ -123,12 +123,6 @@ const maskedNIS = (value: string) => `•••${value.slice(-3)}`
       variant="destructive"
     >
       <AlertDescription>{{ message }}</AlertDescription>
-    </Alert>
-    <Alert
-      v-if="success"
-      role="status"
-    >
-      <AlertDescription>{{ success }}</AlertDescription>
     </Alert>
     <template v-if="canView">
       <form

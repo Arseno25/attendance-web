@@ -57,3 +57,17 @@ Sesuai aturan terakhir pengguna, password baru minimal 8 karakter dan harus memi
 Go memakai aturan komposisi yang sama pada hashing/creation/bootstrap/profile. Login dan verifikasi password existing tidak memaksakan aturan baru, sehingga akun lama tetap dapat digunakan. Batas request JSON 8 KiB, limiter dan concurrency hashing tetap berlaku sebagai pengaman transport; tidak ada lagi cap 128 pada password maupun input HTML.
 
 `make check`, `make db-test` dan build Nuxt/Go berhasil. Tes mencakup batas 7/8 karakter, setiap syarat komposisi, Unicode, simbol dibanding whitespace, password di atas 128 karakter, login setelah perubahan password panjang, preservasi spasi, konfirmasi, rotasi sesi dan rollback. Fixture bootstrap yang memerlukan password baru diperbarui ke policy ini. Akun/password nyata pengguna tidak diganti selama pengujian; hanya schema disposable untuk perubahan password.
+
+
+## Notifikasi Sonner — 14 Oktober 2026
+
+Sonner shadcn-vue dipasang melalui CLI resmi `npx --yes shadcn-vue@latest add sonner --yes` dari `apps/web`. Paket `vue-sonner` dipin tepat 2.0.9; dependency Lucide tetap exact 1.56.0. Font Google duplikat yang disisipkan CLI dihapus karena Inter lokal sudah tersedia. Toaster registry, stylesheet resmi, dan satu host `ClientOnly` di `app.vue` dipakai untuk semua route. Host mengikuti tema terang/gelap/sistem, rich colors per jenis status, posisi kanan atas, durasi enam detik, dan tombol tutup dengan label Bahasa Indonesia.
+
+Semua state/panel sukses sementara dipindahkan ke `toast.success`; kegagalan tindakan memakai `toast.error(apiMessage(error))`. Sudah tercatat memakai `toast.info`; preview CSV tidak valid memakai `toast.warning` sambil mempertahankan detail per baris. Login/logout, pairing, CRUD akademik/pengguna/siswa/perangkat, jadwal/kalender, attendance/corrections, export, consent dan enrollment memakai host yang sama. Tidak memasukkan token pairing, password atau gambar wajah dalam toast.
+
+FieldError, error loading yang memerlukan retry, empty states, streaming camera quality/error, serta warning evaluasi/consent tetap di konteksnya. Tidak ada toast berulang dari polling kamera/heartbeat. Tidak ada perubahan API, data, auth, password policy, atau syarat keberhasilan operasi.
+
+Context7 memakai dokumentasi Sonner shadcn-vue dan Vue Sonner; MCP shadcn-vue dipakai untuk command/audit. `make check` berhasil dengan 33 tes Node dan 64 pytest serta lint/format/typecheck/Go/Ruff. Tiga tes baru menjalankan handler akun production melalui compiler Vue dan observer Sonner nyata: success hanya setelah operasi selesai, submit ganda ditolak, error tunggal tanpa success dan form dipertahankan, serta validasi field tidak mengirim request/toast. Build production Nuxt berhasil.
+
+
+Browser runtime memverifikasi satu host Sonner, success setelah save profil dengan nilai yang sama, tema sistem/gelap dan terang, close button, dan ukuran390px tanpa overflow. Tidak mengisi field password atau mengganti identitas/kredensial. Tema/viewport dikembalikan setelah pengujian. Bukti `.tools/sonner/success-desktop.png` dan `success-mobile-light.png`. Detector mekanis target UI mengembalikan tanpa temuan.

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { toast } from 'vue-sonner'
 import { decisionSchema, correctionFilterSchema } from '~/lib/validation/attendance'
 import { statusVariant } from '~/lib/status'
 import type { Result } from '~/types/auth'
@@ -13,7 +14,6 @@ const status = ref('pending')
 const loading = ref(false)
 const saving = ref(false)
 const message = ref('')
-const success = ref('')
 const selected = ref<Correction | null>(null)
 const decision = ref('approved')
 const reason = ref('')
@@ -62,10 +62,10 @@ async function save() {
       body: { decision: decision.value, reason: reason.value },
     })
     selected.value = null
-    success.value = 'Keputusan tersimpan beserta histori dan audit.'
+    toast.success('Keputusan tersimpan beserta histori dan audit.')
     await load()
   } catch (error) {
-    message.value = apiMessage(error)
+    toast.error(apiMessage(error))
   } finally {
     saving.value = false
   }
@@ -91,12 +91,6 @@ await load()
       variant="destructive"
     >
       <AlertDescription>{{ message }}</AlertDescription>
-    </Alert>
-    <Alert
-      v-if="success"
-      role="status"
-    >
-      <AlertDescription>{{ success }}</AlertDescription>
     </Alert>
     <Card class="min-w-0">
       <CardHeader class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

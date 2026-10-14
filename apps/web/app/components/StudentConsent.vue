@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { toast } from 'vue-sonner'
 import { guardianSchema, consentSchema, reasonSchema } from '~/lib/validation/consent-devices'
 import { statusVariant } from '~/lib/status'
 import type { Result } from '~/types/auth'
@@ -21,7 +22,6 @@ interface Consent {
 const guardians = ref<Guardian[]>([])
 const consents = ref<Consent[]>([])
 const error = ref('')
-const success = ref('')
 const busy = ref(false)
 const guardianOpen = ref(false)
 const consentOpen = ref(false)
@@ -49,7 +49,7 @@ async function save(kind: 'guardian' | 'consent' | 'withdraw') {
   if (busy.value || !validate()) return
   busy.value = true
   error.value = ''
-  success.value = ''
+
   try {
     const path =
       kind === 'withdraw'
@@ -65,14 +65,15 @@ async function save(kind: 'guardian' | 'consent' | 'withdraw') {
     guardianOpen.value = false
     consentOpen.value = false
     withdrawing.value = null
-    success.value =
+    toast.success(
       kind === 'withdraw'
         ? 'Consent dicabut. Siswa tidak eligible untuk biometrik.'
-        : 'Data tersimpan.'
+        : 'Data tersimpan.',
+    )
     await load()
     if (kind !== 'guardian') emit('changed')
   } catch (e) {
-    error.value = apiMessage(e)
+    toast.error(apiMessage(e))
   } finally {
     busy.value = false
   }
@@ -134,12 +135,6 @@ function openWithdrawal(item: Consent) {
         variant="destructive"
       >
         <AlertDescription>{{ error }}</AlertDescription>
-      </Alert>
-      <Alert
-        v-if="success"
-        role="status"
-      >
-        <AlertDescription>{{ success }}</AlertDescription>
       </Alert>
       <Table>
         <TableCaption class="sr-only">Riwayat persetujuan biometrik</TableCaption>

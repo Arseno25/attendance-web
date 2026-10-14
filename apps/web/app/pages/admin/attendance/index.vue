@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { toast } from 'vue-sonner'
 import { sessionSchema, sessionFilterSchema } from '~/lib/validation/attendance'
 import { statusVariant } from '~/lib/status'
 import { Plus } from '@lucide/vue'
@@ -66,9 +67,10 @@ async function save() {
       })
     ).data
     open.value = false
+    toast.success('Sesi absensi berhasil dibuat.')
     await navigateTo(`/admin/attendance/${data.id}`)
   } catch (error) {
-    message.value = apiMessage(error)
+    toast.error(apiMessage(error))
   } finally {
     saving.value = false
   }

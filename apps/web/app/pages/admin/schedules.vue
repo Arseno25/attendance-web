@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { toast } from 'vue-sonner'
 import {
   scheduleSchema,
   newScheduleSchema,
@@ -22,7 +23,6 @@ const saving = ref(false)
 const open = ref(false)
 const editing = ref('')
 const message = ref('')
-const success = ref('')
 const date = ref(today())
 const calendar = reactive({ is_school_day: true, reason: '' })
 const calendarInfo = ref('')
@@ -67,7 +67,7 @@ async function load() {
 async function show(item?: Schedule) {
   clear()
   message.value = ''
-  success.value = ''
+
   editing.value = item?.id ?? ''
   Object.assign(
     form,
@@ -114,10 +114,10 @@ async function save() {
       body,
     })
     open.value = false
-    success.value = 'Jadwal tersimpan. Sesi yang sudah dibuat tetap memakai jadwal sebelumnya.'
+    toast.success('Jadwal tersimpan. Sesi yang sudah dibuat tetap memakai jadwal sebelumnya.')
     await load()
   } catch (error) {
-    message.value = apiMessage(error)
+    toast.error(apiMessage(error))
   } finally {
     saving.value = false
   }
@@ -145,11 +145,12 @@ async function saveCalendar() {
   message.value = ''
   try {
     await request(`/school/calendar/${date.value}`, { method: 'PUT', body: calendar })
-    success.value =
-      'Kalender tersimpan. Perubahan berlaku untuk sesi yang dibuat berikutnya. Batalkan sesi terjadwal yang sudah tersedia bila hari menjadi libur.'
+    toast.success(
+      'Kalender tersimpan. Perubahan berlaku untuk sesi yang dibuat berikutnya. Batalkan sesi terjadwal yang sudah tersedia bila hari menjadi libur.',
+    )
     await loadCalendar()
   } catch (error) {
-    message.value = apiMessage(error)
+    toast.error(apiMessage(error))
   } finally {
     saving.value = false
   }
@@ -191,12 +192,6 @@ await loadCalendar()
       variant="destructive"
     >
       <AlertDescription>{{ message }}</AlertDescription>
-    </Alert>
-    <Alert
-      v-if="success"
-      role="status"
-    >
-      <AlertDescription>{{ success }}</AlertDescription>
     </Alert>
     <Tabs
       v-model="tab"

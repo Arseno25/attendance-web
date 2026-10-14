@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { toast } from 'vue-sonner'
 import { loginSchema } from '~/lib/validation/auth'
 const auth = useAuth()
 const route = useRoute()
@@ -23,11 +24,12 @@ async function submit() {
   message.value = ''
   try {
     await auth.login(email.value, password.value)
+    toast.success('Anda berhasil masuk.')
     password.value = ''
     clear()
     await navigateTo('/admin')
   } catch (error) {
-    message.value = apiMessage(error)
+    toast.error(apiMessage(error))
   } finally {
     busy.value = false
   }

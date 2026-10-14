@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { toast } from 'vue-sonner'
 import { reportSchema } from '~/lib/validation/reports'
 import { statusVariant } from '~/lib/status'
 import { Download, RotateCcw } from '@lucide/vue'
@@ -26,7 +27,6 @@ const total = ref(0)
 const loading = ref(false)
 const exporting = ref(false)
 const message = ref('')
-const success = ref('')
 const yearSelection = computed({
   get: () => form.academic_year_id || 'all',
   set: (value) => {
@@ -61,7 +61,7 @@ async function load(filters: ReportFilters, newPage = 1) {
   }
   loading.value = true
   message.value = ''
-  success.value = ''
+
   try {
     const result = await request<AttendanceReport>('/reports/attendance', {
       query: { ...filters, page: newPage, page_size: 20 },
@@ -92,9 +92,9 @@ async function exportCSV() {
   message.value = ''
   try {
     await download(applied.value)
-    success.value = 'CSV siap diunduh. Ekspor seluruh hasil filter telah tercatat di audit.'
+    toast.success('CSV siap diunduh. Ekspor seluruh hasil filter telah tercatat di audit.')
   } catch (error) {
-    message.value = apiMessage(error)
+    toast.error(apiMessage(error))
   } finally {
     exporting.value = false
   }
@@ -135,12 +135,6 @@ await load({ ...form })
       variant="destructive"
     >
       <AlertDescription>{{ message }}</AlertDescription>
-    </Alert>
-    <Alert
-      v-if="success"
-      role="status"
-    >
-      <AlertDescription>{{ success }}</AlertDescription>
     </Alert>
     <Card>
       <CardHeader>

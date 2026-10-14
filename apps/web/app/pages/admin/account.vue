@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { toast } from 'vue-sonner'
 import { Save } from '@lucide/vue'
 import { profileSchema } from '~/lib/validation/auth'
 import { roleLabels } from '~/types/auth'
@@ -15,8 +16,6 @@ const form = reactive({
   confirm_password: '',
 })
 const busy = ref(false)
-const error = ref('')
-const success = ref('')
 const { errors, validate, clear } = useFormValidation(
   () => profileSchema(auth.session.value?.user.email ?? ''),
   () => form,
@@ -39,8 +38,7 @@ function reset() {
 async function save() {
   if (busy.value || !validate()) return
   busy.value = true
-  error.value = ''
-  success.value = ''
+
   try {
     await auth.saveProfile({
       full_name: form.full_name.trim(),
@@ -49,9 +47,9 @@ async function save() {
       ...(form.new_password ? { new_password: form.new_password } : {}),
     })
     reset()
-    success.value = 'Akun berhasil diperbarui.'
+    toast.success('Akun berhasil diperbarui.')
   } catch (cause) {
-    error.value = apiMessage(cause)
+    toast.error(apiMessage(cause))
   } finally {
     busy.value = false
   }
@@ -78,19 +76,6 @@ reset()
         </Button>
       </template>
     </PageHeader>
-    <Alert
-      v-if="error"
-      variant="destructive"
-      role="alert"
-    >
-      <AlertDescription>{{ error }}</AlertDescription>
-    </Alert>
-    <Alert
-      v-if="success"
-      role="status"
-    >
-      <AlertDescription>{{ success }}</AlertDescription>
-    </Alert>
     <form
       id="account-form"
       novalidate

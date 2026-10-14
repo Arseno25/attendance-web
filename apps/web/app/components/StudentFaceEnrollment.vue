@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { toast } from 'vue-sonner'
 import { RefreshCw, ScanFace, Trash2 } from '@lucide/vue'
 import { enrollmentSchema, reasonSchema } from '~/lib/validation/consent-devices'
 import type { Result } from '~/types/auth'
@@ -15,7 +16,6 @@ const revokeOpen = ref(false)
 const busy = ref(false)
 const loading = ref(false)
 const error = ref('')
-const success = ref('')
 const frames = ref<string[]>([])
 const reason = ref('')
 const capturePanel = ref<{ stop: () => void } | null>(null)
@@ -43,7 +43,7 @@ async function register() {
   await refresh()
   frames.value = []
   clear()
-  success.value = ''
+
   open.value = true
 }
 
@@ -59,11 +59,12 @@ async function save() {
     capturePanel.value?.stop()
     frames.value = []
     open.value = false
-    success.value =
-      'Wajah terdaftar sebagai template provisional. Absensi otomatis menunggu evaluasi.'
+    toast.success(
+      'Wajah terdaftar sebagai template provisional. Absensi otomatis menunggu evaluasi.',
+    )
     await refresh()
   } catch (cause) {
-    error.value = apiMessage(cause)
+    toast.error(apiMessage(cause))
   } finally {
     busy.value = false
   }
@@ -80,10 +81,10 @@ async function revoke() {
     })
     revokeOpen.value = false
     reason.value = ''
-    success.value = 'Template wajah dihapus. Riwayat kehadiran tetap tersedia.'
+    toast.success('Template wajah dihapus. Riwayat kehadiran tetap tersedia.')
     await refresh()
   } catch (cause) {
-    error.value = apiMessage(cause)
+    toast.error(apiMessage(cause))
   } finally {
     busy.value = false
   }
@@ -158,12 +159,6 @@ function openRevocation() {
         role="alert"
       >
         <AlertDescription>{{ error }}</AlertDescription>
-      </Alert>
-      <Alert
-        v-if="success"
-        role="status"
-      >
-        <AlertDescription>{{ success }}</AlertDescription>
       </Alert>
       <dl class="grid gap-4 sm:grid-cols-3">
         <div>

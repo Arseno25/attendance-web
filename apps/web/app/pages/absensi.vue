@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { toast } from 'vue-sonner'
 import { Camera, CameraOff, ShieldCheck } from '@lucide/vue'
 import { pairingSchema } from '../lib/validation/consent-devices.ts'
 import { useFormValidation } from '../composables/useFormValidation.ts'
@@ -182,8 +183,9 @@ async function pair() {
     clear()
     auth.session.value = null
     arm(result.data)
+    toast.success('Perangkat berhasil dipasangkan.')
   } catch (e) {
-    message.value = apiMessage(e)
+    toast.error(apiMessage(e))
   } finally {
     busy.value = false
   }

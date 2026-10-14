@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { toast } from 'vue-sonner'
 import { importSchema, importCommitSchema } from '~/lib/validation/master'
 import type { Result } from '~/types/auth'
 import type { SchoolClass } from '~/types/master'
@@ -19,7 +20,6 @@ const csv = ref('')
 const preview = ref<Preview | null>(null)
 const busy = ref(false)
 const error = ref('')
-const success = ref('')
 const filename = ref('')
 const { errors, validate, clear } = useFormValidation(
   () => importSchema,
@@ -40,12 +40,12 @@ async function file(event: Event) {
   csv.value = ''
   filename.value = ''
   error.value = ''
-  success.value = ''
+
   const input = event.target as HTMLInputElement
   const selected = input.files?.[0]
   if (!selected) return
   if (selected.size > 120 * 1024) {
-    error.value = 'File maksimal 120 KiB dan 500 siswa.'
+    toast.error('File maksimal 120 KiB dan 500 siswa.')
     input.value = ''
     return
   }
@@ -53,7 +53,7 @@ async function file(event: Event) {
     csv.value = await selected.text()
     filename.value = selected.name
   } catch {
-    error.value = 'File tidak dapat dibaca. Pilih ulang file CSV.'
+    toast.error('File tidak dapat dibaca. Pilih ulang file CSV.')
     input.value = ''
   }
 }
@@ -61,7 +61,7 @@ async function dryRun() {
   if (busy.value || !validate()) return
   busy.value = true
   error.value = ''
-  success.value = ''
+
   preview.value = null
   try {
     preview.value = (
@@ -70,8 +70,10 @@ async function dryRun() {
         body: { class_id: classId.value, csv: csv.value },
       })
     ).data
+    if (preview.value.valid) toast.success('Preview CSV siap. Periksa data sebelum mengimpor.')
+    else toast.warning('CSV memerlukan perbaikan. Periksa kesalahan pada preview.')
   } catch (e) {
-    error.value = apiMessage(e)
+    toast.error(apiMessage(e))
   } finally {
     busy.value = false
   }
@@ -85,14 +87,16 @@ async function commit() {
       `/students/imports/${preview.value.id}/commit`,
       { method: 'POST', body: { hash: preview.value.hash } },
     )
-    success.value = `${result.data.imported} siswa berhasil diimport. Retry batch ini tidak membuat duplikat.`
+    toast.success(
+      `${result.data.imported} siswa berhasil diimport. Retry batch ini tidak membuat duplikat.`,
+    )
     clear()
     clearCommit()
     preview.value = null
     csv.value = ''
     filename.value = ''
   } catch (e) {
-    error.value = apiMessage(e)
+    toast.error(apiMessage(e))
   } finally {
     busy.value = false
   }
@@ -146,12 +150,6 @@ if (canWrite.value) {
         variant="destructive"
       >
         <AlertDescription>{{ error }}</AlertDescription>
-      </Alert>
-      <Alert
-        v-if="success"
-        role="status"
-      >
-        <AlertDescription>{{ success }}</AlertDescription>
       </Alert>
       <Card>
         <CardHeader>

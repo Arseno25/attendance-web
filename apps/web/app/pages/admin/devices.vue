@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { toast } from 'vue-sonner'
 import { deviceSchema, reasonSchema } from '~/lib/validation/consent-devices'
 import { statusVariant } from '~/lib/status'
 import type { Result } from '~/types/auth'
@@ -19,7 +20,6 @@ const total = ref(0)
 const loading = ref(false)
 const busy = ref(false)
 const error = ref('')
-const success = ref('')
 const editor = ref(false)
 const revoking = ref<Device | null>(null)
 const reason = ref('')
@@ -49,30 +49,32 @@ async function act(kind: 'create' | 'revoke' | 'pair', id?: string) {
   if (busy.value || (kind !== 'pair' && !validate())) return
   busy.value = true
   error.value = ''
-  success.value = ''
+
   try {
-    if (kind === 'pair')
+    if (kind === 'pair') {
       pairing.value = (
         await request<Result<{ pairing_token: string; expires_at: string }>>(
           `/devices/${id}/pairing-token`,
           { method: 'POST' },
         )
       ).data
-    else {
+      toast.success('Token pairing siap digunakan.')
+    } else {
       await request(kind === 'create' ? '/devices' : `/devices/${revoking.value?.id}/revoke`, {
         method: 'POST',
         body: kind === 'create' ? form : { reason: reason.value },
       })
       editor.value = false
       revoking.value = null
-      success.value =
+      toast.success(
         kind === 'create'
           ? 'Perangkat didaftarkan.'
-          : 'Perangkat dicabut; sesi kiosk langsung tidak berlaku.'
+          : 'Perangkat dicabut; sesi kiosk langsung tidak berlaku.',
+      )
       await load()
     }
   } catch (e) {
-    error.value = apiMessage(e)
+    toast.error(apiMessage(e))
   } finally {
     busy.value = false
   }
@@ -124,12 +126,6 @@ function openRevocation(item: Device) {
       variant="destructive"
     >
       <AlertDescription>{{ error }}</AlertDescription>
-    </Alert>
-    <Alert
-      v-if="success"
-      role="status"
-    >
-      <AlertDescription>{{ success }}</AlertDescription>
     </Alert>
     <Card class="min-w-0">
       <CardHeader>

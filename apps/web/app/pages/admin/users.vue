@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { toast } from 'vue-sonner'
 import { searchSchema } from '~/lib/validation/master'
 import { userSchema } from '~/lib/validation/auth'
 import { Plus } from '@lucide/vue'
@@ -17,7 +18,6 @@ const saving = ref(false)
 const editing = ref<string | null>(null)
 const editor = ref(false)
 const message = ref('')
-const success = ref('')
 const form = reactive({
   email: '',
   full_name: '',
@@ -101,13 +101,12 @@ function edit(user: User) {
     is_active: user.is_active,
     grants: [...user.grants],
   })
-  success.value = ''
 }
 async function save() {
   if (saving.value || !validate()) return
   saving.value = true
   message.value = ''
-  success.value = ''
+
   try {
     const body = editing.value
       ? {
@@ -128,11 +127,11 @@ async function save() {
       method: editing.value ? 'PATCH' : 'POST',
       body,
     })
-    success.value = 'Pengguna berhasil disimpan.'
+    toast.success('Pengguna berhasil disimpan.')
     reset()
     await load()
   } catch (error) {
-    message.value = apiMessage(error)
+    toast.error(apiMessage(error))
   } finally {
     saving.value = false
   }
@@ -144,7 +143,7 @@ async function changePage(value: number) {
 await load()
 function openUser() {
   reset()
-  success.value = ''
+
   editor.value = true
 }
 async function filter() {
@@ -172,12 +171,6 @@ async function filter() {
       role="alert"
     >
       <AlertDescription>{{ message }}</AlertDescription>
-    </Alert>
-    <Alert
-      v-if="success"
-      role="status"
-    >
-      <AlertDescription>{{ success }}</AlertDescription>
     </Alert>
     <Dialog
       :open="editor"

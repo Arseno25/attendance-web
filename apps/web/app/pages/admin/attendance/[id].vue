@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { toast } from 'vue-sonner'
 import {
   rosterSchema,
   checkoutSchema,
@@ -29,7 +30,6 @@ const statusFilter = ref('all')
 const loading = ref(false)
 const saving = ref(false)
 const message = ref('')
-const success = ref('')
 const sheet = ref('')
 const selected = ref<Participant | null>(null)
 const action = ref('')
@@ -154,7 +154,7 @@ async function saveEntry() {
         method: 'POST',
         body: { student_id: form.student_id, reason: form.reason },
       })
-      success.value = 'Siswa ditambahkan ke roster dengan alasan tercatat.'
+      toast.success('Siswa ditambahkan ke roster dengan alasan tercatat.')
     } else if (sheet.value === 'checkout') {
       await request('/attendances/check-out', {
         method: 'POST',
@@ -165,7 +165,7 @@ async function saveEntry() {
           reason: form.reason,
         },
       })
-      success.value = 'Waktu pulang tersimpan; waktu hadir pertama tetap dipertahankan.'
+      toast.success('Waktu pulang tersimpan; waktu hadir pertama tetap dipertahankan.')
     } else if (sheet.value === 'manual') {
       const data = (
         await request<Result<{ outcome: string; record: { status: string } }>>(
@@ -182,10 +182,9 @@ async function saveEntry() {
           },
         )
       ).data
-      success.value =
-        data.outcome === 'already_recorded'
-          ? 'Kehadiran sudah tercatat; waktu pertama dipertahankan.'
-          : `Tersimpan: ${attendanceLabels[data.record.status]}.`
+      if (data.outcome === 'already_recorded')
+        toast.info('Kehadiran sudah tercatat; waktu pertama dipertahankan.')
+      else toast.success(`Tersimpan: ${attendanceLabels[data.record.status]}.`)
     } else {
       await request('/attendance-corrections', {
         method: 'POST',
@@ -201,12 +200,12 @@ async function saveEntry() {
             : {}),
         },
       })
-      success.value = 'Koreksi diajukan. Petugas yang berbeda harus memutuskan permintaan ini.'
+      toast.success('Koreksi diajukan. Petugas yang berbeda harus memutuskan permintaan ini.')
     }
     sheet.value = ''
     await load()
   } catch (error) {
-    message.value = apiMessage(error)
+    toast.error(apiMessage(error))
   } finally {
     saving.value = false
   }
@@ -233,10 +232,10 @@ async function performAction() {
       body: { reason: reason.value },
     })
     action.value = ''
-    success.value = 'Status sesi berhasil diperbarui.'
+    toast.success('Status sesi berhasil diperbarui.')
     await load()
   } catch (error) {
-    message.value = apiMessage(error)
+    toast.error(apiMessage(error))
   } finally {
     saving.value = false
   }
@@ -273,12 +272,6 @@ await load()
       variant="destructive"
     >
       <AlertDescription>{{ message }}</AlertDescription>
-    </Alert>
-    <Alert
-      v-if="success"
-      role="status"
-    >
-      <AlertDescription>{{ success }}</AlertDescription>
     </Alert>
     <template v-if="session">
       <PageHeader

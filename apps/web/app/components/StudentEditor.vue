@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { toast } from 'vue-sonner'
 import { studentSchema, newStudentSchema } from '~/lib/validation/master'
 import type { Student, SchoolClass } from '~/types/master'
 import { statusLabels } from '~/types/master'
@@ -51,7 +52,7 @@ async function save() {
     open.value = false
     emit('saved')
   } catch (error) {
-    message.value = apiMessage(error)
+    toast.error(apiMessage(error))
   } finally {
     saving.value = false
   }

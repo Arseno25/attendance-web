@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { toast } from 'vue-sonner'
 import { ChevronsUpDown, LogOut, UserRound } from '@lucide/vue'
 import { useSidebar } from '~/components/ui/sidebar'
 import { roleLabels } from '~/types/auth'
@@ -6,7 +7,6 @@ import { roleLabels } from '~/types/auth'
 const auth = useAuth()
 const { isMobile } = useSidebar()
 const busy = ref(false)
-const message = ref('')
 const user = computed(() => auth.session.value?.user)
 const initials = computed(() =>
   user.value?.full_name
@@ -20,11 +20,11 @@ const initials = computed(() =>
 async function logout() {
   if (busy.value) return
   busy.value = true
-  message.value = ''
   try {
     await auth.logout()
+    toast.success('Anda telah keluar.')
   } catch (error) {
-    message.value = apiMessage(error)
+    toast.error(apiMessage(error))
   } finally {
     busy.value = false
   }
@@ -32,13 +32,6 @@ async function logout() {
 </script>
 
 <template>
-  <Alert
-    v-if="message"
-    variant="destructive"
-    role="alert"
-  >
-    <AlertDescription>{{ message }}</AlertDescription>
-  </Alert>
   <SidebarMenu v-if="user">
     <SidebarMenuItem>
       <DropdownMenu>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { toast } from 'vue-sonner'
 import { studentFilterSchema } from '~/lib/validation/master'
 import { statusVariant } from '~/lib/status'
 import { Plus } from '@lucide/vue'
@@ -15,7 +16,6 @@ const classFilter = ref('all')
 const status = ref('all')
 const loading = ref(false)
 const message = ref('')
-const success = ref('')
 const open = ref(false)
 const { errors, validate } = useFormValidation(
   () => studentFilterSchema,
@@ -56,7 +56,7 @@ async function changePage(value: number) {
   await load()
 }
 async function saved() {
-  success.value = 'Siswa berhasil ditambahkan.'
+  toast.success('Siswa berhasil ditambahkan.')
   page.value = 1
   await load()
 }
@@ -100,12 +100,6 @@ await load()
       variant="destructive"
     >
       <AlertDescription>{{ message }}</AlertDescription>
-    </Alert>
-    <Alert
-      v-if="success"
-      role="status"
-    >
-      <AlertDescription>{{ success }}</AlertDescription>
     </Alert>
     <Card class="min-w-0">
       <CardHeader>
