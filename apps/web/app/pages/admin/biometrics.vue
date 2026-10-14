@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { RefreshCw, ScanFace } from '@lucide/vue'
+import { RefreshCw } from '@lucide/vue'
 import { searchSchema } from '~/lib/validation/master'
 import { statusVariant } from '~/lib/status'
 import { statusLabels, type Student } from '~/types/master'
@@ -78,11 +78,7 @@ await load()
         </CardDescription>
       </CardHeader>
       <CardContent class="min-w-0 space-y-4">
-        <form
-          novalidate
-          class="flex flex-wrap items-start gap-3"
-          @submit.prevent="filter"
-        >
+        <DataTableToolbar @submit.prevent="filter">
           <Field
             class="min-w-0 flex-1 sm:max-w-sm"
             :data-invalid="!!errors.search"
@@ -115,53 +111,54 @@ await load()
           >
             Cari
           </Button>
-        </form>
-        <Table>
-          <TableCaption class="sr-only">Siswa untuk pengelolaan wajah</TableCaption>
-          <TableHeader class="bg-muted/50">
-            <TableRow>
-              <TableHead>NIS</TableHead>
-              <TableHead>Nama</TableHead>
-              <TableHead>Kelas</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead class="w-12 text-right">Tindakan</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow
-              v-for="student in students"
-              :key="student.id"
-            >
-              <TableCell>{{ student.nis }}</TableCell>
-              <TableCell class="font-medium">{{ student.full_name }}</TableCell>
-              <TableCell>{{ student.class_name ?? 'Belum ditempatkan' }}</TableCell>
-              <TableCell>
-                <Badge :variant="statusVariant(student.status)">
-                  {{ statusLabels[student.status] }}
-                </Badge>
-              </TableCell>
-              <TableCell class="text-right">
-                <TableActions
-                  :label="student.full_name"
-                  :disabled="loading"
-                >
-                  <DropdownMenuItem @select="selected = student">
-                    <ScanFace />
-                    Kelola wajah
-                  </DropdownMenuItem>
-                </TableActions>
-              </TableCell>
-            </TableRow>
-            <TableRow v-if="!students.length">
-              <TableCell
-                colspan="5"
-                class="py-8 text-center text-muted-foreground"
-              >
-                {{ loading ? 'Memuat siswa…' : 'Tidak ada siswa sesuai pencarian.' }}
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
+        </DataTableToolbar>
+        <DataTable
+          :data="students ?? []"
+          :columns="[
+            { id: 'nis', label: 'NIS' },
+            { id: 'nama', label: 'Nama', cellClass: 'font-medium' },
+            { id: 'kelas', label: 'Kelas' },
+            { id: 'status', label: 'Status' },
+            {
+              id: 'tindakan',
+              label: 'Tindakan',
+              headClass: 'w-24 text-right',
+              cellClass: 'text-right',
+            },
+          ]"
+          caption="Siswa untuk pengelolaan wajah"
+          row-key="id"
+          :loading="loading"
+        >
+          <template #cell-nis="{ item: student }">{{ student.nis }}</template>
+          <template #cell-nama="{ item: student }">{{ student.full_name }}</template>
+          <template #cell-kelas="{ item: student }">
+            {{ student.class_name ?? 'Belum ditempatkan' }}
+          </template>
+          <template #cell-status="{ item: student }">
+            <Badge :variant="statusVariant(student.status)">
+              {{ statusLabels[student.status] }}
+            </Badge>
+          </template>
+          <template #cell-tindakan="{ item: student }">
+            <TableActions
+              :label="student.full_name"
+              :disabled="loading"
+              :actions="[
+                {
+                  label: 'Kelola wajah',
+                  icon: 'face',
+                  onSelect: () => {
+                    selected = student
+                  },
+                },
+              ]"
+            />
+          </template>
+          <template #empty>
+            {{ loading ? 'Memuat siswa…' : 'Tidak ada siswa sesuai pencarian.' }}
+          </template>
+        </DataTable>
         <TablePagination
           :page="page"
           :total="total"

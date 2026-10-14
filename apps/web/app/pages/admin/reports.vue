@@ -153,9 +153,8 @@ await load({ ...form })
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form
-          novalidate
-          class="space-y-4"
+        <DataTableToolbar
+          class="flex-col gap-4"
           @submit.prevent="load({ ...form })"
         >
           <FieldError v-if="errors.student_id || errors.session_id">
@@ -344,7 +343,7 @@ await load({ ...form })
               Terapkan perubahan filter sebelum mengekspor.
             </span>
           </div>
-        </form>
+        </DataTableToolbar>
       </CardContent>
     </Card>
     <div
@@ -375,32 +374,53 @@ await load({ ...form })
         </CardDescription>
       </CardHeader>
       <CardContent class="min-w-0">
-        <Table class="min-w-[640px]">
-          <TableCaption class="sr-only">Rekap kehadiran harian sesuai filter laporan</TableCaption>
-          <TableHeader class="bg-muted/50">
-            <TableRow>
-              <TableHead>Tanggal</TableHead>
-              <TableHead class="text-right">Roster</TableHead>
-              <TableHead class="text-right">Sudah hadir</TableHead>
-              <TableHead class="text-right">Terlambat</TableHead>
-              <TableHead class="text-right">Belum tercatat</TableHead>
-              <TableHead class="text-right">Rasio hadir</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow
-              v-for="day in daily"
-              :key="day.date"
-            >
-              <TableCell class="font-medium">{{ day.date }}</TableCell>
-              <TableCell class="text-right tabular-nums">{{ day.roster_total }}</TableCell>
-              <TableCell class="text-right tabular-nums">{{ day.attended }}</TableCell>
-              <TableCell class="text-right tabular-nums">{{ day.late }}</TableCell>
-              <TableCell class="text-right tabular-nums">{{ day.not_recorded }}</TableCell>
-              <TableCell class="text-right tabular-nums">{{ day.attendance_rate }}%</TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
+        <DataTable
+          class="min-w-[640px]"
+          :data="daily ?? []"
+          :columns="[
+            { id: 'tanggal', label: 'Tanggal', cellClass: 'font-medium' },
+            {
+              id: 'roster',
+              label: 'Roster',
+              headClass: 'text-right',
+              cellClass: 'text-right tabular-nums',
+            },
+            {
+              id: 'sudah-hadir',
+              label: 'Sudah hadir',
+              headClass: 'text-right',
+              cellClass: 'text-right tabular-nums',
+            },
+            {
+              id: 'terlambat',
+              label: 'Terlambat',
+              headClass: 'text-right',
+              cellClass: 'text-right tabular-nums',
+            },
+            {
+              id: 'belum-tercatat',
+              label: 'Belum tercatat',
+              headClass: 'text-right',
+              cellClass: 'text-right tabular-nums',
+            },
+            {
+              id: 'rasio-hadir',
+              label: 'Rasio hadir',
+              headClass: 'text-right',
+              cellClass: 'text-right tabular-nums',
+            },
+          ]"
+          caption="Rekap kehadiran harian sesuai filter laporan"
+          row-key="date"
+          :loading="loading"
+        >
+          <template #cell-tanggal="{ item: day }">{{ day.date }}</template>
+          <template #cell-roster="{ item: day }">{{ day.roster_total }}</template>
+          <template #cell-sudah-hadir="{ item: day }">{{ day.attended }}</template>
+          <template #cell-terlambat="{ item: day }">{{ day.late }}</template>
+          <template #cell-belum-tercatat="{ item: day }">{{ day.not_recorded }}</template>
+          <template #cell-rasio-hadir="{ item: day }">{{ day.attendance_rate }}%</template>
+        </DataTable>
       </CardContent>
     </Card>
     <Card class="min-w-0">
@@ -413,78 +433,85 @@ await load({ ...form })
         <CardDescription v-else>Terapkan filter untuk melihat rincian.</CardDescription>
       </CardHeader>
       <CardContent class="min-w-0">
-        <Table class="min-w-[980px]">
-          <TableCaption class="sr-only">Laporan kehadiran sesuai filter</TableCaption>
-          <TableHeader class="bg-muted/50">
-            <TableRow>
-              <TableHead>Tanggal / sesi</TableHead>
-              <TableHead>Siswa</TableHead>
-              <TableHead>Kelas / tahun</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Waktu hadir / pulang</TableHead>
-              <TableHead>Alasan</TableHead>
-              <TableHead class="w-12 text-right">Tindakan</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow
-              v-for="item in entries"
-              :key="`${item.session_id}-${item.student_id}`"
+        <DataTable
+          class="min-w-[980px]"
+          :data="entries ?? []"
+          :columns="[
+            { id: 'tanggal-sesi', label: 'Tanggal / sesi' },
+            { id: 'siswa', label: 'Siswa', cellClass: 'font-medium' },
+            { id: 'kelas-tahun', label: 'Kelas / tahun' },
+            { id: 'status', label: 'Status' },
+            {
+              id: 'waktu-hadir-pulang',
+              label: 'Waktu hadir / pulang',
+              cellClass: 'whitespace-nowrap',
+            },
+            { id: 'alasan', label: 'Alasan', cellClass: 'max-w-48 whitespace-normal' },
+            {
+              id: 'tindakan',
+              label: 'Tindakan',
+              headClass: 'w-24 text-right',
+              cellClass: 'text-right',
+            },
+          ]"
+          caption="Laporan kehadiran sesuai filter"
+          :loading="loading"
+        >
+          <template #cell-tanggal-sesi="{ item }">
+            {{ item.date }}
+            <div class="text-xs text-muted-foreground">{{ item.session_name }}</div>
+          </template>
+          <template #cell-siswa="{ item }">
+            {{ item.full_name }}
+            <div class="text-xs font-normal text-muted-foreground">
+              {{ item.nis }}
+            </div>
+          </template>
+          <template #cell-kelas-tahun="{ item }">
+            {{ item.class_name }}
+            <div class="text-xs text-muted-foreground">
+              {{ item.academic_year_name }}
+            </div>
+          </template>
+          <template #cell-status="{ item }">
+            <Badge :variant="statusVariant(item.status)">
+              {{ attendanceLabels[item.status] }}
+            </Badge>
+          </template>
+          <template #cell-waktu-hadir-pulang="{ item }">
+            {{ item.check_in_at ? dateTime(item.check_in_at) : '—' }}
+            <div
+              v-if="item.check_out_at"
+              class="text-xs text-muted-foreground"
             >
-              <TableCell>
-                {{ item.date }}
-                <div class="text-xs text-muted-foreground">{{ item.session_name }}</div>
-              </TableCell>
-              <TableCell class="font-medium">
-                {{ item.full_name }}
-                <div class="text-xs font-normal text-muted-foreground">
-                  {{ item.nis }}
-                </div>
-              </TableCell>
-              <TableCell>
-                {{ item.class_name }}
-                <div class="text-xs text-muted-foreground">
-                  {{ item.academic_year_name }}
-                </div>
-              </TableCell>
-              <TableCell>
-                <Badge :variant="statusVariant(item.status)">
-                  {{ attendanceLabels[item.status] }}
-                </Badge>
-              </TableCell>
-              <TableCell class="whitespace-nowrap">
-                {{ item.check_in_at ? dateTime(item.check_in_at) : '—' }}
-                <div
-                  v-if="item.check_out_at"
-                  class="text-xs text-muted-foreground"
-                >
-                  Pulang: {{ dateTime(item.check_out_at) }}
-                </div>
-              </TableCell>
-              <TableCell class="max-w-48 whitespace-normal">{{ item.reason ?? '—' }}</TableCell>
-              <TableCell class="text-right">
-                <TableActions :label="item.full_name">
-                  <DropdownMenuItem as-child>
-                    <NuxtLink :to="`/admin/attendance/${item.session_id}`">Lihat sesi</NuxtLink>
-                  </DropdownMenuItem>
-                </TableActions>
-              </TableCell>
-            </TableRow>
-            <TableRow v-if="!entries.length && !loading">
-              <TableCell colspan="7">
-                <Empty>
-                  <EmptyHeader>
-                    <EmptyTitle>Tidak ada roster sesuai filter</EmptyTitle>
-                    <EmptyDescription>
-                      Periksa tanggal dan kelas. Roster tersedia setelah sesi dibuka; sesi
-                      dibatalkan tidak masuk laporan.
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
+              Pulang: {{ dateTime(item.check_out_at) }}
+            </div>
+          </template>
+          <template #cell-alasan="{ item }">{{ item.reason ?? '—' }}</template>
+          <template #cell-tindakan="{ item }">
+            <TableActions
+              :label="item.full_name"
+              :actions="[
+                {
+                  label: 'Lihat sesi',
+                  icon: 'view',
+                  to: `/admin/attendance/${item.session_id}`,
+                },
+              ]"
+            />
+          </template>
+          <template #empty>
+            <Empty>
+              <EmptyHeader>
+                <EmptyTitle>Tidak ada roster sesuai filter</EmptyTitle>
+                <EmptyDescription>
+                  Periksa tanggal dan kelas. Roster tersedia setelah sesi dibuka; sesi dibatalkan
+                  tidak masuk laporan.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          </template>
+        </DataTable>
       </CardContent>
       <CardFooter class="block border-t">
         <TablePagination

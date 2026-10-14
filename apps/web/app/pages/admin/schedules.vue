@@ -224,77 +224,74 @@ await loadCalendar()
                 class="h-10"
               />
             </div>
-            <Table
+            <DataTable
               v-else
               class="min-w-[760px]"
+              :data="schedules ?? []"
+              :columns="[
+                { id: 'jadwal-kelas', label: 'Jadwal / kelas', cellClass: 'font-medium' },
+                { id: 'hari', label: 'Hari', cellClass: 'max-w-48 whitespace-normal' },
+                { id: 'jam-toleransi', label: 'Jam / toleransi' },
+                { id: 'status', label: 'Status' },
+                {
+                  id: 'tindakan',
+                  label: 'Tindakan',
+                  headClass: 'w-24 text-right',
+                  cellClass: 'text-right',
+                  hidden: !canConfigure,
+                },
+              ]"
+              caption="Jadwal absensi kelas"
+              row-key="id"
+              :loading="loading"
             >
-              <TableCaption class="sr-only">Jadwal absensi kelas</TableCaption>
-              <TableHeader class="bg-muted/50">
-                <TableRow>
-                  <TableHead>Jadwal / kelas</TableHead>
-                  <TableHead>Hari</TableHead>
-                  <TableHead>Jam / toleransi</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead
-                    v-if="canConfigure"
-                    class="w-12 text-right"
-                  >
-                    Tindakan
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                <TableRow
-                  v-for="item in schedules"
-                  :key="item.id"
-                >
-                  <TableCell class="font-medium">
-                    {{ item.name }}
-                    <div class="text-xs font-normal text-muted-foreground">
-                      {{ item.class_name }} · {{ item.academic_year_name }}
-                    </div>
-                  </TableCell>
-                  <TableCell class="max-w-48 whitespace-normal">
-                    {{ item.weekdays.map((day) => dayLabels[day - 1]).join(', ') }}
-                  </TableCell>
-                  <TableCell>
-                    {{ item.checkin_start.slice(0, 5) }} – {{ item.close_time.slice(0, 5) }}
-                    <div class="text-xs text-muted-foreground">
-                      Batas {{ item.checkin_cutoff.slice(0, 5) }} + {{ item.grace_minutes }} menit ·
-                      {{ item.timezone }}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge :variant="statusVariant(item.is_active ? 'active' : 'inactive')">
-                      {{ item.is_active ? 'Aktif' : 'Nonaktif' }}
-                    </Badge>
-                  </TableCell>
-                  <TableCell
-                    v-if="canConfigure"
-                    class="text-right"
-                  >
-                    <TableActions
-                      :label="item.name"
-                      :disabled="saving"
-                    >
-                      <DropdownMenuItem @select="show(item)">Edit jadwal</DropdownMenuItem>
-                    </TableActions>
-                  </TableCell>
-                </TableRow>
-                <TableRow v-if="!schedules.length">
-                  <TableCell :colspan="canConfigure ? 5 : 4">
-                    <Empty>
-                      <EmptyHeader>
-                        <EmptyTitle>Belum ada jadwal kelas</EmptyTitle>
-                        <EmptyDescription>
-                          Tambahkan jadwal untuk memulai sesi absensi.
-                        </EmptyDescription>
-                      </EmptyHeader>
-                    </Empty>
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
+              <template #cell-jadwal-kelas="{ item }">
+                {{ item.name }}
+                <div class="text-xs font-normal text-muted-foreground">
+                  {{ item.class_name }} · {{ item.academic_year_name }}
+                </div>
+              </template>
+              <template #cell-hari="{ item }">
+                {{ item.weekdays.map((day) => dayLabels[day - 1]).join(', ') }}
+              </template>
+              <template #cell-jam-toleransi="{ item }">
+                {{ item.checkin_start.slice(0, 5) }} – {{ item.close_time.slice(0, 5) }}
+                <div class="text-xs text-muted-foreground">
+                  Batas {{ item.checkin_cutoff.slice(0, 5) }} + {{ item.grace_minutes }} menit ·
+                  {{ item.timezone }}
+                </div>
+              </template>
+              <template #cell-status="{ item }">
+                <Badge :variant="statusVariant(item.is_active ? 'active' : 'inactive')">
+                  {{ item.is_active ? 'Aktif' : 'Nonaktif' }}
+                </Badge>
+              </template>
+              <template #cell-tindakan="{ item }">
+                <TableActions
+                  :label="item.name"
+                  :disabled="saving"
+                  :actions="[
+                    {
+                      label: 'Edit jadwal',
+                      icon: 'edit',
+                      onSelect: () => {
+                        show(item)
+                      },
+                    },
+                  ]"
+                />
+              </template>
+              <template #empty>
+                <Empty>
+                  <EmptyHeader>
+                    <EmptyTitle>Belum ada jadwal kelas</EmptyTitle>
+                    <EmptyDescription>
+                      Tambahkan jadwal untuk memulai sesi absensi.
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              </template>
+            </DataTable>
           </CardContent>
           <CardFooter class="block border-t">
             <TablePagination

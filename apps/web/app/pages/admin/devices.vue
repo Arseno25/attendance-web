@@ -136,65 +136,69 @@ function openRevocation(item: Device) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <Table class="min-w-[600px]">
-          <TableCaption class="sr-only">Perangkat dan heartbeat terakhir</TableCaption>
-          <TableHeader class="bg-muted/50">
-            <TableRow>
-              <TableHead>Perangkat</TableHead>
-              <TableHead>Lokasi</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Heartbeat terakhir</TableHead>
-              <TableHead class="w-12 text-right">Tindakan</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow
-              v-for="item in devices"
-              :key="item.id"
+        <DataTable
+          class="min-w-[600px]"
+          :data="devices ?? []"
+          :columns="[
+            { id: 'perangkat', label: 'Perangkat', cellClass: 'font-medium' },
+            { id: 'lokasi', label: 'Lokasi' },
+            { id: 'status', label: 'Status' },
+            { id: 'heartbeat-terakhir', label: 'Heartbeat terakhir' },
+            {
+              id: 'tindakan',
+              label: 'Tindakan',
+              headClass: 'w-24 text-right',
+              cellClass: 'text-right',
+            },
+          ]"
+          caption="Perangkat dan heartbeat terakhir"
+          row-key="id"
+          :loading="loading"
+        >
+          <template #cell-perangkat="{ item }">{{ item.name }}</template>
+          <template #cell-lokasi="{ item }">{{ item.location }}</template>
+          <template #cell-status="{ item }">
+            <Badge :variant="statusVariant(item.revoked_at ? 'revoked' : 'active')">
+              {{ item.revoked_at ? 'Dicabut' : 'Terdaftar' }}
+            </Badge>
+          </template>
+          <template #cell-heartbeat-terakhir="{ item }">
+            {{ item.last_seen_at ? dateTime(item.last_seen_at) : 'Belum terhubung' }}
+          </template>
+          <template #cell-tindakan="{ item }">
+            <TableActions
+              v-if="canManage && !item.revoked_at"
+              :label="item.name"
+              :disabled="busy"
+              :actions="[
+                {
+                  label: 'Token pairing',
+                  icon: 'pair',
+                  onSelect: () => {
+                    act('pair', item.id)
+                  },
+                },
+                {
+                  label: 'Cabut perangkat',
+                  icon: 'revoke',
+                  onSelect: () => {
+                    openRevocation(item)
+                  },
+                  destructive: true,
+                },
+              ]"
+            />
+            <span
+              v-else
+              class="text-muted-foreground"
             >
-              <TableCell class="font-medium">{{ item.name }}</TableCell>
-              <TableCell>{{ item.location }}</TableCell>
-              <TableCell>
-                <Badge :variant="statusVariant(item.revoked_at ? 'revoked' : 'active')">
-                  {{ item.revoked_at ? 'Dicabut' : 'Terdaftar' }}
-                </Badge>
-              </TableCell>
-              <TableCell>
-                {{ item.last_seen_at ? dateTime(item.last_seen_at) : 'Belum terhubung' }}
-              </TableCell>
-              <TableCell class="text-right">
-                <TableActions
-                  v-if="canManage && !item.revoked_at"
-                  :label="item.name"
-                  :disabled="busy"
-                >
-                  <DropdownMenuItem @select="act('pair', item.id)">Token pairing</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    variant="destructive"
-                    @select="openRevocation(item)"
-                  >
-                    Cabut perangkat
-                  </DropdownMenuItem>
-                </TableActions>
-                <span
-                  v-else
-                  class="text-muted-foreground"
-                >
-                  —
-                </span>
-              </TableCell>
-            </TableRow>
-            <TableRow v-if="!devices.length">
-              <TableCell
-                colspan="5"
-                class="py-8 text-center text-muted-foreground"
-              >
-                {{ loading ? 'Memuat perangkat…' : 'Belum ada perangkat.' }}
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
+              —
+            </span>
+          </template>
+          <template #empty>
+            {{ loading ? 'Memuat perangkat…' : 'Belum ada perangkat.' }}
+          </template>
+        </DataTable>
       </CardContent>
       <CardFooter class="block border-t">
         <TablePagination

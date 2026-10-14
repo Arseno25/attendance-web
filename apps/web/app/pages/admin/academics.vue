@@ -263,161 +263,227 @@ function openRevocation(item: Assignment) {
             :value="kind"
             class="mt-0"
           >
-            <Table class="min-w-[620px]">
-              <TableCaption class="sr-only">Daftar {{ labels[kind] }}</TableCaption>
-              <TableHeader class="bg-muted/50">
-                <TableRow>
-                  <TableHead>
-                    {{ kind === 'years' ? 'Tahun ajaran' : kind === 'classes' ? 'Kelas' : 'Guru' }}
-                  </TableHead>
-                  <TableHead>
-                    {{
-                      kind === 'years'
-                        ? 'Periode'
-                        : kind === 'classes'
-                          ? 'Tahun ajaran'
-                          : 'Kelas / tahun ajaran'
-                    }}
-                  </TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead
-                    v-if="canWrite"
-                    class="w-12 text-right"
-                  >
-                    Tindakan
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody v-if="kind === 'years'">
-                <TableRow
-                  v-for="year in years"
-                  :key="year.id"
-                >
-                  <TableCell class="font-medium">{{ year.name }}</TableCell>
-                  <TableCell>{{ year.starts_on }} – {{ year.ends_on }}</TableCell>
-                  <TableCell>
-                    <Badge :variant="statusVariant(year.is_active ? 'active' : 'inactive')">
-                      {{ year.is_active ? 'Aktif' : 'Nonaktif' }}
-                    </Badge>
-                  </TableCell>
-                  <TableCell
-                    v-if="canWrite"
-                    class="text-right"
-                  >
-                    <TableActions
-                      :label="year.name"
-                      :disabled="saving"
-                    >
-                      <DropdownMenuItem @select="show(year)">Edit tahun ajaran</DropdownMenuItem>
-                    </TableActions>
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-              <TableBody v-else-if="kind === 'classes'">
-                <TableRow
-                  v-for="item in classes"
-                  :key="item.id"
-                >
-                  <TableCell>
-                    <div class="font-medium">{{ item.name }}</div>
-                    <div class="text-xs text-muted-foreground">
-                      {{ item.code }} · {{ item.level || 'Tingkat belum diisi' }}
-                    </div>
-                  </TableCell>
-                  <TableCell>{{ item.academic_year_name }}</TableCell>
-                  <TableCell>
-                    <Badge :variant="statusVariant(item.is_active ? 'active' : 'inactive')">
-                      {{ item.is_active ? 'Aktif' : 'Nonaktif' }}
-                    </Badge>
-                  </TableCell>
-                  <TableCell
-                    v-if="canWrite"
-                    class="text-right"
-                  >
-                    <TableActions
-                      :label="item.name"
-                      :disabled="saving"
-                    >
-                      <DropdownMenuItem @select="show(item)">Edit kelas</DropdownMenuItem>
-                    </TableActions>
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-              <TableBody v-else>
-                <TableRow
-                  v-for="item in assignments"
-                  :key="item.id"
-                >
-                  <TableCell>
-                    <div class="font-medium">{{ item.teacher_name }}</div>
-                    <div class="text-xs text-muted-foreground">
-                      {{ dateTime(item.starts_at) }} – {{ dateTime(item.ends_at) }}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {{ item.class_name }}
-                    <div class="text-xs text-muted-foreground">
-                      {{ item.academic_year_name }}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      :variant="
-                        statusVariant(
-                          !item.is_active
-                            ? 'revoked'
-                            : item.is_current
-                              ? 'active'
-                              : 'out_of_period',
-                        )
-                      "
-                    >
-                      {{
-                        !item.is_active ? 'Dicabut' : item.is_current ? 'Aktif' : 'Di luar periode'
-                      }}
-                    </Badge>
-                  </TableCell>
-                  <TableCell
-                    v-if="canWrite"
-                    class="text-right"
-                  >
-                    <TableActions
-                      v-if="item.is_active"
-                      :label="item.teacher_name"
-                      :disabled="saving"
-                    >
-                      <DropdownMenuItem
-                        variant="destructive"
-                        @select="openRevocation(item)"
-                      >
-                        Cabut penugasan
-                      </DropdownMenuItem>
-                    </TableActions>
-                    <span
-                      v-else
-                      class="text-muted-foreground"
-                    >
-                      —
-                    </span>
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-            <Empty
-              v-if="!total"
-              class="py-12"
+            <DataTable
+              v-if="kind === 'years'"
+              class="min-w-[620px]"
+              :data="years ?? []"
+              :columns="[
+                {
+                  id: 'tahun-ajaran',
+                  label: 'Tahun ajaran',
+                  cellClass: 'font-medium',
+                },
+                {
+                  id: 'periode',
+                  label: 'Periode',
+                },
+                { id: 'status', label: 'Status' },
+                {
+                  id: 'tindakan',
+                  label: 'Tindakan',
+                  headClass: 'w-24 text-right',
+                  cellClass: 'text-right',
+                  hidden: !canWrite,
+                },
+              ]"
+              :caption="`Daftar ${labels[kind]}`"
+              row-key="id"
+              :loading="loading"
             >
-              <EmptyHeader>
-                <EmptyTitle>Belum ada {{ labels[kind] }}</EmptyTitle>
-                <EmptyDescription>
-                  {{
-                    canWrite
-                      ? 'Tambahkan data untuk memulai pengelolaan sekolah.'
-                      : 'Minta admin sekolah mengatur penugasan kelas Anda.'
-                  }}
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
+              <template #cell-tahun-ajaran="{ item: year }">{{ year.name }}</template>
+              <template #cell-periode="{ item: year }">
+                {{ year.starts_on }} – {{ year.ends_on }}
+              </template>
+              <template #cell-status="{ item: year }">
+                <Badge :variant="statusVariant(year.is_active ? 'active' : 'inactive')">
+                  {{ year.is_active ? 'Aktif' : 'Nonaktif' }}
+                </Badge>
+              </template>
+              <template #cell-tindakan="{ item: year }">
+                <TableActions
+                  :label="year.name"
+                  :disabled="saving"
+                  :actions="[
+                    {
+                      label: 'Edit tahun ajaran',
+                      icon: 'edit',
+                      onSelect: () => {
+                        show(year)
+                      },
+                    },
+                  ]"
+                />
+              </template>
+              <template #empty>
+                <Empty>
+                  <EmptyHeader>
+                    <EmptyTitle>Belum ada {{ labels[kind] }}</EmptyTitle>
+                    <EmptyDescription>
+                      {{
+                        canWrite
+                          ? 'Tambahkan data untuk memulai pengelolaan sekolah.'
+                          : 'Minta admin sekolah mengatur penugasan kelas Anda.'
+                      }}
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              </template>
+            </DataTable>
+            <DataTable
+              v-else-if="kind === 'classes'"
+              class="min-w-[620px]"
+              :data="classes ?? []"
+              :columns="[
+                {
+                  id: 'kelas',
+                  label: 'Kelas',
+                },
+                {
+                  id: 'tahun-ajaran',
+                  label: 'Tahun ajaran',
+                },
+                { id: 'status', label: 'Status' },
+                {
+                  id: 'tindakan',
+                  label: 'Tindakan',
+                  headClass: 'w-24 text-right',
+                  cellClass: 'text-right',
+                  hidden: !canWrite,
+                },
+              ]"
+              :caption="`Daftar ${labels[kind]}`"
+              row-key="id"
+              :loading="loading"
+            >
+              <template #cell-kelas="{ item }">
+                <div class="font-medium">{{ item.name }}</div>
+                <div class="text-xs text-muted-foreground">
+                  {{ item.code }} · {{ item.level || 'Tingkat belum diisi' }}
+                </div>
+              </template>
+              <template #cell-tahun-ajaran="{ item }">{{ item.academic_year_name }}</template>
+              <template #cell-status="{ item }">
+                <Badge :variant="statusVariant(item.is_active ? 'active' : 'inactive')">
+                  {{ item.is_active ? 'Aktif' : 'Nonaktif' }}
+                </Badge>
+              </template>
+              <template #cell-tindakan="{ item }">
+                <TableActions
+                  :label="item.name"
+                  :disabled="saving"
+                  :actions="[
+                    {
+                      label: 'Edit kelas',
+                      icon: 'edit',
+                      onSelect: () => {
+                        show(item)
+                      },
+                    },
+                  ]"
+                />
+              </template>
+              <template #empty>
+                <Empty>
+                  <EmptyHeader>
+                    <EmptyTitle>Belum ada {{ labels[kind] }}</EmptyTitle>
+                    <EmptyDescription>
+                      {{
+                        canWrite
+                          ? 'Tambahkan data untuk memulai pengelolaan sekolah.'
+                          : 'Minta admin sekolah mengatur penugasan kelas Anda.'
+                      }}
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              </template>
+            </DataTable>
+            <DataTable
+              v-else
+              class="min-w-[620px]"
+              :data="assignments ?? []"
+              :columns="[
+                {
+                  id: 'guru',
+                  label: 'Guru',
+                },
+                {
+                  id: 'kelas-tahun-ajaran',
+                  label: 'Kelas / tahun ajaran',
+                },
+                { id: 'status', label: 'Status' },
+                {
+                  id: 'tindakan',
+                  label: 'Tindakan',
+                  headClass: 'w-24 text-right',
+                  cellClass: 'text-right',
+                  hidden: !canWrite,
+                },
+              ]"
+              :caption="`Daftar ${labels[kind]}`"
+              row-key="id"
+              :loading="loading"
+            >
+              <template #cell-guru="{ item }">
+                <div class="font-medium">{{ item.teacher_name }}</div>
+                <div class="text-xs text-muted-foreground">
+                  {{ dateTime(item.starts_at) }} – {{ dateTime(item.ends_at) }}
+                </div>
+              </template>
+              <template #cell-kelas-tahun-ajaran="{ item }">
+                {{ item.class_name }}
+                <div class="text-xs text-muted-foreground">
+                  {{ item.academic_year_name }}
+                </div>
+              </template>
+              <template #cell-status="{ item }">
+                <Badge
+                  :variant="
+                    statusVariant(
+                      !item.is_active ? 'revoked' : item.is_current ? 'active' : 'out_of_period',
+                    )
+                  "
+                >
+                  {{ !item.is_active ? 'Dicabut' : item.is_current ? 'Aktif' : 'Di luar periode' }}
+                </Badge>
+              </template>
+              <template #cell-tindakan="{ item }">
+                <TableActions
+                  v-if="item.is_active"
+                  :label="item.teacher_name"
+                  :disabled="saving"
+                  :actions="[
+                    {
+                      label: 'Cabut penugasan',
+                      icon: 'revoke',
+                      onSelect: () => {
+                        openRevocation(item)
+                      },
+                      destructive: true,
+                    },
+                  ]"
+                />
+                <span
+                  v-else
+                  class="text-muted-foreground"
+                >
+                  —
+                </span>
+              </template>
+              <template #empty>
+                <Empty>
+                  <EmptyHeader>
+                    <EmptyTitle>Belum ada {{ labels[kind] }}</EmptyTitle>
+                    <EmptyDescription>
+                      {{
+                        canWrite
+                          ? 'Tambahkan data untuk memulai pengelolaan sekolah.'
+                          : 'Minta admin sekolah mengatur penugasan kelas Anda.'
+                      }}
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              </template>
+            </DataTable>
           </TabsContent>
         </CardContent>
         <CardFooter class="block border-t">

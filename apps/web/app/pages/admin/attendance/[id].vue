@@ -372,11 +372,7 @@ await load()
           </Button>
         </CardHeader>
         <CardContent class="min-w-0 space-y-4">
-          <form
-            novalidate
-            class="flex flex-wrap gap-3"
-            @submit.prevent="filter"
-          >
+          <DataTableToolbar @submit.prevent="filter">
             <Label
               for="roster-search"
               class="sr-only"
@@ -446,7 +442,7 @@ await load()
             >
               Cari
             </Button>
-          </form>
+          </DataTableToolbar>
           <div
             v-if="loading"
             class="space-y-3"
@@ -459,124 +455,104 @@ await load()
               class="h-10"
             />
           </div>
-          <Table
+          <DataTable
             v-else
             class="min-w-[720px]"
+            :data="participants ?? []"
+            :columns="[
+              { id: 'siswa', label: 'Siswa', cellClass: 'font-medium' },
+              { id: 'status', label: 'Status' },
+              { id: 'waktu-hadir-pulang', label: 'Waktu hadir / pulang' },
+              { id: 'alasan', label: 'Alasan', cellClass: 'max-w-48 whitespace-normal' },
+              {
+                id: 'tindakan',
+                label: 'Tindakan',
+                headClass: 'w-24 text-right',
+                cellClass: 'text-right',
+                hidden: !(canManual || canRequest),
+              },
+            ]"
+            caption="Roster dan catatan absensi siswa"
+            row-key="id"
+            :loading="loading"
           >
-            <TableCaption class="sr-only">Roster dan catatan absensi siswa</TableCaption>
-            <TableHeader class="bg-muted/50">
-              <TableRow>
-                <TableHead>Siswa</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Waktu hadir / pulang</TableHead>
-                <TableHead>Alasan</TableHead>
-                <TableHead
-                  v-if="canManual || canRequest"
-                  class="w-12 text-right"
-                >
-                  Tindakan
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow
-                v-for="item in participants"
-                :key="item.id"
+            <template #cell-siswa="{ item }">
+              {{ item.full_name }}
+              <div class="text-xs font-normal text-muted-foreground">
+                {{ item.nis }}
+              </div>
+            </template>
+            <template #cell-status="{ item }">
+              <Badge :variant="statusVariant(item.status)">
+                {{ attendanceLabels[item.status] }}
+              </Badge>
+              <div
+                v-if="item.correction_pending"
+                class="mt-1"
               >
-                <TableCell class="font-medium">
-                  {{ item.full_name }}
-                  <div class="text-xs font-normal text-muted-foreground">
-                    {{ item.nis }}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <Badge :variant="statusVariant(item.status)">
-                    {{ attendanceLabels[item.status] }}
-                  </Badge>
-                  <div
-                    v-if="item.correction_pending"
-                    class="mt-1"
-                  >
-                    <Badge variant="warning">Koreksi menunggu</Badge>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  {{ item.check_in_at ? dateTime(item.check_in_at) : '—' }}
-                  <div
-                    v-if="item.check_out_at"
-                    class="text-xs text-muted-foreground"
-                  >
-                    Pulang: {{ dateTime(item.check_out_at) }}
-                  </div>
-                </TableCell>
-                <TableCell class="max-w-48 whitespace-normal">{{ item.reason ?? '—' }}</TableCell>
-                <TableCell
-                  v-if="canManual || canRequest"
-                  class="text-right"
-                >
-                  <TableActions
-                    v-if="
-                      (canManual &&
-                        session.status === 'open' &&
-                        (item.status === 'not_recorded' ||
-                          (['present', 'late'].includes(item.status) && !item.check_out_at))) ||
-                      (canRequest && ['open', 'closed'].includes(session.status))
-                    "
-                    :label="item.full_name"
-                    :disabled="saving || item.correction_pending"
-                  >
-                    <DropdownMenuItem
-                      v-if="
-                        canManual && session.status === 'open' && item.status === 'not_recorded'
-                      "
-                      @select="show('manual', item)"
-                    >
-                      Catat absensi
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      v-if="
-                        canManual &&
-                        session.status === 'open' &&
-                        ['present', 'late'].includes(item.status) &&
-                        !item.check_out_at
-                      "
-                      @select="show('checkout', item)"
-                    >
-                      Catat pulang
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      v-if="canRequest && ['open', 'closed'].includes(session.status)"
-                      @select="show('correction', item)"
-                    >
-                      Ajukan koreksi
-                    </DropdownMenuItem>
-                  </TableActions>
-                  <span
-                    v-else
-                    class="text-muted-foreground"
-                  >
-                    —
-                  </span>
-                </TableCell>
-              </TableRow>
-              <TableRow v-if="!participants.length">
-                <TableCell :colspan="canManual || canRequest ? 5 : 4">
-                  <Empty>
-                    <EmptyHeader>
-                      <EmptyTitle>Belum ada siswa sesuai filter</EmptyTitle>
-                      <EmptyDescription>
-                        {{
-                          session.status === 'scheduled'
-                            ? 'Roster tersedia setelah sesi dibuka.'
-                            : 'Siswa yang masuk setelah waktu mulai dapat ditambahkan dengan alasan.'
-                        }}
-                      </EmptyDescription>
-                    </EmptyHeader>
-                  </Empty>
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
+                <Badge variant="warning">Koreksi menunggu</Badge>
+              </div>
+            </template>
+            <template #cell-waktu-hadir-pulang="{ item }">
+              {{ item.check_in_at ? dateTime(item.check_in_at) : '—' }}
+              <div
+                v-if="item.check_out_at"
+                class="text-xs text-muted-foreground"
+              >
+                Pulang: {{ dateTime(item.check_out_at) }}
+              </div>
+            </template>
+            <template #cell-alasan="{ item }">{{ item.reason ?? '—' }}</template>
+            <template #cell-tindakan="{ item }">
+              <TableActions
+                :label="item.full_name"
+                :disabled="saving || item.correction_pending"
+                :actions="[
+                  {
+                    label: 'Catat absensi',
+                    icon: 'record',
+                    onSelect: () => show('manual', item),
+                    hidden: !(
+                      canManual &&
+                      session?.status === 'open' &&
+                      item.status === 'not_recorded'
+                    ),
+                  },
+                  {
+                    label: 'Catat pulang',
+                    icon: 'checkout',
+                    onSelect: () => show('checkout', item),
+                    hidden: !(
+                      canManual &&
+                      session?.status === 'open' &&
+                      ['present', 'late'].includes(item.status) &&
+                      !item.check_out_at
+                    ),
+                  },
+                  {
+                    label: 'Ajukan koreksi',
+                    icon: 'correction',
+                    onSelect: () => show('correction', item),
+                    hidden: !(canRequest && ['open', 'closed'].includes(session?.status ?? '')),
+                  },
+                ]"
+              />
+            </template>
+            <template #empty>
+              <Empty>
+                <EmptyHeader>
+                  <EmptyTitle>Belum ada siswa sesuai filter</EmptyTitle>
+                  <EmptyDescription>
+                    {{
+                      session?.status === 'scheduled'
+                        ? 'Roster tersedia setelah sesi dibuka.'
+                        : 'Siswa yang masuk setelah waktu mulai dapat ditambahkan dengan alasan.'
+                    }}
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            </template>
+          </DataTable>
         </CardContent>
         <CardFooter class="block border-t">
           <TablePagination

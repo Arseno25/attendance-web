@@ -262,26 +262,19 @@ if (canWrite.value) {
               </ul>
             </AlertDescription>
           </Alert>
-          <Table>
-            <TableCaption class="sr-only">Preview data siswa yang akan diimport</TableCaption>
-            <TableHeader class="bg-muted/50">
-              <TableRow>
-                <TableHead>NIS</TableHead>
-                <TableHead>NISN</TableHead>
-                <TableHead>Nama</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow
-                v-for="(row, i) in preview.preview"
-                :key="i"
-              >
-                <TableCell>{{ row.nis }}</TableCell>
-                <TableCell>{{ row.nisn || '—' }}</TableCell>
-                <TableCell>{{ row.full_name }}</TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
+          <DataTable
+            :data="preview.preview ?? []"
+            :columns="[
+              { id: 'nis', label: 'NIS' },
+              { id: 'nisn', label: 'NISN' },
+              { id: 'nama', label: 'Nama' },
+            ]"
+            caption="Preview data siswa yang akan diimport"
+          >
+            <template #cell-nis="{ item: row }">{{ row.nis }}</template>
+            <template #cell-nisn="{ item: row }">{{ row.nisn || '—' }}</template>
+            <template #cell-nama="{ item: row }">{{ row.full_name }}</template>
+          </DataTable>
         </CardContent>
       </Card>
     </template>

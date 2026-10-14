@@ -164,41 +164,29 @@ await load()
           </CardDescription>
         </CardHeader>
         <CardContent class="min-w-0">
-          <Table class="min-w-[720px]">
-            <TableCaption class="sr-only">Histori kelas siswa</TableCaption>
-            <TableHeader class="bg-muted/50">
-              <TableRow>
-                <TableHead>Kelas</TableHead>
-                <TableHead>Mulai</TableHead>
-                <TableHead>Berakhir</TableHead>
-                <TableHead>Alasan</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow
-                v-for="item in student.placements"
-                :key="item.id"
-              >
-                <TableCell class="font-medium">
-                  {{ item.class_name }}
-                  <div class="text-xs font-normal text-muted-foreground">
-                    {{ item.academic_year_name }}
-                  </div>
-                </TableCell>
-                <TableCell>{{ dateTime(item.joined_at) }}</TableCell>
-                <TableCell>{{ dateTime(item.left_at) }}</TableCell>
-                <TableCell class="max-w-64 whitespace-normal">{{ item.reason }}</TableCell>
-              </TableRow>
-              <TableRow v-if="!student.placements?.length">
-                <TableCell
-                  colspan="4"
-                  class="py-8 text-center text-muted-foreground"
-                >
-                  Belum ada penempatan yang dapat ditampilkan.
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
+          <DataTable
+            class="min-w-[720px]"
+            :data="student.placements ?? []"
+            :columns="[
+              { id: 'kelas', label: 'Kelas', cellClass: 'font-medium' },
+              { id: 'mulai', label: 'Mulai' },
+              { id: 'berakhir', label: 'Berakhir' },
+              { id: 'alasan', label: 'Alasan', cellClass: 'max-w-64 whitespace-normal' },
+            ]"
+            caption="Histori kelas siswa"
+            row-key="id"
+          >
+            <template #cell-kelas="{ item }">
+              {{ item.class_name }}
+              <div class="text-xs font-normal text-muted-foreground">
+                {{ item.academic_year_name }}
+              </div>
+            </template>
+            <template #cell-mulai="{ item }">{{ dateTime(item.joined_at) }}</template>
+            <template #cell-berakhir="{ item }">{{ dateTime(item.left_at) }}</template>
+            <template #cell-alasan="{ item }">{{ item.reason }}</template>
+            <template #empty>Belum ada penempatan yang dapat ditampilkan.</template>
+          </DataTable>
         </CardContent>
       </Card>
       <StudentConsent

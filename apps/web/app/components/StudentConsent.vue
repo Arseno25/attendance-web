@@ -136,77 +136,72 @@ function openWithdrawal(item: Consent) {
       >
         <AlertDescription>{{ error }}</AlertDescription>
       </Alert>
-      <Table>
-        <TableCaption class="sr-only">Riwayat persetujuan biometrik</TableCaption>
-        <TableHeader class="bg-muted/50">
-          <TableRow>
-            <TableHead>Wali</TableHead>
-            <TableHead>Kebijakan</TableHead>
-            <TableHead>Berlaku sampai</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead class="w-12 text-right">Tindakan</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          <TableRow
-            v-for="item in consents"
-            :key="item.id"
+      <DataTable
+        :data="consents ?? []"
+        :columns="[
+          { id: 'wali', label: 'Wali' },
+          { id: 'kebijakan', label: 'Kebijakan' },
+          { id: 'berlaku-sampai', label: 'Berlaku sampai' },
+          { id: 'status', label: 'Status' },
+          {
+            id: 'tindakan',
+            label: 'Tindakan',
+            headClass: 'w-24 text-right',
+            cellClass: 'text-right',
+          },
+        ]"
+        caption="Riwayat persetujuan biometrik"
+        row-key="id"
+      >
+        <template #cell-wali="{ item }">{{ item.guardian_name }}</template>
+        <template #cell-kebijakan="{ item }">{{ item.policy_version }}</template>
+        <template #cell-berlaku-sampai="{ item }">{{ dateTime(item.valid_until) }}</template>
+        <template #cell-status="{ item }">
+          <Badge
+            :variant="
+              statusVariant(
+                item.withdrawn_at
+                  ? 'withdrawn'
+                  : new Date(item.valid_until) <= new Date()
+                    ? 'expired'
+                    : 'active',
+              )
+            "
           >
-            <TableCell>{{ item.guardian_name }}</TableCell>
-            <TableCell>{{ item.policy_version }}</TableCell>
-            <TableCell>{{ dateTime(item.valid_until) }}</TableCell>
-            <TableCell>
-              <Badge
-                :variant="
-                  statusVariant(
-                    item.withdrawn_at
-                      ? 'withdrawn'
-                      : new Date(item.valid_until) <= new Date()
-                        ? 'expired'
-                        : 'active',
-                  )
-                "
-              >
-                {{
-                  item.withdrawn_at
-                    ? 'Dicabut'
-                    : new Date(item.valid_until) <= new Date()
-                      ? 'Kedaluwarsa'
-                      : 'Berlaku'
-                }}
-              </Badge>
-            </TableCell>
-            <TableCell class="text-right">
-              <TableActions
-                v-if="!item.withdrawn_at"
-                :label="item.guardian_name"
-                :disabled="busy"
-              >
-                <DropdownMenuItem
-                  variant="destructive"
-                  @select="openWithdrawal(item)"
-                >
-                  Cabut consent
-                </DropdownMenuItem>
-              </TableActions>
-              <span
-                v-else
-                class="text-muted-foreground"
-              >
-                —
-              </span>
-            </TableCell>
-          </TableRow>
-          <TableRow v-if="!consents.length">
-            <TableCell
-              colspan="5"
-              class="py-8 text-center text-muted-foreground"
-            >
-              Belum ada consent. Absensi manual tetap tersedia.
-            </TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
+            {{
+              item.withdrawn_at
+                ? 'Dicabut'
+                : new Date(item.valid_until) <= new Date()
+                  ? 'Kedaluwarsa'
+                  : 'Berlaku'
+            }}
+          </Badge>
+        </template>
+        <template #cell-tindakan="{ item }">
+          <TableActions
+            v-if="!item.withdrawn_at"
+            :label="item.guardian_name"
+            :disabled="busy"
+            :actions="[
+              {
+                label: 'Cabut consent',
+                icon: 'revoke',
+                onSelect: () => {
+                  openWithdrawal(item)
+                },
+                destructive: true,
+              },
+            ]"
+          />
+          <span
+            v-else
+            class="text-muted-foreground"
+          >
+            —
+          </span>
+        </template>
+        <template #empty>Belum ada consent. Absensi manual tetap tersedia.</template>
+      </DataTable>
     </CardContent>
   </Card>
   <Dialog

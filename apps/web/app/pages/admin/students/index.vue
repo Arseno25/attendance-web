@@ -107,9 +107,8 @@ await load()
         <CardDescription>{{ total }} siswa sesuai filter.</CardDescription>
       </CardHeader>
       <CardContent class="min-w-0 space-y-4">
-        <form
-          novalidate
-          class="grid gap-3 sm:grid-cols-2 xl:flex"
+        <DataTableToolbar
+          class="grid sm:grid-cols-2 xl:flex"
           @submit.prevent="filter"
         >
           <Label
@@ -218,7 +217,7 @@ await load()
           >
             Cari
           </Button>
-        </form>
+        </DataTableToolbar>
         <div
           v-if="loading"
           class="space-y-3"
@@ -231,67 +230,63 @@ await load()
             class="h-10"
           />
         </div>
-        <Table
+        <DataTable
           v-else
           class="min-w-[640px]"
+          :data="students ?? []"
+          :columns="[
+            { id: 'nama-siswa', label: 'Nama siswa', cellClass: 'font-medium' },
+            { id: 'nis', label: 'NIS' },
+            { id: 'kelas-terakhir', label: 'Kelas terakhir' },
+            { id: 'status', label: 'Status' },
+            {
+              id: 'tindakan',
+              label: 'Tindakan',
+              headClass: 'w-24 text-right',
+              cellClass: 'text-right',
+            },
+          ]"
+          caption="Daftar siswa sekolah"
+          row-key="id"
+          :loading="loading"
         >
-          <TableCaption class="sr-only">Daftar siswa sekolah</TableCaption>
-          <TableHeader class="bg-muted/50">
-            <TableRow>
-              <TableHead>Nama siswa</TableHead>
-              <TableHead>NIS</TableHead>
-              <TableHead>Kelas terakhir</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead class="w-12 text-right">Tindakan</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow
-              v-for="student in students"
-              :key="student.id"
+          <template #cell-nama-siswa="{ item: student }">
+            <NuxtLink
+              :to="`/admin/students/${student.id}`"
+              class="hover:underline"
             >
-              <TableCell class="font-medium">
-                <NuxtLink
-                  :to="`/admin/students/${student.id}`"
-                  class="hover:underline"
-                >
-                  {{ student.full_name }}
-                </NuxtLink>
-              </TableCell>
-              <TableCell>{{ student.nis }}</TableCell>
-              <TableCell>
-                {{ student.class_name ?? 'Belum ditempatkan' }}
-                <div class="text-xs text-muted-foreground">
-                  {{ student.academic_year_name }}
-                </div>
-              </TableCell>
-              <TableCell>
-                <Badge :variant="statusVariant(student.status)">
-                  {{ statusLabels[student.status] }}
-                </Badge>
-              </TableCell>
-              <TableCell class="text-right">
-                <TableActions :label="student.full_name">
-                  <DropdownMenuItem as-child>
-                    <NuxtLink :to="`/admin/students/${student.id}`">Detail</NuxtLink>
-                  </DropdownMenuItem>
-                </TableActions>
-              </TableCell>
-            </TableRow>
-            <TableRow v-if="!students.length">
-              <TableCell colspan="5">
-                <Empty>
-                  <EmptyHeader>
-                    <EmptyTitle>Tidak ada siswa sesuai filter</EmptyTitle>
-                    <EmptyDescription>
-                      Coba pencarian lain atau tambahkan siswa pada kelas aktif.
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
+              {{ student.full_name }}
+            </NuxtLink>
+          </template>
+          <template #cell-nis="{ item: student }">{{ student.nis }}</template>
+          <template #cell-kelas-terakhir="{ item: student }">
+            {{ student.class_name ?? 'Belum ditempatkan' }}
+            <div class="text-xs text-muted-foreground">
+              {{ student.academic_year_name }}
+            </div>
+          </template>
+          <template #cell-status="{ item: student }">
+            <Badge :variant="statusVariant(student.status)">
+              {{ statusLabels[student.status] }}
+            </Badge>
+          </template>
+          <template #cell-tindakan="{ item: student }">
+            <TableActions
+              :label="student.full_name"
+              :actions="[{ label: 'Detail', icon: 'view', to: `/admin/students/${student.id}` }]"
+            />
+          </template>
+          <template #empty>
+            <Empty>
+              <EmptyHeader>
+                <EmptyTitle>Tidak ada siswa sesuai filter</EmptyTitle>
+                <EmptyDescription>
+                  Coba pencarian lain atau tambahkan siswa pada kelas aktif.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          </template>
+        </DataTable>
       </CardContent>
       <CardFooter class="block border-t">
         <TablePagination

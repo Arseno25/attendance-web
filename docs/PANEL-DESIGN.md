@@ -12,8 +12,8 @@ Seluruh 26 kelompok primitive yang dipakai dipasang ulang dengan CLI resmi 2.8.2
 
 - `/admin/**` memakai SidebarProvider, AppSidebar inset, SidebarInset, SiteHeader dan Breadcrumb. Lebar sidebar dan tinggi header mengikuti block resmi; content menggunakan spacing responsif 16/24px. Menu disaring oleh izin dan role yang sudah ada.
 - AppSidebar, NavMain, NavUser, SiteHeader dan SectionCards mengadaptasi block untuk data sekolah aktual. Dashboard/reports memakai roster, hadir, terlambat, belum tercatat, trend tujuh hari dan catatan terbaru. Tabel trend tetap dipakai; tidak menambahkan grafik/data contoh block.
-- Form memakai Field/FieldGroup/Input/Select/Checkbox/Switch/Textarea; feedback memakai Alert/Skeleton/Spinner/Empty. Seluruh tabel memakai Table, header muted, scroll internal, Badge dan TablePagination.
-- TableActions memakai DropdownMenu nonmodal, Button ikon dengan nama aksesibel per baris, DropdownMenuItem dan Separator. Link tetap NuxtLink; tindakan edit/pencabutan/koreksi memakai handler dan batas izin yang sama. Pengguna tidak dapat mengedit akun sendiri dari tabel; koreksi pending tetap memblokir pencatatan.
+- Form memakai Field/FieldGroup/Input/Select/Checkbox/Switch/Textarea; feedback memakai Alert/Skeleton/Spinner/Empty. Seluruh tabel memakai DataTable berbasis TanStack Vue Table v9 dan primitive Table shadcn-vue, scroll internal, Badge dan TablePagination.
+- TableActions menghitung tindakan yang terlihat setelah aturan izin diterapkan: 1–2 tindakan menjadi Button ikon dengan Tooltip; 3 atau lebih memakai DropdownMenu nonmodal dengan ikon dan label. Link tetap NuxtLink; tindakan edit/pencabutan/koreksi memakai handler dan batas izin yang sama. Pengguna tidak dapat mengedit akun sendiri dari tabel; koreksi pending tetap memblokir pencatatan.
 - Pagination berbagi komponen yang sama termasuk perangkat, dengan jumlah/halaman di kiri dan kontrol di kanan saat ruang cukup. Tabel panjang bergulir dalam container dan tidak melebar ke halaman.
 - Sidebar mobile menggunakan Sheet internal komponen Sidebar resmi. Navigasi menutup setelah perpindahan route. Offcanvas desktop yang tertutup tetap `inert`; label pembaca layar dan tooltip berbahasa Indonesia dipulihkan sesudah overwrite CLI.
 - `/absensi` memakai layout mandiri dengan komponen yang sama. Kontrak pairing, sesi perangkat, kamera dan gate biometrik tidak diubah oleh pembaruan tampilan ini.
@@ -69,3 +69,27 @@ Referensi: [blocks](https://shadcn-vue.com/blocks), [CLI](https://shadcn-vue.com
 Browser memeriksa login, dashboard, akademik, siswa/detail, jadwal, perangkat, pengguna, sesi/detail, koreksi, laporan, audit dan import. Modal diuji buka/batal, fokus/keyboard dan label; AlertDialog tindakan sesi diuji tanpa submit. Pada mobile 390px, form jadwal muat dalam viewport dan form izin pengguna yang panjang bergulir dalam modal; navigasi menutup setelah route dipilih. Penyimpanan/pencabutan/consent/import tidak dijalankan ulang melalui browser untuk pembaruan tampilan ini. CI remote dan UAT sekolah belum dijalankan. Audit npm saat pemasangan masih 19 advisory upstream (14 high, 5 moderate), bukan status dependency bersih.
 
 Log dan screenshot lokal di `.tools/shadcn-*` (ignored), termasuk hasil CLI, check/build, detector dan bukti UI akhir.
+
+
+## Data table dan toolbar — 14 Oktober 2026
+
+Semua tabel produk memakai `DataTable.vue`: siswa, riwayat kelas, consent, preview import, akademik (tiga tab), jadwal, sesi/roster, koreksi, laporan (harian dan rincian), audit, perangkat, pengguna dan biometrik. Kolom bernama dan slot sel bertipe menjaga label, format tanggal, status badge, catatan, empty state serta batas izin pada halaman masing-masing. TanStack mengelola model baris reaktif; sorting/filter/pagination client tidak ditambahkan pada respons yang sudah dipaginasi server. Pagination bernomor shadcn tetap menggunakan jumlah total server dan ukuran halaman 20.
+
+`DataTableToolbar.vue` memakai form native dengan Input, Select, Field dan Button shadcn yang tingginya seragam 32px. Filter sederhana berada di atas tabel; filter laporan/audit tetap grid berlabel karena mencakup rentang tanggal dan beberapa dimensi. Handler submit, Zod, reset halaman, loading, filter terapan dan pengunci ekspor saat filter belum diterapkan tetap berlaku. Tidak ada filter baru pada overview.
+
+`TableActions.vue` menerima daftar tindakan bertipe. Tindakan tersembunyi tidak dihitung. Satu atau dua tindakan memakai ikon dengan tooltip dan nama aksesibel yang mencakup nama baris. Tiga atau lebih memakai dropdown. Tindakan destructive tetap merah dan konfirmasi tetap diperlukan; tindakan disabled tidak bisa menjalankan handler atau menjadi link navigasi. Tidak ada tindakan menghasilkan tanda “—”. Fokus dialog kembali ke tombol yang membuka modal; penjelasan koreksi milik pemohon sendiri tetap tampil sebagai teks pada baris.
+
+Context7: `/websites/shadcn-vue` untuk pola data table dan pemasangan, `/tanstack/table` untuk API Vue v9 dan data reaktif. MCP shadcn-vue memeriksa registry serta command table/tooltip/dropdown-menu. Data table adalah pola komposisi, bukan block registry terpisah. CLI mengecek primitive yang sudah terpasang; tidak menimpa modifikasi aksesibilitas yang diperlukan. Font Google tambahan dan perubahan pin dependency oleh CLI dikembalikan supaya font Inter lokal dan versi exact tetap konsisten.
+
+Command yang dijalankan dari `apps/web`:
+
+```bash
+npm_config_cache=/tmp/attendance-npm-cache npx --yes shadcn-vue@latest add table tooltip dropdown-menu --yes
+npm_config_cache=/tmp/attendance-npm-cache npm install --save-exact @tanstack/vue-table@9.3.1
+```
+
+Referensi: [data table shadcn-vue](https://shadcn-vue.com/docs/components/data-table), [API tabel TanStack](https://github.com/TanStack/table/blob/main/docs/guide/tables.md).
+
+Verifikasi: `make check` lulus (37 tes Node, 64 pytest, unittest bootstrap, Go race/vet, lint, format dan typecheck); build Nuxt lulus. Tiga tes baru memakai source SFC produksi dan primitive native untuk aturan 1/2/3 tindakan, hidden/disabled/link, serta pergantian halaman dan kolom tabel secara reaktif. Browser memeriksa filter siswa (hasil kosong dan pemulihan), tooltip keyboard, edit tahun ajaran buka/batal serta fokus kembali, dua tombol perangkat, pembatasan edit akun sendiri, filter laporan dan ekspor dirty, serta mobile 390px tanpa overflow halaman. Smoke check tambahan memeriksa jadwal, audit, sesi/roster, biometrik, riwayat kelas dan consent; semua tabel termuat tanpa error console. Kedua tabel laporan menampilkan 2 hari dan 1 rincian untuk 13–14 Oktober pada data lokal. Tidak ada error/warning console pada pemeriksaan itu.
+
+Tidak ada koreksi pending untuk petugas lain pada data lokal; dropdown 3 tindakan diverifikasi oleh tes komponen, belum oleh browser dengan baris nyata. Penyimpanan, pencabutan, pairing, consent, import dan ekspor CSV tidak dijalankan ulang lewat browser untuk perubahan tampilan ini. Backend dan database tidak diubah. Screenshot/log lokal: `.tools/data-tables/` (ignored).

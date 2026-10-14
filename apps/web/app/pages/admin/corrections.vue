@@ -98,44 +98,51 @@ await load()
           <CardTitle>Antrean koreksi</CardTitle>
           <CardDescription class="mt-1.5">{{ total }} permintaan sesuai filter.</CardDescription>
         </div>
-        <Field
-          class="sm:w-48"
-          :data-invalid="!!filterErrors.status"
-        >
-          <Select
-            v-model="status"
-            :disabled="loading"
-            @update:model-value="filter"
-          >
-            <SelectTrigger
-              id="correction-status-filter"
-              :aria-invalid="!!filterErrors.status"
-              :aria-describedby="filterErrors.status ? 'correction-status-filter-error' : undefined"
-              aria-label="Filter status koreksi"
-              class="w-full sm:w-48"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Semua status</SelectItem>
-              <SelectItem
-                v-for="(label, key) in correctionLabels"
-                :key="key"
-                :value="key"
-              >
-                {{ label }}
-              </SelectItem>
-            </SelectContent>
-          </Select>
-          <FieldError
-            v-if="filterErrors.status"
-            id="correction-status-filter-error"
-          >
-            {{ filterErrors.status }}
-          </FieldError>
-        </Field>
       </CardHeader>
-      <CardContent class="min-w-0">
+      <CardContent class="min-w-0 space-y-4">
+        <DataTableToolbar
+          aria-label="Filter koreksi"
+          @submit.prevent="filter"
+        >
+          <Field
+            class="sm:w-48"
+            :data-invalid="!!filterErrors.status"
+          >
+            <Select
+              v-model="status"
+              :disabled="loading"
+              @update:model-value="filter"
+            >
+              <SelectTrigger
+                id="correction-status-filter"
+                :aria-invalid="!!filterErrors.status"
+                :aria-describedby="
+                  filterErrors.status ? 'correction-status-filter-error' : undefined
+                "
+                aria-label="Filter status koreksi"
+                class="w-full sm:w-48"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua status</SelectItem>
+                <SelectItem
+                  v-for="(label, key) in correctionLabels"
+                  :key="key"
+                  :value="key"
+                >
+                  {{ label }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <FieldError
+              v-if="filterErrors.status"
+              id="correction-status-filter-error"
+            >
+              {{ filterErrors.status }}
+            </FieldError>
+          </Field>
+        </DataTableToolbar>
         <div
           v-if="loading"
           class="space-y-3"
@@ -148,110 +155,118 @@ await load()
             class="h-10"
           />
         </div>
-        <Table
+        <DataTable
           v-else
           class="min-w-[900px]"
+          :data="entries ?? []"
+          :columns="[
+            { id: 'siswa-sesi', label: 'Siswa / sesi', cellClass: 'font-medium' },
+            { id: 'perubahan', label: 'Perubahan' },
+            {
+              id: 'alasan-pemohon',
+              label: 'Alasan / pemohon',
+              cellClass: 'max-w-64 whitespace-normal',
+            },
+            { id: 'status', label: 'Status' },
+            {
+              id: 'tindakan',
+              label: 'Tindakan',
+              headClass: 'w-24 text-right',
+              cellClass: 'text-right',
+            },
+          ]"
+          caption="Permintaan koreksi absensi"
+          row-key="id"
+          :loading="loading"
         >
-          <TableCaption class="sr-only">Permintaan koreksi absensi</TableCaption>
-          <TableHeader class="bg-muted/50">
-            <TableRow>
-              <TableHead>Siswa / sesi</TableHead>
-              <TableHead>Perubahan</TableHead>
-              <TableHead>Alasan / pemohon</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead class="w-12 text-right">Tindakan</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow
-              v-for="item in entries"
-              :key="item.id"
+          <template #cell-siswa-sesi="{ item }">
+            {{ item.full_name }}
+            <div class="text-xs font-normal text-muted-foreground">
+              {{ item.nis }} · {{ item.class_name }} · {{ item.session_date }}
+            </div>
+          </template>
+          <template #cell-perubahan="{ item }">
+            {{ attendanceLabels[item.previous_status] }} →
+            {{ attendanceLabels[item.new_status] }}
+            <div
+              v-if="item.check_in_at"
+              class="text-xs text-muted-foreground"
             >
-              <TableCell class="font-medium">
-                {{ item.full_name }}
-                <div class="text-xs font-normal text-muted-foreground">
-                  {{ item.nis }} · {{ item.class_name }} · {{ item.session_date }}
-                </div>
-              </TableCell>
-              <TableCell>
-                {{ attendanceLabels[item.previous_status] }} →
-                {{ attendanceLabels[item.new_status] }}
-                <div
-                  v-if="item.check_in_at"
-                  class="text-xs text-muted-foreground"
-                >
-                  {{ dateTime(item.check_in_at) }}
-                </div>
-              </TableCell>
-              <TableCell class="max-w-64 whitespace-normal">
-                {{ item.reason }}
-                <div class="mt-1 text-xs text-muted-foreground">
-                  {{ item.requester_name }}
-                </div>
-              </TableCell>
-              <TableCell>
-                <Badge :variant="statusVariant(item.status)">
-                  {{ correctionLabels[item.status] }}
-                </Badge>
-                <div
-                  v-if="item.decision_reason"
-                  class="mt-1 max-w-48 whitespace-normal text-xs text-muted-foreground"
-                >
-                  {{ item.decision_reason }}
-                </div>
-              </TableCell>
-              <TableCell class="text-right">
-                <TableActions
-                  :label="item.full_name"
-                  :disabled="saving"
-                >
-                  <DropdownMenuItem as-child>
-                    <NuxtLink :to="`/admin/attendance/${item.session_id}`">Lihat sesi</NuxtLink>
-                  </DropdownMenuItem>
-                  <template
-                    v-if="
-                      canApprove &&
-                      item.status === 'pending' &&
-                      item.requested_by !== auth.session.value?.user.id
-                    "
-                  >
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem @select="show(item, 'approved')">
-                      Setujui koreksi
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      variant="destructive"
-                      @select="show(item, 'rejected')"
-                    >
-                      Tolak koreksi
-                    </DropdownMenuItem>
-                  </template>
-                  <DropdownMenuLabel
-                    v-else-if="
-                      item.status === 'pending' && item.requested_by === auth.session.value?.user.id
-                    "
-                    class="font-normal text-muted-foreground"
-                  >
-                    Menunggu petugas lain
-                  </DropdownMenuLabel>
-                </TableActions>
-              </TableCell>
-            </TableRow>
-            <TableRow v-if="!entries.length">
-              <TableCell colspan="5">
-                <Empty>
-                  <EmptyHeader>
-                    <EmptyTitle>Tidak ada permintaan sesuai filter</EmptyTitle>
-                    <EmptyDescription>
-                      Ajukan koreksi dari detail sesi absensi bila ada catatan yang perlu
-                      diperbaiki.
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
+              {{ dateTime(item.check_in_at) }}
+            </div>
+          </template>
+          <template #cell-alasan-pemohon="{ item }">
+            {{ item.reason }}
+            <div class="mt-1 text-xs text-muted-foreground">
+              {{ item.requester_name }}
+            </div>
+          </template>
+          <template #cell-status="{ item }">
+            <Badge :variant="statusVariant(item.status)">
+              {{ correctionLabels[item.status] }}
+            </Badge>
+            <div
+              v-if="item.decision_reason"
+              class="mt-1 max-w-48 whitespace-normal text-xs text-muted-foreground"
+            >
+              {{ item.decision_reason }}
+            </div>
+          </template>
+          <template #cell-tindakan="{ item }">
+            <TableActions
+              :label="item.full_name"
+              :disabled="saving"
+              :actions="[
+                {
+                  label: 'Lihat sesi',
+                  icon: 'view',
+                  to: `/admin/attendance/${item.session_id}`,
+                },
+                {
+                  label: 'Setujui koreksi',
+                  icon: 'approve',
+                  onSelect: () => {
+                    show(item, 'approved')
+                  },
+                  hidden: !(
+                    canApprove &&
+                    item.status === 'pending' &&
+                    item.requested_by !== auth.session.value?.user.id
+                  ),
+                },
+                {
+                  label: 'Tolak koreksi',
+                  icon: 'reject',
+                  onSelect: () => {
+                    show(item, 'rejected')
+                  },
+                  destructive: true,
+                  hidden: !(
+                    canApprove &&
+                    item.status === 'pending' &&
+                    item.requested_by !== auth.session.value?.user.id
+                  ),
+                },
+              ]"
+            />
+            <span
+              v-if="item.status === 'pending' && item.requested_by === auth.session.value?.user.id"
+              class="mt-1 block text-xs text-muted-foreground"
+            >
+              Menunggu petugas lain
+            </span>
+          </template>
+          <template #empty>
+            <Empty>
+              <EmptyHeader>
+                <EmptyTitle>Tidak ada permintaan sesuai filter</EmptyTitle>
+                <EmptyDescription>
+                  Ajukan koreksi dari detail sesi absensi bila ada catatan yang perlu diperbaiki.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          </template>
+        </DataTable>
       </CardContent>
       <CardFooter class="block border-t">
         <TablePagination

@@ -108,7 +108,7 @@ await load()
       <AlertDescription>{{ message }}</AlertDescription>
     </Alert>
     <Card class="min-w-0">
-      <CardHeader class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <CardHeader>
         <div>
           <CardTitle>Sesi sekolah</CardTitle>
           <CardDescription class="mt-1.5">
@@ -116,18 +116,19 @@ await load()
             sekolah.
           </CardDescription>
         </div>
-        <form
-          novalidate
-          class="flex gap-2"
-          @submit.prevent="filter"
-        >
+      </CardHeader>
+      <CardContent class="min-w-0 space-y-4">
+        <DataTableToolbar @submit.prevent="filter">
           <Label
             for="session-date"
             class="sr-only"
           >
             Tanggal sesi
           </Label>
-          <Field :data-invalid="!!filterErrors.date">
+          <Field
+            class="w-full sm:w-48"
+            :data-invalid="!!filterErrors.date"
+          >
             <Input
               id="session-date"
               v-model="date"
@@ -150,9 +151,7 @@ await load()
           >
             Lihat
           </Button>
-        </form>
-      </CardHeader>
-      <CardContent class="min-w-0">
+        </DataTableToolbar>
         <div
           v-if="loading"
           class="space-y-3"
@@ -165,73 +164,69 @@ await load()
             class="h-10"
           />
         </div>
-        <Table
+        <DataTable
           v-else
           class="min-w-[720px]"
+          :data="sessions ?? []"
+          :columns="[
+            { id: 'kelas-jadwal', label: 'Kelas / jadwal', cellClass: 'font-medium' },
+            { id: 'periode', label: 'Periode' },
+            { id: 'status', label: 'Status' },
+            { id: 'tercatat-roster', label: 'Tercatat / roster', cellClass: 'tabular-nums' },
+            {
+              id: 'tindakan',
+              label: 'Tindakan',
+              headClass: 'w-24 text-right',
+              cellClass: 'text-right',
+            },
+          ]"
+          caption="Daftar sesi absensi sekolah"
+          row-key="id"
+          :loading="loading"
         >
-          <TableCaption class="sr-only">Daftar sesi absensi sekolah</TableCaption>
-          <TableHeader class="bg-muted/50">
-            <TableRow>
-              <TableHead>Kelas / jadwal</TableHead>
-              <TableHead>Periode</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Tercatat / roster</TableHead>
-              <TableHead class="w-12 text-right">Tindakan</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow
-              v-for="item in sessions"
-              :key="item.id"
+          <template #cell-kelas-jadwal="{ item }">
+            {{ item.class_name }}
+            <div class="text-xs font-normal text-muted-foreground">
+              {{ item.name }}
+            </div>
+          </template>
+          <template #cell-periode="{ item }">
+            {{ dateTime(item.starts_at) }}
+            <div class="text-xs text-muted-foreground">Sampai {{ dateTime(item.closes_at) }}</div>
+          </template>
+          <template #cell-status="{ item }">
+            <Badge :variant="statusVariant(item.status)">
+              {{ sessionLabels[item.status] }}
+            </Badge>
+            <div
+              v-if="item.reconciled_at"
+              class="mt-1 text-xs text-muted-foreground"
             >
-              <TableCell class="font-medium">
-                {{ item.class_name }}
-                <div class="text-xs font-normal text-muted-foreground">
-                  {{ item.name }}
-                </div>
-              </TableCell>
-              <TableCell>
-                {{ dateTime(item.starts_at) }}
-                <div class="text-xs text-muted-foreground">
-                  Sampai {{ dateTime(item.closes_at) }}
-                </div>
-              </TableCell>
-              <TableCell>
-                <Badge :variant="statusVariant(item.status)">
-                  {{ sessionLabels[item.status] }}
-                </Badge>
-                <div
-                  v-if="item.reconciled_at"
-                  class="mt-1 text-xs text-muted-foreground"
-                >
-                  Sudah direkonsiliasi
-                </div>
-              </TableCell>
-              <TableCell class="tabular-nums">
-                {{ item.recorded_count }} / {{ item.roster_count }}
-              </TableCell>
-              <TableCell class="text-right">
-                <TableActions :label="item.class_name">
-                  <DropdownMenuItem as-child>
-                    <NuxtLink :to="`/admin/attendance/${item.id}`">Buka detail</NuxtLink>
-                  </DropdownMenuItem>
-                </TableActions>
-              </TableCell>
-            </TableRow>
-            <TableRow v-if="!sessions.length">
-              <TableCell colspan="5">
-                <Empty>
-                  <EmptyHeader>
-                    <EmptyTitle>Belum ada sesi pada tanggal ini</EmptyTitle>
-                    <EmptyDescription>
-                      Periksa jadwal kelas dan kalender, atau buat sesi dari jadwal aktif.
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
+              Sudah direkonsiliasi
+            </div>
+          </template>
+          <template #cell-tercatat-roster="{ item }">
+            {{ item.recorded_count }} / {{ item.roster_count }}
+          </template>
+          <template #cell-tindakan="{ item }">
+            <TableActions
+              :label="item.class_name"
+              :actions="[
+                { label: 'Buka detail', icon: 'view', to: `/admin/attendance/${item.id}` },
+              ]"
+            />
+          </template>
+          <template #empty>
+            <Empty>
+              <EmptyHeader>
+                <EmptyTitle>Belum ada sesi pada tanggal ini</EmptyTitle>
+                <EmptyDescription>
+                  Periksa jadwal kelas dan kalender, atau buat sesi dari jadwal aktif.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          </template>
+        </DataTable>
       </CardContent>
       <CardFooter class="block border-t">
         <TablePagination

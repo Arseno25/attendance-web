@@ -176,9 +176,8 @@ await load()
         </div>
       </CardHeader>
       <CardContent class="min-w-0 space-y-4">
-        <form
-          novalidate
-          class="space-y-4"
+        <DataTableToolbar
+          class="flex-col gap-4"
           @submit.prevent="filter"
         >
           <FieldGroup class="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
@@ -314,7 +313,7 @@ await load()
               </FieldError>
             </Field>
           </FieldGroup>
-          <div class="flex gap-2">
+          <div class="flex flex-wrap gap-2">
             <Button
               type="submit"
               :disabled="loading"
@@ -330,7 +329,7 @@ await load()
               Reset
             </Button>
           </div>
-        </form>
+        </DataTableToolbar>
         <div
           v-if="loading"
           class="space-y-3"
@@ -343,52 +342,48 @@ await load()
             class="h-10 w-full"
           />
         </div>
-        <Table
+        <DataTable
           v-else
           class="min-w-[760px]"
+          :data="entries ?? []"
+          :columns="[
+            { id: 'waktu', label: 'Waktu', cellClass: 'whitespace-nowrap tabular-nums' },
+            { id: 'aktivitas', label: 'Aktivitas' },
+            { id: 'pelaku', label: 'Pelaku' },
+            { id: 'target', label: 'Target' },
+            { id: 'request-id', label: 'Request ID', cellClass: 'font-mono text-xs' },
+          ]"
+          caption="Audit aktivitas sekolah"
+          row-key="id"
+          :loading="loading"
         >
-          <TableCaption class="sr-only">Audit aktivitas sekolah</TableCaption>
-          <TableHeader class="bg-muted/50">
-            <TableRow>
-              <TableHead>Waktu</TableHead>
-              <TableHead>Aktivitas</TableHead>
-              <TableHead>Pelaku</TableHead>
-              <TableHead>Target</TableHead>
-              <TableHead>Request ID</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow
-              v-for="entry in entries"
-              :key="entry.id"
-            >
-              <TableCell class="whitespace-nowrap tabular-nums">
-                {{ date(entry.occurred_at) }}
-              </TableCell>
-              <TableCell>{{ labels[entry.action] ?? entry.action }}</TableCell>
-              <TableCell>{{ entry.actor_name ?? 'Sistem / anonim' }}</TableCell>
-              <TableCell>
-                {{ targets[entry.target_type] ?? entry.target_type }}
-                <div class="text-xs text-muted-foreground">
-                  {{ entry.target_id?.slice(0, 8) ?? '—' }}
-                </div>
-              </TableCell>
-              <TableCell class="font-mono text-xs">{{ entry.request_id }}</TableCell>
-            </TableRow>
-            <TableRow v-if="!entries.length">
-              <TableCell colspan="5">
-                <Empty>
-                  <EmptyHeader>
-                    <EmptyTitle>Belum ada aktivitas tercatat</EmptyTitle>
-                    <EmptyDescription>
-                      Aktivitas login dan perubahan pengguna akan tampil di sini.
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
+          <template #cell-waktu="{ item: entry }">
+            {{ date(entry.occurred_at) }}
+          </template>
+          <template #cell-aktivitas="{ item: entry }">
+            {{ labels[entry.action] ?? entry.action }}
+          </template>
+          <template #cell-pelaku="{ item: entry }">
+            {{ entry.actor_name ?? 'Sistem / anonim' }}
+          </template>
+          <template #cell-target="{ item: entry }">
+            {{ targets[entry.target_type] ?? entry.target_type }}
+            <div class="text-xs text-muted-foreground">
+              {{ entry.target_id?.slice(0, 8) ?? '—' }}
+            </div>
+          </template>
+          <template #cell-request-id="{ item: entry }">{{ entry.request_id }}</template>
+          <template #empty>
+            <Empty>
+              <EmptyHeader>
+                <EmptyTitle>Belum ada aktivitas tercatat</EmptyTitle>
+                <EmptyDescription>
+                  Aktivitas login dan perubahan pengguna akan tampil di sini.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          </template>
+        </DataTable>
       </CardContent>
       <CardFooter class="block border-t pt-4">
         <TablePagination

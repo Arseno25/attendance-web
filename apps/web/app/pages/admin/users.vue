@@ -384,23 +384,24 @@ async function filter() {
       </DialogContent>
     </Dialog>
     <Card class="min-w-0">
-      <CardHeader class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <CardHeader>
         <div>
           <CardTitle>Daftar pengguna</CardTitle>
           <CardDescription class="mt-1.5">Cari dan perbarui akun petugas sekolah.</CardDescription>
         </div>
-        <form
-          novalidate
-          class="flex w-full gap-2 sm:max-w-sm"
-          @submit.prevent="filter"
-        >
+      </CardHeader>
+      <CardContent class="min-w-0 space-y-4">
+        <DataTableToolbar @submit.prevent="filter">
           <Label
             for="user-search"
             class="sr-only"
           >
             Cari pengguna
           </Label>
-          <Field :data-invalid="!!filterErrors.search">
+          <Field
+            class="min-w-0 flex-1 sm:max-w-sm"
+            :data-invalid="!!filterErrors.search"
+          >
             <Input
               id="user-search"
               v-model="search"
@@ -423,9 +424,7 @@ async function filter() {
           >
             Cari
           </Button>
-        </form>
-      </CardHeader>
-      <CardContent class="min-w-0">
+        </DataTableToolbar>
         <div
           v-if="loading"
           class="space-y-3"
@@ -438,63 +437,66 @@ async function filter() {
             class="h-10 w-full"
           />
         </div>
-        <Table
+        <DataTable
           v-else
           class="min-w-[640px]"
+          :data="users ?? []"
+          :columns="[
+            { id: 'nama', label: 'Nama', cellClass: 'font-medium' },
+            { id: 'email', label: 'Email' },
+            { id: 'peran', label: 'Peran' },
+            { id: 'status', label: 'Status' },
+            {
+              id: 'tindakan',
+              label: 'Tindakan',
+              headClass: 'w-24 text-right',
+              cellClass: 'text-right',
+            },
+          ]"
+          caption="Daftar pengguna sekolah"
+          row-key="id"
+          :loading="loading"
         >
-          <TableCaption class="sr-only">Daftar pengguna sekolah</TableCaption>
-          <TableHeader class="bg-muted/50">
-            <TableRow>
-              <TableHead>Nama</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Peran</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead class="w-12 text-right">Tindakan</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow
-              v-for="user in users"
-              :key="user.id"
+          <template #cell-nama="{ item: user }">{{ user.full_name }}</template>
+          <template #cell-email="{ item: user }">{{ user.email }}</template>
+          <template #cell-peran="{ item: user }">{{ roleLabels[user.role] }}</template>
+          <template #cell-status="{ item: user }">
+            <Badge :variant="statusVariant(user.is_active ? 'active' : 'inactive')">
+              {{ user.is_active ? 'Aktif' : 'Nonaktif' }}
+            </Badge>
+          </template>
+          <template #cell-tindakan="{ item: user }">
+            <TableActions
+              :label="user.full_name"
+              :disabled="saving || user.id === auth.session.value?.user.id"
+              :actions="[
+                {
+                  label: 'Edit pengguna',
+                  icon: 'edit',
+                  onSelect: () => {
+                    edit(user)
+                  },
+                },
+              ]"
+            />
+            <span
+              v-if="user.id === auth.session.value?.user.id"
+              class="sr-only"
             >
-              <TableCell class="font-medium">{{ user.full_name }}</TableCell>
-              <TableCell>{{ user.email }}</TableCell>
-              <TableCell>{{ roleLabels[user.role] }}</TableCell>
-              <TableCell>
-                <Badge :variant="statusVariant(user.is_active ? 'active' : 'inactive')">
-                  {{ user.is_active ? 'Aktif' : 'Nonaktif' }}
-                </Badge>
-              </TableCell>
-              <TableCell class="text-right">
-                <TableActions
-                  :label="user.full_name"
-                  :disabled="saving || user.id === auth.session.value?.user.id"
-                >
-                  <DropdownMenuItem @select="edit(user)">Edit pengguna</DropdownMenuItem>
-                </TableActions>
-                <span
-                  v-if="user.id === auth.session.value?.user.id"
-                  class="sr-only"
-                >
-                  Akun Anda
-                </span>
-              </TableCell>
-            </TableRow>
-            <TableRow v-if="!users.length">
-              <TableCell colspan="5">
-                <Empty>
-                  <EmptyHeader>
-                    <EmptyTitle>Tidak ada pengguna sesuai pencarian</EmptyTitle>
-                    <EmptyDescription>
-                      Coba nama atau email lain, atau kosongkan pencarian untuk melihat semua
-                      pengguna.
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
+              Akun Anda
+            </span>
+          </template>
+          <template #empty>
+            <Empty>
+              <EmptyHeader>
+                <EmptyTitle>Tidak ada pengguna sesuai pencarian</EmptyTitle>
+                <EmptyDescription>
+                  Coba nama atau email lain, atau kosongkan pencarian untuk melihat semua pengguna.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          </template>
+        </DataTable>
       </CardContent>
       <CardFooter class="block border-t pt-4">
         <TablePagination
