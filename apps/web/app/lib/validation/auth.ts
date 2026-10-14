@@ -5,6 +5,7 @@ const email = z
   .string()
   .trim()
   .toLowerCase()
+  .min(1, 'Email wajib diisi.')
   .pipe(z.email({ error: 'Masukkan email yang valid.' }))
   .refine((value) => byteLength(value) <= 254, 'Email maksimal 254 byte.')
 const currentPassword = z.string().min(1, 'Password wajib diisi.')

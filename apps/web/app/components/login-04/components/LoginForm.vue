@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { toast } from 'vue-sonner'
 import { loginSchema } from '~/lib/validation/auth'
 const auth = useAuth()
 const route = useRoute()
@@ -10,6 +9,10 @@ const { errors, validate, clear } = useFormValidation(
   () => ({ email: email.value, password: password.value }),
 )
 const busy = ref(false)
+const failure = ref('')
+watch([email, password], () => {
+  failure.value = ''
+})
 const message = ref(
   route.query.expired
     ? 'Sesi berakhir. Silakan masuk kembali.'
@@ -19,17 +22,18 @@ const message = ref(
 )
 
 async function submit() {
-  if (busy.value || !validate()) return
+  if (busy.value) return
+  failure.value = ''
+  if (!validate()) return
   busy.value = true
   message.value = ''
   try {
     await auth.login(email.value, password.value)
-    toast.success('Anda berhasil masuk.')
     password.value = ''
     clear()
     await navigateTo('/admin')
   } catch (error) {
-    toast.error(apiMessage(error))
+    failure.value = apiMessage(error)
   } finally {
     busy.value = false
   }
@@ -42,12 +46,19 @@ async function submit() {
       <CardContent class="grid p-0 md:grid-cols-2">
         <form
           novalidate
+          aria-labelledby="login-title"
+          :aria-describedby="failure ? 'login-error' : undefined"
           class="p-6 md:p-8"
           @submit.prevent="submit"
         >
           <FieldGroup>
             <div class="flex flex-col items-center gap-2 text-center">
-              <h1 class="text-2xl font-bold">Selamat datang kembali</h1>
+              <h1
+                id="login-title"
+                class="text-2xl font-bold"
+              >
+                Selamat datang kembali
+              </h1>
               <p class="text-balance text-muted-foreground">Masuk ke akun Absensi Sekolah.</p>
             </div>
             <Alert
@@ -55,6 +66,14 @@ async function submit() {
               role="alert"
             >
               <AlertDescription>{{ message }}</AlertDescription>
+            </Alert>
+            <Alert
+              v-if="failure"
+              id="login-error"
+              variant="destructive"
+              role="alert"
+            >
+              <AlertDescription>{{ failure }}</AlertDescription>
             </Alert>
             <Field :data-invalid="!!errors.email">
               <FieldLabel for="email">Email</FieldLabel>

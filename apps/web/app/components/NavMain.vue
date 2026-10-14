@@ -2,7 +2,9 @@
 import type { Component } from 'vue'
 import { useSidebar } from '~/components/ui/sidebar'
 
-defineProps<{ items: { title: string; url: string; icon: Component }[] }>()
+defineProps<{
+  groups: { title: string; items: { title: string; url: string; icon: Component }[] }[]
+}>()
 const route = useRoute()
 const { setOpenMobile } = useSidebar()
 watch(
@@ -12,13 +14,16 @@ watch(
 </script>
 
 <template>
-  <SidebarGroup>
-    <SidebarGroupLabel>Panel sekolah</SidebarGroupLabel>
-    <SidebarGroupContent>
-      <nav aria-label="Navigasi admin">
+  <nav aria-label="Navigasi admin">
+    <SidebarGroup
+      v-for="group in groups"
+      :key="group.title"
+    >
+      <SidebarGroupLabel>{{ group.title }}</SidebarGroupLabel>
+      <SidebarGroupContent>
         <SidebarMenu>
           <SidebarMenuItem
-            v-for="item in items"
+            v-for="item in group.items"
             :key="item.url"
           >
             <SidebarMenuButton
@@ -44,7 +49,7 @@ watch(
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
-      </nav>
-    </SidebarGroupContent>
-  </SidebarGroup>
+      </SidebarGroupContent>
+    </SidebarGroup>
+  </nav>
 </template>

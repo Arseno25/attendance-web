@@ -17,40 +17,72 @@ import NavUser from '~/components/NavUser.vue'
 
 const auth = useAuth()
 const links = computed(() => [
-  { title: 'Ringkasan', url: '/admin', icon: LayoutDashboard },
+  { title: 'Ringkasan', url: '/admin', icon: LayoutDashboard, category: 'Utama' },
   ...(auth.session.value?.permissions.includes('biometrics.enroll') ||
   auth.session.value?.permissions.includes('biometrics.revoke')
-    ? [{ title: 'Wajah siswa', url: '/admin/biometrics', icon: ScanFace }]
+    ? [{ title: 'Wajah siswa', url: '/admin/biometrics', icon: ScanFace, category: 'Kehadiran' }]
     : []),
   ...(auth.session.value?.permissions.includes('academics.read')
     ? [
-        { title: 'Data akademik', url: '/admin/academics', icon: GraduationCap },
-        { title: 'Siswa', url: '/admin/students', icon: Users },
+        {
+          title: 'Data akademik',
+          url: '/admin/academics',
+          icon: GraduationCap,
+          category: 'Akademik',
+        },
+        { title: 'Siswa', url: '/admin/students', icon: Users, category: 'Akademik' },
       ]
     : []),
   ...(auth.session.value?.permissions.includes('academics.read')
-    ? [{ title: 'Jadwal & kalender', url: '/admin/schedules', icon: CalendarDays }]
+    ? [
+        {
+          title: 'Jadwal & kalender',
+          url: '/admin/schedules',
+          icon: CalendarDays,
+          category: 'Kehadiran',
+        },
+      ]
     : []),
   ...(auth.session.value?.permissions.includes('attendance.read') ||
   auth.session.value?.permissions.includes('attendance.manual')
     ? [
-        { title: 'Sesi absensi', url: '/admin/attendance', icon: ClipboardCheck },
-        { title: 'Koreksi absensi', url: '/admin/corrections', icon: ListChecks },
+        {
+          title: 'Sesi absensi',
+          url: '/admin/attendance',
+          icon: ClipboardCheck,
+          category: 'Kehadiran',
+        },
+        {
+          title: 'Koreksi absensi',
+          url: '/admin/corrections',
+          icon: ListChecks,
+          category: 'Kehadiran',
+        },
       ]
     : []),
   ...(['super_admin', 'admin', 'teacher'].includes(auth.session.value?.user.role ?? '')
-    ? [{ title: 'Laporan kehadiran', url: '/admin/reports', icon: FileDown }]
+    ? [{ title: 'Laporan kehadiran', url: '/admin/reports', icon: FileDown, category: 'Kehadiran' }]
     : []),
   ...(auth.session.value?.permissions.includes('devices.health')
-    ? [{ title: 'Perangkat kiosk', url: '/admin/devices', icon: Camera }]
+    ? [{ title: 'Perangkat kiosk', url: '/admin/devices', icon: Camera, category: 'Administrasi' }]
     : []),
   ...(auth.session.value?.user.role === 'super_admin'
     ? [
-        { title: 'Pengguna & peran', url: '/admin/users', icon: Users },
-        { title: 'Audit aktivitas', url: '/admin/audit', icon: ScrollText },
+        { title: 'Pengguna & peran', url: '/admin/users', icon: Users, category: 'Administrasi' },
+        {
+          title: 'Audit aktivitas',
+          url: '/admin/audit',
+          icon: ScrollText,
+          category: 'Administrasi',
+        },
       ]
     : []),
 ])
+const groups = computed(() =>
+  ['Utama', 'Akademik', 'Kehadiran', 'Administrasi']
+    .map((title) => ({ title, items: links.value.filter((item) => item.category === title) }))
+    .filter((group) => group.items.length),
+)
 </script>
 
 <template>
@@ -80,7 +112,7 @@ const links = computed(() => [
       </SidebarMenu>
     </SidebarHeader>
     <SidebarContent>
-      <NavMain :items="links" />
+      <NavMain :groups="groups" />
     </SidebarContent>
     <SidebarFooter>
       <NavUser />

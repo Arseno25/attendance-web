@@ -28,6 +28,7 @@ const { errors, validate, clear } = useFormValidation(
   }),
 )
 const targets: Record<string, string> = {
+  school: 'Sekolah',
   guardian: 'Wali',
   consent: 'Persetujuan biometrik',
   device: 'Perangkat kiosk',
@@ -51,6 +52,7 @@ const total = ref(0)
 const loading = ref(false)
 const message = ref('')
 const labels: Record<string, string> = {
+  'development.seed_reset': 'Data demo lokal direset',
   'guardians.verified': 'Wali diverifikasi',
   'consents.recorded': 'Consent dicatat',
   'consents.withdrawn': 'Consent dicabut',

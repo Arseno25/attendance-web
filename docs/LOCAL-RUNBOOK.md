@@ -71,3 +71,12 @@ podman --storage-opt additionalimagestore=/var/tmp/attendance-ai-build/storage s
 ```
 
 Build/Compose di host yang cukup ruang dapat memakai storage standar. Root filesystem dan home sama-sama terbatas; ini hanya pengaturan preview workspace lokal.
+
+
+## Reset data demo lokal — 14 Oktober 2026
+
+Atas permintaan pengguna, fixture demo akademik/absensi dihapus dari database preview lokal: 1 siswa DEMO-001, 1 kelas DEMO-7A, 1 tahun ajaran, 1 jadwal, 3 sesi, 1 penempatan, 1 catatan/event absensi, 1 ledger request dan 1 kalender demo. Identitas dibatasi UUID/name/code yang telah diperiksa; tidak menggunakan TRUNCATE atau menonaktifkan seluruh constraint. Tidak ada wali, consent, tombstone atau template biometrik untuk fixture ini. Identitas tenant, akun/password/sesi/grants pengguna dan perangkat `tes` dipertahankan. Audit historis tetap append-only dan mendapat event `development.seed_reset` baru.
+
+Sebelum perubahan, dump PostgreSQL18 format custom dialirkan langsung ke GnuPG AES256; backup terenkripsi `.tools/sidebar-reset/pre-reset.dump.gpg` dan kunci pemulihan terpisah di directory private ignored dengan permission 0600. Dekripsi dan daftar TOC `pg_restore --list` diverifikasi. Backup tidak dibuka ke browser atau Git.
+
+Reset diuji dahulu dalam transaksi ROLLBACK. Identitas fixture, dependensi tidak terduga, perbandingan seluruh baris akun/perangkat/sekolah/audit dan trigger enabled diperiksa sebelum COMMIT aktual. Empat trigger riwayat pada tabel fixture saja ditangguhkan dalam transaksi dan diaktifkan kembali sebelum commit; FK dan proteksi audit tetap aktif. Setelah reset, semua tabel demo operasional tersebut kosong, akun dan perangkat masing-masing tetap 1. Log/rencana SQL lokal di `.tools/sidebar-reset/` (ignored), tidak menjadi endpoint reset atau migrasi produk. File seed pengembangan hanya memastikan tenant dummy dan tidak membuat ulang fixture akademik/absensi.
