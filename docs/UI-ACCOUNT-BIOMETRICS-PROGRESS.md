@@ -48,3 +48,12 @@ Kontrak endpoint: [account.json](openapi/account.json), [biometrics.json](openap
 Kamera fisik/izin capture, pendaftaran manusia nyata, akurasi identitas, spoof/liveness, kalibrasi ambang/margin, latency hardware dan G3 restore template belum diuji. Alur evaluator trace anonim tersedia; gunakan sampel berizin yang terpisah dari pendaftaran. Tidak ada angka akurasi atau persetujuan otomatis dari smoke test/instalasi. Coolify dan gate produksi mengikuti rencana induk dan belum dijalankan.
 
 Disk home hampir penuh; hanya virtualenv project dipindahkan ke `/tmp` dan disymlink. Virtualenv development perlu dipulihkan setelah reboot; DB, model dan kunci tetap pada storage asal. Image AI sudah dibangun dari Dockerfile/lockfile dan diuji dengan model CPU, lalu dijalankan memakai additional image store di `/var/tmp/attendance-ai-build/storage` karena import ke storage home kehabisan ruang. Runtime AI tidak bergantung pada virtualenv host. Pertahankan storage tambahan dan gunakan command restart pada runbook; deployment di host cukup ruang memakai image/Compose standar.
+
+
+## Pembaruan aturan password — 14 Oktober 2026
+
+Sesuai aturan terakhir pengguna, password baru minimal 8 karakter dan harus memiliki huruf besar, huruf kecil, angka 0–9, serta simbol. Tidak ada batas maksimal password atau trimming. Form akun dan pembuatan pengguna memakai schema Zod dan komponen `PasswordRequirements` yang sama; indikator menandai aturan yang terpenuhi tanpa menampilkan password. Konfirmasi harus persis sama dan perubahan sensitif tetap memerlukan password saat ini.
+
+Go memakai aturan komposisi yang sama pada hashing/creation/bootstrap/profile. Login dan verifikasi password existing tidak memaksakan aturan baru, sehingga akun lama tetap dapat digunakan. Batas request JSON 8 KiB, limiter dan concurrency hashing tetap berlaku sebagai pengaman transport; tidak ada lagi cap 128 pada password maupun input HTML.
+
+`make check`, `make db-test` dan build Nuxt/Go berhasil. Tes mencakup batas 7/8 karakter, setiap syarat komposisi, Unicode, simbol dibanding whitespace, password di atas 128 karakter, login setelah perubahan password panjang, preservasi spasi, konfirmasi, rotasi sesi dan rollback. Fixture bootstrap yang memerlukan password baru diperbarui ke policy ini. Akun/password nyata pengguna tidak diganti selama pengujian; hanya schema disposable untuk perubahan password.

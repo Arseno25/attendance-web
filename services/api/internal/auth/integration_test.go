@@ -70,7 +70,7 @@ func TestAuthDatabaseLifecycleAndPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	password := strings.Repeat("a", 16)
+	password := "ExamplePassword1!"
 	if err = svc.Bootstrap(ctx, "owner@example.test", "Pemilik Uji", password, "Sekolah Uji"); err != nil {
 		t.Fatal(err)
 	}

@@ -98,7 +98,7 @@ func (s *Service) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	email, err := normalizeEmail(input.Email)
-	if err != nil || len(input.Password) == 0 || len(input.Password) > 128 {
+	if err != nil || len(input.Password) == 0 {
 		httpresponse.Error(w, 400, "VALIDATION_ERROR", "Email atau password tidak valid")
 		return
 	}

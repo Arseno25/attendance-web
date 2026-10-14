@@ -27,7 +27,7 @@ type Service struct {
 }
 
 func New(pool *pgxpool.Pool, schoolID, origin string) (*Service, error) {
-	dummy, err := HashPassword("comparison-only-unknown-account")
+	dummy, err := HashPassword("Comparison-only-unknown-account-1!")
 	if err != nil {
 		return nil, err
 	}

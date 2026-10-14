@@ -33,8 +33,12 @@ func (s *Service) profile(w http.ResponseWriter, r *http.Request) {
 	email, err := normalizeEmail(input.Email)
 	name := strings.TrimSpace(input.FullName)
 	passwordChanged := input.NewPassword != ""
-	if err != nil || !validName(name) || (passwordChanged && (len(input.NewPassword) < 12 || len(input.NewPassword) > 128)) {
-		httpresponse.Error(w, 400, "VALIDATION_ERROR", "Nama, email atau password tidak valid; password baru harus 12–128 byte")
+	if err != nil || !validName(name) {
+		httpresponse.Error(w, 400, "VALIDATION_ERROR", "Nama atau email tidak valid")
+		return
+	}
+	if passwordChanged && !validNewPassword(input.NewPassword) {
+		httpresponse.Error(w, 400, "VALIDATION_ERROR", passwordRule)
 		return
 	}
 	sensitive := email != actor.Email || passwordChanged

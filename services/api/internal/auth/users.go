@@ -132,7 +132,7 @@ func (s *Service) createUser(w http.ResponseWriter, r *http.Request, actor User)
 	hash, err := HashPassword(input.Password)
 	input.Password = ""
 	if err != nil {
-		httpresponse.Error(w, 400, "VALIDATION_ERROR", "Password harus 12–128 byte")
+		httpresponse.Error(w, 400, "VALIDATION_ERROR", passwordRule)
 		return
 	}
 	tx, err := s.adminTransaction(r.Context(), actor)

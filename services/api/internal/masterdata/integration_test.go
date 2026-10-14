@@ -71,7 +71,7 @@ func TestMasterDatabaseScopesAndHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	password := strings.Repeat("a", 16)
+	password := "ExamplePassword1!"
 	if err = a.Bootstrap(ctx, "owner@example.test", "Owner", password, "School"); err != nil {
 		t.Fatal(err)
 	}

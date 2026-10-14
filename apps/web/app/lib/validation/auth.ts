@@ -7,16 +7,38 @@ const email = z
   .toLowerCase()
   .pipe(z.email({ error: 'Masukkan email yang valid.' }))
   .refine((value) => byteLength(value) <= 254, 'Email maksimal 254 byte.')
-const currentPassword = z
-  .string()
-  .min(1, 'Password wajib diisi.')
-  .refine((value) => byteLength(value) <= 128, 'Password maksimal 128 byte.')
-const newPassword = z
-  .string()
-  .refine(
-    (value) => byteLength(value) >= 12 && byteLength(value) <= 128,
-    'Password harus 12–128 byte.',
-  )
+const currentPassword = z.string().min(1, 'Password wajib diisi.')
+export const passwordRules = [
+  {
+    label: 'Minimal 8 karakter',
+    message: 'Password minimal 8 karakter.',
+    test: (value: string) => [...value].length >= 8,
+  },
+  {
+    label: '1 huruf besar',
+    message: 'Password harus memiliki huruf besar.',
+    test: (value: string) => /\p{Lu}/u.test(value),
+  },
+  {
+    label: '1 huruf kecil',
+    message: 'Password harus memiliki huruf kecil.',
+    test: (value: string) => /\p{Ll}/u.test(value),
+  },
+  {
+    label: '1 angka',
+    message: 'Password harus memiliki angka.',
+    test: (value: string) => /[0-9]/.test(value),
+  },
+  {
+    label: '1 simbol',
+    message: 'Password harus memiliki simbol.',
+    test: (value: string) => /[\p{P}\p{S}]/u.test(value),
+  },
+] as const
+const newPassword = passwordRules.reduce(
+  (schema, rule) => schema.refine(rule.test, { error: rule.message }),
+  z.string(),
+)
 const roles = ['super_admin', 'admin', 'operator', 'teacher'] as const
 const grantIds = [
   'biometrics.enroll',
@@ -56,15 +78,8 @@ export function profileSchema(originalEmail: string) {
     .object({
       full_name: requiredText('Nama lengkap', 120),
       email,
-      current_password: z
-        .string()
-        .refine((value) => byteLength(value) <= 128, 'Password maksimal 128 byte.'),
-      new_password: z
-        .string()
-        .refine(
-          (value) => !value || (byteLength(value) >= 12 && byteLength(value) <= 128),
-          'Password harus 12–128 byte.',
-        ),
+      current_password: z.string(),
+      new_password: newPassword.or(z.literal('')),
       confirm_password: z.string(),
     })
     .superRefine((value, ctx) => {

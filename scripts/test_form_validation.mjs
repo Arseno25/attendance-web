@@ -20,22 +20,30 @@ const profile = { full_name: 'Petugas', email: 'staff@example.com', current_pass
 const schedule = { name: 'Pagi', weekdays: [1, 2], checkin_start: '07:00', checkin_cutoff: '07:30', close_time: '08:00', grace_minutes: 0, is_active: true }
 const report = { from: '', to: '', class_id: '', academic_year_id: '', student_id: '', session_id: '', status: '', search: '' }
 
-test('password validation uses raw UTF-8 bytes, including spaces, with distinct login and new-password bounds', () => {
+test('new passwords require eight characters, uppercase, lowercase, numbers and symbols without a maximum', () => {
   valid(loginSchema, { email: ' Staff@Example.com ', password: ' ' })
   invalid(loginSchema, { email: 'invalid', password: '' }, 'email')
-  invalid(loginSchema, { email: 'staff@example.com', password: 'é'.repeat(65) }, 'password')
+  valid(loginSchema, { email: profile.email, password: 'legacy password' })
+  valid(loginSchema, { email: profile.email, password: 'a'.repeat(500) })
   valid(profileSchema(profile.email), profile)
   valid(profileSchema(profile.email), { ...profile, email: ' STAFF@EXAMPLE.COM ' })
   invalid(profileSchema(profile.email), { ...profile, email: 'other@example.com' }, 'current_password')
-  invalid(profileSchema(profile.email), { ...profile, new_password: 'é'.repeat(6), confirm_password: 'é'.repeat(6) }, 'current_password')
-  valid(profileSchema(profile.email), { ...profile, current_password: 'old', new_password: 'é'.repeat(6), confirm_password: 'é'.repeat(6) })
-  invalid(profileSchema(profile.email), { ...profile, current_password: 'old', new_password: 'é'.repeat(65), confirm_password: 'é'.repeat(65) }, 'new_password')
-  invalid(profileSchema(profile.email), { ...profile, current_password: 'old', new_password: 'long password', confirm_password: 'different' }, 'confirm_password')
-  invalid(profileSchema(profile.email), { ...profile, current_password: 'old', new_password: 'short', confirm_password: 'short' }, 'new_password')
+  invalid(profileSchema(profile.email), { ...profile, new_password: 'Abcd123!', confirm_password: 'Abcd123!' }, 'current_password')
+  const user = { email: profile.email, full_name: 'Petugas', role: 'admin', is_active: true, grants: [] }
+  for (const password of ['Abcd123!', 'Éé12345!', 'Ab12345🔒', ' Ab12!a ', 'Ab1!' + 'a'.repeat(200)]) {
+    const result = profileSchema(profile.email).parse({ ...profile, current_password: 'old', new_password: password, confirm_password: password })
+    assert.equal(result.new_password, password)
+    valid(userSchema(false), { ...user, password })
+  }
+  for (const password of ['Ab12!xy', 'abcd123!', 'ABCD123!', 'Abcdefg!', 'Abcd1234', 'Abcd123 ', 'Abcd123é']) {
+    invalid(profileSchema(profile.email), { ...profile, current_password: 'old', new_password: password, confirm_password: password }, 'new_password')
+    invalid(userSchema(false), { ...user, password }, 'password')
+  }
+  invalid(profileSchema(profile.email), { ...profile, current_password: 'old', new_password: 'Abcd123!', confirm_password: 'different' }, 'confirm_password')
 })
 
 test('role grants cannot be duplicated or exceed the selected role', () => {
-  const user = { email: profile.email, full_name: 'Guru', role: 'teacher', password: 'twelve bytes', is_active: true, grants: ['reports.export'] }
+  const user = { email: profile.email, full_name: 'Guru', role: 'teacher', password: 'Example123!', is_active: true, grants: ['reports.export'] }
   valid(userSchema(false), user)
   valid(userSchema(true), { ...user, password: '' })
   invalid(userSchema(false), { ...user, password: 'short' }, 'password')

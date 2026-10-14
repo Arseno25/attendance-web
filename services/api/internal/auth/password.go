@@ -6,15 +6,32 @@ import (
 	"encoding/base64"
 	"errors"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"golang.org/x/crypto/argon2"
 )
 
 const hashPrefix = "$argon2id$v=19$m=65536,t=3,p=2$"
+const passwordRule = "Password minimal 8 karakter, dengan huruf besar, huruf kecil, angka dan simbol"
+
+func validNewPassword(password string) bool {
+	if !utf8.ValidString(password) || utf8.RuneCountInString(password) < 8 {
+		return false
+	}
+	var upper, lower, number, symbol bool
+	for _, character := range password {
+		upper = upper || unicode.IsUpper(character)
+		lower = lower || unicode.IsLower(character)
+		number = number || (character >= '0' && character <= '9')
+		symbol = symbol || unicode.IsPunct(character) || unicode.IsSymbol(character)
+	}
+	return upper && lower && number && symbol
+}
 
 func HashPassword(password string) (string, error) {
-	if len(password) < 12 || len(password) > 128 {
-		return "", errors.New("password must be 12–128 bytes")
+	if !validNewPassword(password) {
+		return "", errors.New(passwordRule)
 	}
 	salt := make([]byte, 16)
 	if _, err := rand.Read(salt); err != nil {
@@ -25,7 +42,7 @@ func HashPassword(password string) (string, error) {
 }
 
 func VerifyPassword(password, encoded string) bool {
-	if len(password) > 128 || !strings.HasPrefix(encoded, hashPrefix) {
+	if !strings.HasPrefix(encoded, hashPrefix) {
 		return false
 	}
 	parts := strings.Split(strings.TrimPrefix(encoded, hashPrefix), "$")

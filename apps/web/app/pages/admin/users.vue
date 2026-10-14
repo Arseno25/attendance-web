@@ -294,17 +294,19 @@ async function filter() {
                 id="new-password"
                 v-model="form.password"
                 :aria-invalid="!!errors.password"
-                :aria-describedby="errors.password ? 'new-password-error' : undefined"
+                :aria-describedby="
+                  errors.password ? 'new-password-help new-password-error' : 'new-password-help'
+                "
                 type="password"
                 autocomplete="new-password"
                 required
-                minlength="12"
-                maxlength="128"
+                minlength="8"
                 :disabled="saving"
               />
-              <FieldDescription>
-                12–128 byte UTF-8; tidak dikirim lewat email otomatis.
-              </FieldDescription>
+              <PasswordRequirements
+                id="new-password-help"
+                :value="form.password"
+              />
               <FieldError
                 v-if="errors.password"
                 id="new-password-error"

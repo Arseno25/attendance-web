@@ -1,15 +1,18 @@
 package auth
 
 import (
+	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/crypto/argon2"
 )
 
 func TestPasswordHashIsSaltedAndRejectsInvalidParameters(t *testing.T) {
-	password := strings.Repeat("a", 16)
+	password := "ExamplePassword1!"
 	hash, err := HashPassword(password)
 	if err != nil {
 		t.Fatal(err)
@@ -31,7 +34,7 @@ func TestPasswordHashIsSaltedAndRejectsInvalidParameters(t *testing.T) {
 	}
 	for _, invalid := range []string{"short", strings.Repeat("a", 129)} {
 		if _, err := HashPassword(invalid); err == nil {
-			t.Fatal("password size not enforced")
+			t.Fatal("password policy not enforced")
 		}
 	}
 }
@@ -100,5 +103,29 @@ func TestHTTPSCookieAndDeletion(t *testing.T) {
 		if (!remove && c.MaxAge != 28800) || (remove && c.MaxAge != -1) {
 			t.Fatal("cookie lifetime wrong")
 		}
+	}
+}
+
+func TestNewPasswordCompositionPolicyWithoutMaximum(t *testing.T) {
+	for _, password := range []string{"Abcd123!", "Éé12345!", "Ab12345🔒", " Ab12!a ", "Ab1!" + strings.Repeat("a", 200)} {
+		hash, err := HashPassword(password)
+		if err != nil || !VerifyPassword(password, hash) {
+			t.Fatal("valid password rejected or changed")
+		}
+	}
+	for _, password := range []string{"Ab12!xy", "abcd123!", "ABCD123!", "Abcdefg!", "Abcd1234", "Abcd123 ", "Abcd123é"} {
+		if _, err := HashPassword(password); err == nil {
+			t.Fatal("password missing a required rule accepted")
+		}
+	}
+}
+
+func TestLegacyPasswordRemainsUsableForLogin(t *testing.T) {
+	password := "legacy lower only"
+	salt := []byte("0123456789abcdef")
+	key := argon2.IDKey([]byte(password), salt, 3, 64*1024, 2, 32)
+	hash := hashPrefix + base64.RawStdEncoding.EncodeToString(salt) + "$" + base64.RawStdEncoding.EncodeToString(key)
+	if validNewPassword(password) || !VerifyPassword(password, hash) {
+		t.Fatal("new password rules broke an existing credential")
 	}
 }

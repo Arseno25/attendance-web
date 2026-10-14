@@ -167,15 +167,19 @@ reset()
                 v-model="form.new_password"
                 type="password"
                 autocomplete="new-password"
+                minlength="8"
                 :disabled="busy"
                 :aria-invalid="!!errors.new_password"
                 :aria-describedby="
-                  errors.new_password ? 'account-new-password-error' : 'account-password-help'
+                  errors.new_password
+                    ? 'account-password-help account-new-password-error'
+                    : 'account-password-help'
                 "
               />
-              <FieldDescription id="account-password-help">
-                Gunakan 12–128 byte; spasi tetap menjadi bagian password.
-              </FieldDescription>
+              <PasswordRequirements
+                id="account-password-help"
+                :value="form.new_password"
+              />
               <FieldError
                 v-if="errors.new_password"
                 id="account-new-password-error"
@@ -193,9 +197,14 @@ reset()
                 :disabled="busy"
                 :aria-invalid="!!errors.confirm_password"
                 :aria-describedby="
-                  errors.confirm_password ? 'account-confirm-password-error' : undefined
+                  errors.confirm_password
+                    ? 'account-confirm-password-error'
+                    : 'account-confirm-password-help'
                 "
               />
+              <FieldDescription id="account-confirm-password-help">
+                Masukkan ulang password baru yang sama persis.
+              </FieldDescription>
               <FieldError
                 v-if="errors.confirm_password"
                 id="account-confirm-password-error"

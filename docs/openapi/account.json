@@ -57,12 +57,20 @@
                   "current_password": {
                     "type": "string",
                     "default": "",
-                    "description": "Required for normalized email changes or a nonempty new_password; maximum 128 bytes. Never trimmed."
+                    "description": "Required for normalized email changes or a nonempty new_password. Never trimmed; existing passwords do not need to satisfy new-password composition rules."
                   },
                   "new_password": {
                     "type": "string",
                     "default": "",
-                    "description": "Omit or use empty string to retain current password. Otherwise 12\u2013128 bytes, with no trimming."
+                    "description": "Omit or use empty string to retain the current password. Otherwise at least 8 Unicode code points with uppercase and lowercase letters, a digit 0\u20139, and punctuation or a symbol. No password maximum length; not trimmed. The normal 8 KiB JSON request boundary still applies.",
+                    "anyOf": [
+                      {
+                        "const": ""
+                      },
+                      {
+                        "minLength": 8
+                      }
+                    ]
                   }
                 }
               }

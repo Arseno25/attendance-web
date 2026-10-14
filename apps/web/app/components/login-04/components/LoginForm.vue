@@ -83,7 +83,6 @@ async function submit() {
                 type="password"
                 autocomplete="current-password"
                 required
-                maxlength="128"
                 :disabled="busy"
                 :aria-invalid="!!errors.password"
                 :aria-describedby="errors.password ? 'password-error' : undefined"

@@ -21,7 +21,7 @@ import (
 )
 
 const profileSchool = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
-const profilePassword = "original test password"
+const profilePassword = "Original test password 1!"
 
 type profileFixture struct {
 	s      *Service
@@ -206,7 +206,7 @@ func TestProfileSensitiveChangesRotateSessionAndAuditWithoutSecrets(t *testing.T
 		t.Fatal(err)
 	}
 	cookie, other := f.cookie(t, ownerID), f.cookie(t, ownerID)
-	newPassword := "  replacement password  "
+	newPassword := "  Replacement password 1! " + strings.Repeat("a", 140) + "  "
 	w := f.call("PATCH", "/auth/profile", map[string]string{"full_name": "Owner Updated", "email": " NEW@example.test ", "current_password": profilePassword, "new_password": newPassword}, cookie, csrfToken(cookie.Value), f.s.origin)
 	u, csrf := profileResponse(t, w, 200, "")
 	if u.ID != ownerID || u.Email != "new@example.test" || u.Role != "super_admin" || !u.Active || len(w.Result().Cookies()) != 1 {
@@ -236,6 +236,8 @@ func TestProfileSensitiveChangesRotateSessionAndAuditWithoutSecrets(t *testing.T
 	if err := json.Unmarshal([]byte(metadata), &fields); err != nil || !reflect.DeepEqual(fields, map[string]any{"name_changed": true, "email_changed": true, "password_changed": true}) {
 		t.Fatal("audit must contain only change booleans")
 	}
+	profileResponse(t, f.call("POST", "/auth/login", map[string]string{"email": "new@example.test", "password": newPassword}, nil, "", f.s.origin), 200, "")
+
 	// Email-only changes reauthenticate and keep the password while rotating again.
 	w = f.call("PATCH", "/auth/profile", map[string]string{"full_name": "Owner Updated", "email": "email-only@example.test", "current_password": newPassword}, rotated, csrf, f.s.origin)
 	profileResponse(t, w, 200, "")
@@ -245,9 +247,9 @@ func TestProfileSensitiveChangesRotateSessionAndAuditWithoutSecrets(t *testing.T
 	}
 	emailCookie := w.Result().Cookies()[0]
 	_, emailCSRF := profileResponse(t, w, 200, "")
-	w = f.call("PATCH", "/auth/profile", map[string]string{"full_name": "Owner Updated", "email": "email-only@example.test", "current_password": newPassword, "new_password": "password only replacement"}, emailCookie, emailCSRF, f.s.origin)
+	w = f.call("PATCH", "/auth/profile", map[string]string{"full_name": "Owner Updated", "email": "email-only@example.test", "current_password": newPassword, "new_password": "Abcd123!"}, emailCookie, emailCSRF, f.s.origin)
 	profileResponse(t, w, 200, "")
-	if err := f.pool.QueryRow(ctx, `SELECT password_hash FROM users WHERE id=$1`, ownerID).Scan(&hash); err != nil || !VerifyPassword("password only replacement", hash) || w.Result().Cookies()[0].Value == emailCookie.Value {
+	if err := f.pool.QueryRow(ctx, `SELECT password_hash FROM users WHERE id=$1`, ownerID).Scan(&hash); err != nil || !VerifyPassword("Abcd123!", hash) || w.Result().Cookies()[0].Value == emailCookie.Value {
 		t.Fatal("password-only edit did not replace password and session")
 	}
 	profileResponse(t, f.call("GET", "/auth/me", nil, emailCookie, "", ""), 401, "UNAUTHENTICATED")
@@ -272,14 +274,14 @@ func TestProfileRejectsTamperingAndFailedReauthenticationWithoutMutation(t *test
 		{"long name", "full_name", strings.Repeat("名", 121), "VALIDATION_ERROR"},
 		{"bad email", "email", "not-an-email", "VALIDATION_ERROR"},
 		{"email reauth", "email", "changed@example.test", "CURRENT_PASSWORD_REQUIRED"},
-		{"password reauth", "new_password", "replacement password", "CURRENT_PASSWORD_REQUIRED"},
+		{"password reauth", "new_password", "Replacement password 1!", "CURRENT_PASSWORD_REQUIRED"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			body := map[string]string{"full_name": base["full_name"], "email": base["email"], test.field: test.value}
 			profileResponse(t, f.call("PATCH", "/auth/profile", body, cookie, csrf, f.s.origin), 400, test.code)
 		})
 	}
-	for _, password := range []string{"short", strings.Repeat("p", 129)} {
+	for _, password := range []string{"Ab12!xy", "abcd123!", "ABCD123!", "Abcdefg!", "Abcd1234", "Abcd123 ", "Abcd123é"} {
 		profileResponse(t, f.call("PATCH", "/auth/profile", map[string]string{"full_name": "Updated", "email": u.Email, "current_password": profilePassword, "new_password": password}, cookie, csrf, f.s.origin), 400, "VALIDATION_ERROR")
 	}
 	profileResponse(t, f.call("PATCH", "/auth/profile", map[string]string{"full_name": "Updated", "email": "changed@example.test", "current_password": "wrong password"}, cookie, csrf, f.s.origin), 400, "CURRENT_PASSWORD_INVALID")
@@ -335,7 +337,7 @@ func TestProfileAuditFailureRollsBackAccountAndSessions(t *testing.T) {
 	u := f.user(t, "rollback@example.test", "operator", []string{})
 	cookie, other := f.cookie(t, u.ID), f.cookie(t, u.ID)
 	f.exec(t, `CREATE FUNCTION reject_profile_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action='auth.profile_updated' THEN RAISE EXCEPTION 'test audit rejection'; END IF; RETURN NEW; END $$; CREATE TRIGGER reject_profile BEFORE INSERT ON audit_logs FOR EACH ROW EXECUTE FUNCTION reject_profile_audit()`)
-	w := f.call("PATCH", "/auth/profile", map[string]string{"full_name": "Rejected", "email": "rejected@example.test", "current_password": profilePassword, "new_password": "rejected password"}, cookie, csrfToken(cookie.Value), f.s.origin)
+	w := f.call("PATCH", "/auth/profile", map[string]string{"full_name": "Rejected", "email": "rejected@example.test", "current_password": profilePassword, "new_password": "Rejected password 1!"}, cookie, csrfToken(cookie.Value), f.s.origin)
 	profileResponse(t, w, 503, "DATABASE_UNAVAILABLE")
 	if len(w.Result().Cookies()) != 0 {
 		t.Fatal("failed transaction issued cookie")
@@ -388,7 +390,7 @@ func TestProfileRechecksLiveAuthenticationAndPasswordAfterHashing(t *testing.T) 
 			}
 			done := make(chan *httptest.ResponseRecorder, 1)
 			go func() {
-				done <- f.call("PATCH", "/auth/profile", map[string]string{"full_name": "Rejected", "email": u.Email, "current_password": profilePassword, "new_password": "replacement password"}, cookie, csrfToken(cookie.Value), f.s.origin)
+				done <- f.call("PATCH", "/auth/profile", map[string]string{"full_name": "Rejected", "email": u.Email, "current_password": profilePassword, "new_password": "Replacement password 1!"}, cookie, csrfToken(cookie.Value), f.s.origin)
 			}()
 			f.waitForSchoolLock(t, 1)
 			query, arg := "UPDATE schools SET is_active=false WHERE id=$1", profileSchool
@@ -432,7 +434,7 @@ func TestProfileConcurrentPasswordChangesCannotOverwriteEachOther(t *testing.T) 
 	if _, err = blocker.Exec(ctx, `SELECT is_active FROM schools WHERE id=$1 FOR UPDATE`, profileSchool); err != nil {
 		t.Fatal(err)
 	}
-	passwords := []string{"concurrent replacement one", "concurrent replacement two"}
+	passwords := []string{"Concurrent replacement one 1!", "Concurrent replacement two 2!"}
 	done := make(chan struct {
 		index    int
 		response *httptest.ResponseRecorder
@@ -482,7 +484,7 @@ func TestProfileConcurrentLogoutCompletesWithoutDeadlock(t *testing.T) {
 			body := map[string]string{"full_name": "Updated", "email": u.Email}
 			if sensitive {
 				logoutCookie = f.cookie(t, u.ID)
-				body["current_password"], body["new_password"] = profilePassword, "replacement password"
+				body["current_password"], body["new_password"] = profilePassword, "Replacement password 1!"
 			}
 			ctx := context.Background()
 			blocker, err := f.pool.Begin(ctx)
