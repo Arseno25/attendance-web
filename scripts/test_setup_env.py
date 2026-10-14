@@ -22,6 +22,8 @@ class SetupEnvTest(unittest.TestCase):
             self.assertEqual(len(base64.b64decode(values["AI_TEMPLATE_KEY_BASE64"], validate=True)), 32)
             self.assertNotIn(values["AI_TEMPLATE_KEY_BASE64"], result.stdout)
             self.assertIn(values["POSTGRES_PASSWORD"], values["DATABASE_URL"])
+            self.assertEqual(values["WEB_ORIGIN"], "http://localhost:3001")
+            self.assertEqual(values["NUXT_PORT"], "3001")
             self.assertNotIn(values["POSTGRES_PASSWORD"], result.stdout)
             self.assertEqual(stat.S_IMODE(env.stat().st_mode), 0o600)
             subprocess.run(["python3", str(script)], capture_output=True, check=True)

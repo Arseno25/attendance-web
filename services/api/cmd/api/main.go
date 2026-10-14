@@ -39,7 +39,7 @@ func run() error {
 		return errors.New("invalid database configuration")
 	}
 	defer pool.Close()
-	authService, err := auth.New(pool, cfg.SchoolID, cfg.WebOrigin)
+	authService, err := auth.NewWithLocalOrigins(pool, cfg.SchoolID, cfg.WebOrigin, cfg.AllowLocalWebPortRange)
 	if err != nil {
 		return errors.New("authentication initialization failed")
 	}
@@ -57,7 +57,7 @@ func run() error {
 	go attendanceService.Run(ctx)
 	server := &http.Server{
 		Addr: cfg.Address,
-		Handler: httpserver.NewHandler(pool.Ping, cfg.WebOrigin, func(m *http.ServeMux) {
+		Handler: httpserver.NewHandlerWithLocalOrigins(pool.Ping, cfg.WebOrigin, cfg.AllowLocalWebPortRange, func(m *http.ServeMux) {
 			authService.Register(m)
 			masterService.Register(m)
 			attendanceService.Register(m)

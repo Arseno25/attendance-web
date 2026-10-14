@@ -66,6 +66,41 @@ func TestCORSOnlyAllowsConfiguredOrigin(t *testing.T) {
 	}
 }
 
+func TestCORSAllowsDevelopmentFallbackPortsOnlyWhenEnabled(t *testing.T) {
+	h := NewHandlerWithLocalOrigins(func(context.Context) error { return nil }, "http://localhost:3000", true, nil)
+	for _, tc := range []struct {
+		origin string
+		want   int
+	}{
+		{"http://localhost:3001", 204},
+		{"http://localhost:3010", 204},
+		{"http://localhost:3011", 403},
+		{"http://127.0.0.1:3002", 403},
+		{"http://localhost.evil:3002", 403},
+		{"http://evil.example:3002", 403},
+	} {
+		r := httptest.NewRequest("OPTIONS", "/api/v1/health/live", nil)
+		r.Header.Set("Origin", tc.origin)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != tc.want {
+			t.Errorf("origin %s: status=%d want=%d", tc.origin, w.Code, tc.want)
+		}
+		if tc.want == 204 && w.Header().Get("Access-Control-Allow-Origin") != tc.origin {
+			t.Errorf("origin %s was not echoed", tc.origin)
+		}
+	}
+
+	strict := NewHandler(func(context.Context) error { return nil }, "http://localhost:3000", nil)
+	r := httptest.NewRequest("OPTIONS", "/api/v1/health/live", nil)
+	r.Header.Set("Origin", "http://localhost:3002")
+	w := httptest.NewRecorder()
+	strict.ServeHTTP(w, r)
+	if w.Code != 403 {
+		t.Fatalf("strict handler accepted local alternate origin: %d", w.Code)
+	}
+}
+
 func TestUnknownRoutesReturnJSONWithoutEchoingClientRequestID(t *testing.T) {
 	h := NewHandler(func(context.Context) error { return nil }, "http://localhost:3000", nil)
 	r := httptest.NewRequest("GET", "/api/v1/students", nil)

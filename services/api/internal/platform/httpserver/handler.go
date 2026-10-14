@@ -8,9 +8,14 @@ import (
 	"time"
 
 	"attendance.local/api/internal/platform/httpresponse"
+	"attendance.local/api/internal/platform/weborigin"
 )
 
 func NewHandler(ping func(context.Context) error, webOrigin string, register func(*http.ServeMux)) http.Handler {
+	return NewHandlerWithLocalOrigins(ping, webOrigin, false, register)
+}
+
+func NewHandlerWithLocalOrigins(ping func(context.Context) error, webOrigin string, allowLocalWebPortRange bool, register func(*http.ServeMux)) http.Handler {
 	mux := http.NewServeMux()
 	if register != nil {
 		register(mux)
@@ -47,7 +52,7 @@ func NewHandler(ping func(context.Context) error, webOrigin string, register fun
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Add("Vary", "Origin")
 		if origin := r.Header.Get("Origin"); origin != "" {
-			if origin != webOrigin {
+			if !weborigin.Allowed(origin, webOrigin, allowLocalWebPortRange) {
 				httpresponse.Error(w, 403, "FORBIDDEN", "Origin tidak diizinkan")
 				return
 			}

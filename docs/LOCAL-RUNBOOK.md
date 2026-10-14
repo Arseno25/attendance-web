@@ -13,7 +13,7 @@ cd services/ai
 ../../.tools/uv run python -m app.models --directory ../../.tools/models
 ```
 
-Manifest di `services/ai/models/manifest.json` memakai commit/ukuran/checksum dari OpenCV Zoo, model YuNetMIT/SFaceApache2.0; installer menyimpan LICENSE di directory model. Tidak mengubah model menjadi production-ready. Artefak model ignored, tidak ikut Git. Raw frame dan embedding plaintext tidak disimpan; enrollment sekarang menyimpan ciphertext AES-GCM. Pertahankan kunci di secret terpisah dari backup DB.
+Manifest di `services/ai/models/manifest.json` memakai commit/ukuran/checksum dari OpenCV Zoo, model YuNetMIT/SFaceApache2.0; installer menyimpan LICENSE di directory model. Tidak mengubah model menjadi production-ready. Artefak model ignored, tidak ikut Git. Untuk Coolify, Compose memakai named volume project-scoped `model_data`: service satu-kali `init-models` mengunduh dan memverifikasi model di `/models`, lalu AI memakai volume yang sama read-only. Volume bertahan pada redeploy dengan nama project yang sama, tidak berbagi antar-project, dan bukan backup. Jika nama project berubah, Compose membuat volume baru, init mengunduh ulang model, dan volume lama tidak otomatis dihapus. Jadwalkan backup volume dan uji restore. Volume baru memerlukan koneksi keluar ke URL model yang dipin. Raw frame dan embedding plaintext tidak disimpan; enrollment sekarang menyimpan ciphertext AES-GCM. Pertahankan kunci di secret terpisah dari backup DB.
 
 Evaluasi trace anonim dari hold-out yang diizinkan:
 
@@ -54,7 +54,9 @@ Rollback aplikasi: pilih binary/image kompatibel schema7. Migration5/6/7 menamba
 - AI/model unavailable: manual terus berjalan; feature tetapdisabled; jangan turunkan threshold untuk demo.
 - Salah match/purge backlog/key compromise setelah biometrik aktif: disable recognition, simpan audit nonbiometrik, ikuti prosedur sekolah; investigasi/rekey/purge/rebuild sebelum membuka ulang.
 
-Coolify deployment, HTTPS cookies/CORS pada domain sebenarnya, RBAC least-privilege DB roles, encrypted backup schedule/RPO/RTO, load test500gallery/2kiosk, UAT/training/DPIA/pilotsign-off tetap gate produksi. Tidak dilakukan dalam pekerjaan lokal ini. WP12 adalah kegiatan sekolah nyata, bukan fungsi yang dapat ditandai selesai dari fixture.
+Compose migrasi memakai service satu-kali Goose dengan `MIGRATION_DATABASE_URL` terpisah; API hanya mulai setelah migrasi sukses. Compose menjalankan migrasi saat stack dibuat/reconciled, bukan hanya saat file migrasi berubah. Uji retry dan kegagalan migrasi pada Coolify target sebelum trafik. Admin awal dibuat manual satu kali melalui binary `bootstrap` setelah migration/API siap; password hanya lewat stdin privat dan bootstrap berulang ditolak.
+
+Coolify deployment belum dijalankan pada server. Verifikasi live volume, secret, urutan startup dan kegagalan migrasi di target tetap wajib. HTTPS cookies/CORS pada domain sebenarnya, RBAC least-privilege DB roles, encrypted backup schedule/RPO/RTO, load test500gallery/2kiosk, UAT/training/DPIA/pilotsign-off tetap gate produksi. WP12 adalah kegiatan sekolah nyata, bukan fungsi yang dapat ditandai selesai dari fixture.
 
 ## Akun, tema dan lingkungan pengembangan
 
