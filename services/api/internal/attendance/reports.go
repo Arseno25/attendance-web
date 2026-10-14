@@ -79,6 +79,10 @@ func (s *Service) totals(r *http.Request, tx pgx.Tx, u auth.User, f reportFilter
 	return one(r.Context(), tx, `SELECT `+reportTotals+` FROM (`+reportSelect+`) filtered`, f.args(s, u)...)
 }
 
+func (s *Service) dailyTotals(r *http.Request, tx pgx.Tx, u auth.User, f reportFilter) ([]map[string]any, error) {
+	return rows(r.Context(), tx, `WITH filtered AS (`+reportSelect+`), daily AS(SELECT date,`+reportTotals+` FROM filtered GROUP BY date) SELECT d.day::date::text AS date,coalesce(a.roster_total,0) AS roster_total,coalesce(a.students_total,0) AS students_total,coalesce(a.sessions_total,0) AS sessions_total,coalesce(a.present,0) AS present,coalesce(a.late,0) AS late,coalesce(a.attended,0) AS attended,coalesce(a.excused,0) AS excused,coalesce(a.sick,0) AS sick,coalesce(a.absent,0) AS absent,coalesce(a.not_recorded,0) AS not_recorded,coalesce(a.pending_review,0) AS pending_review,coalesce(a.recorded,0) AS recorded,coalesce(a.attendance_rate,0)::float8 AS attendance_rate FROM generate_series($4::date,$5::date,interval '1 day') d(day) LEFT JOIN daily a ON a.date=d.day::date::text ORDER BY d.day`, f.args(s, u)...)
+}
+
 const reportOrder = ` ORDER BY date DESC,class_name,full_name,session_id,student_id`
 
 func (s *Service) report(w http.ResponseWriter, r *http.Request) {
@@ -128,7 +132,12 @@ func (s *Service) report(w http.ResponseWriter, r *http.Request) {
 	if data == nil {
 		data = []map[string]any{}
 	}
-	httpresponse.JSON(w, 200, map[string]any{"data": data, "totals": totals, "filters": f, "pagination": map[string]any{"page": page, "page_size": size, "total": totals["roster_total"]}, "request_id": w.Header().Get("X-Request-ID")})
+	daily, err := s.dailyTotals(r, tx, u, f)
+	if err != nil {
+		dbError(w, err)
+		return
+	}
+	httpresponse.JSON(w, 200, map[string]any{"data": data, "totals": totals, "daily": daily, "filters": f, "pagination": map[string]any{"page": page, "page_size": size, "total": totals["roster_total"]}, "request_id": w.Header().Get("X-Request-ID")})
 }
 func (s *Service) dashboard(w http.ResponseWriter, r *http.Request) {
 	if !httpresponse.Method(w, r, "GET") {
@@ -155,7 +164,7 @@ func (s *Service) dashboard(w http.ResponseWriter, r *http.Request) {
 	trendFilter := f
 	last, _ := time.Parse("2006-01-02", f.To)
 	trendFilter.From = last.AddDate(0, 0, -6).Format("2006-01-02")
-	trend, err := rows(r.Context(), tx, `WITH filtered AS (`+reportSelect+`), daily AS(SELECT date,`+reportTotals+` FROM filtered GROUP BY date) SELECT d.day::date::text AS date,coalesce(a.roster_total,0) AS roster_total,coalesce(a.students_total,0) AS students_total,coalesce(a.sessions_total,0) AS sessions_total,coalesce(a.present,0) AS present,coalesce(a.late,0) AS late,coalesce(a.attended,0) AS attended,coalesce(a.excused,0) AS excused,coalesce(a.sick,0) AS sick,coalesce(a.absent,0) AS absent,coalesce(a.not_recorded,0) AS not_recorded,coalesce(a.pending_review,0) AS pending_review,coalesce(a.recorded,0) AS recorded,coalesce(a.attendance_rate,0)::float8 AS attendance_rate FROM generate_series($4::date,$5::date,interval '1 day') d(day) LEFT JOIN daily a ON a.date=d.day::date::text ORDER BY d.day`, trendFilter.args(s, u)...)
+	trend, err := s.dailyTotals(r, tx, u, trendFilter)
 	if err != nil {
 		dbError(w, err)
 		return

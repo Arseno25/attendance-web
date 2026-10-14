@@ -407,8 +407,17 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 	if len(fullReport["data"].([]any)) != 1 || fullReport["pagination"].(map[string]any)["total"] != float64(3) || fullReport["totals"].(map[string]any)["roster_total"] != float64(3) {
 		t.Fatal("report totals depended on page", fullReport)
 	}
+	daily, ok := fullReport["daily"].([]any)
+	if !ok || len(daily) != 1 || daily[0].(map[string]any)["roster_total"] != float64(3) || daily[0].(map[string]any)["date"] != day {
+		t.Fatal("daily report must aggregate all matching rows independent of pagination", fullReport)
+	}
+	reportEnd, _ := time.Parse("2006-01-02", day)
+	week := expect(call("GET", "/reports/attendance?from="+reportEnd.AddDate(0, 0, -6).Format("2006-01-02")+"&to="+day, nil), 200)["daily"].([]any)
+	if len(week) != 7 || week[0].(map[string]any)["roster_total"] != float64(0) || week[0].(map[string]any)["absent"] != float64(0) {
+		t.Fatal("daily report must include empty days without inventing absence", week)
+	}
 	perStudent := expect(call("GET", "/reports/attendance?date="+day+"&student_id="+student["id"].(string), nil), 200)
-	if perStudent["totals"].(map[string]any)["roster_total"] != float64(1) {
+	if perStudent["totals"].(map[string]any)["roster_total"] != float64(1) || perStudent["daily"].([]any)[0].(map[string]any)["roster_total"] != float64(1) {
 		t.Fatal("student filter drift", perStudent)
 	}
 	filtered := expect(call("GET", "/reports/attendance?date="+day+"&status=sick", nil), 200)
@@ -477,7 +486,7 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 	expect(call("PATCH", "/teacher-assignments/"+reassignment, map[string]any{"is_active": false}), 200)
 	login("teacher@example.test")
 	revokedReport := expect(call("GET", "/reports/attendance?date="+day, nil), 200)
-	if len(revokedReport["data"].([]any)) != 0 {
+	if len(revokedReport["data"].([]any)) != 0 || revokedReport["daily"].([]any)[0].(map[string]any)["roster_total"] != float64(0) {
 		t.Fatal("report survived assignment revocation")
 	}
 	revokedCSV := call("GET", "/reports/attendance?format=csv&date="+day, nil)

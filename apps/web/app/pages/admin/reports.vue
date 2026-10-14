@@ -5,7 +5,13 @@ import { statusVariant } from '~/lib/status'
 import { Download, RotateCcw } from '@lucide/vue'
 import { attendanceLabels } from '~/types/attendance'
 import type { AcademicYear, SchoolClass } from '~/types/master'
-import type { AttendanceReport, ReportFilters, ReportRow, AttendanceTotals } from '~/types/reports'
+import type {
+  AttendanceReport,
+  ReportFilters,
+  ReportRow,
+  AttendanceTotals,
+  AttendanceDay,
+} from '~/types/reports'
 definePageMeta({ layout: 'admin', middleware: ['auth', 'reports'] })
 const { request, options, dateTime, canExport, defaultFilters, download } = useReports()
 const route = useRoute()
@@ -21,6 +27,7 @@ const applied = ref<ReportFilters | null>(null)
 const years = ref<AcademicYear[]>([])
 const classes = ref<SchoolClass[]>([])
 const entries = ref<ReportRow[]>([])
+const daily = ref<AttendanceDay[]>([])
 const totals = ref<AttendanceTotals | null>(null)
 const page = ref(1)
 const total = ref(0)
@@ -68,6 +75,7 @@ async function load(filters: ReportFilters, newPage = 1) {
     })
     Object.assign(form, result.filters)
     entries.value = result.data
+    daily.value = result.daily
     totals.value = result.totals
     applied.value = result.filters
     page.value = result.pagination.page
@@ -75,6 +83,7 @@ async function load(filters: ReportFilters, newPage = 1) {
   } catch (error) {
     message.value = apiMessage(error)
     entries.value = []
+    daily.value = []
     totals.value = null
     applied.value = null
   } finally {
@@ -354,6 +363,46 @@ await load({ ...form })
       v-else-if="totals"
       :totals="totals"
     />
+    <Card
+      v-if="applied && !loading"
+      class="min-w-0"
+    >
+      <CardHeader>
+        <CardTitle>Rekap harian</CardTitle>
+        <CardDescription>
+          {{ applied.from }} – {{ applied.to }}. Rekap seluruh hasil filter, termasuk hari tanpa
+          roster.
+        </CardDescription>
+      </CardHeader>
+      <CardContent class="min-w-0">
+        <Table class="min-w-[640px]">
+          <TableCaption class="sr-only">Rekap kehadiran harian sesuai filter laporan</TableCaption>
+          <TableHeader class="bg-muted/50">
+            <TableRow>
+              <TableHead>Tanggal</TableHead>
+              <TableHead class="text-right">Roster</TableHead>
+              <TableHead class="text-right">Sudah hadir</TableHead>
+              <TableHead class="text-right">Terlambat</TableHead>
+              <TableHead class="text-right">Belum tercatat</TableHead>
+              <TableHead class="text-right">Rasio hadir</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow
+              v-for="day in daily"
+              :key="day.date"
+            >
+              <TableCell class="font-medium">{{ day.date }}</TableCell>
+              <TableCell class="text-right tabular-nums">{{ day.roster_total }}</TableCell>
+              <TableCell class="text-right tabular-nums">{{ day.attended }}</TableCell>
+              <TableCell class="text-right tabular-nums">{{ day.late }}</TableCell>
+              <TableCell class="text-right tabular-nums">{{ day.not_recorded }}</TableCell>
+              <TableCell class="text-right tabular-nums">{{ day.attendance_rate }}%</TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
     <Card class="min-w-0">
       <CardHeader>
         <CardTitle>Rincian roster</CardTitle>

@@ -725,6 +725,14 @@
           },
           "request_id": {
             "type": "string"
+          },
+          "daily": {
+            "type": "array",
+            "maxItems": 366,
+            "items": {
+              "$ref": "#/components/schemas/TrendDay"
+            },
+            "description": "Daily aggregates of all filtered rows, independent of pagination; empty days contain zeros. Uses the same live school/class permissions and all report filters."
           }
         },
         "required": [
@@ -732,7 +740,8 @@
           "totals",
           "filters",
           "pagination",
-          "request_id"
+          "request_id",
+          "daily"
         ]
       },
       "TrendDay": {

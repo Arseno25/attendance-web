@@ -45,13 +45,16 @@ export interface ReportRow {
 export interface AttendanceReport {
   data: ReportRow[]
   totals: AttendanceTotals
+  daily: AttendanceDay[]
   filters: ReportFilters
   pagination: { page: number; page_size: number; total: number }
   request_id: string
 }
+export type AttendanceDay = AttendanceTotals & { date: string }
+
 export interface AttendanceDashboard {
   totals: AttendanceTotals
   filters: ReportFilters
-  trend: (AttendanceTotals & { date: string })[]
+  trend: AttendanceDay[]
   recent: ReportRow[]
 }
