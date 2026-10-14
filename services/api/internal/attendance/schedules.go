@@ -1,6 +1,7 @@
 package attendance
 
 import (
+	"attendance.local/api/internal/auth"
 	"attendance.local/api/internal/platform/httpresponse"
 	"context"
 	"net/http"
@@ -8,7 +9,7 @@ import (
 	"time"
 )
 
-const scheduleSelect = `SELECT a.id::text AS id,a.class_id::text AS class_id,c.name AS class_name,y.name AS academic_year_name,a.name,a.timezone,a.weekdays,a.checkin_start::text,a.checkin_cutoff::text,a.grace_minutes,a.close_time::text,a.is_active,a.created_at,a.updated_at FROM attendance_schedules a JOIN classes c ON c.id=a.class_id AND c.school_id=a.school_id JOIN academic_years y ON y.id=c.academic_year_id AND y.school_id=c.school_id WHERE a.school_id=$1 AND ($2::text!='teacher' OR a.class_id=ANY($3::uuid[]))`
+const scheduleSelect = `SELECT a.id::text AS id,a.class_id::text AS class_id,c.name AS class_name,y.name AS academic_year_name,a.name,a.timezone,a.weekdays,a.checkin_start::text,a.checkin_cutoff::text,a.grace_minutes,a.close_time::text,a.is_active,a.created_at,a.updated_at FROM attendance_schedules a JOIN classes c ON c.id=a.class_id AND c.school_id=a.school_id JOIN academic_years y ON y.id=c.academic_year_id AND y.school_id=c.school_id WHERE a.school_id=$1 AND (NOT $2::boolean OR a.class_id=ANY($3::uuid[]))`
 
 type scheduleInput struct {
 	Class  string `json:"class_id"`
@@ -53,7 +54,7 @@ func (s *Service) schedules(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback(context.Background())
 	if !write {
-		s.list(w, r, tx, scheduleSelect, s.schoolID, u.Role, u.ClassIDs)
+		s.list(w, r, tx, scheduleSelect, s.schoolID, u.Scope == auth.ScopeAssignedClasses, u.ClassIDs)
 		return
 	}
 	var in scheduleInput
@@ -81,7 +82,7 @@ func (s *Service) schedules(w http.ResponseWriter, r *http.Request) {
 		dbError(w, err)
 		return
 	}
-	data, err := one(r.Context(), tx, scheduleSelect+` AND a.id=$4`, s.schoolID, u.Role, u.ClassIDs, id)
+	data, err := one(r.Context(), tx, scheduleSelect+` AND a.id=$4`, s.schoolID, u.Scope == auth.ScopeAssignedClasses, u.ClassIDs, id)
 	if err != nil {
 		dbError(w, err)
 		return
@@ -101,7 +102,7 @@ func (s *Service) schedule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback(context.Background())
-	data, err := one(r.Context(), tx, scheduleSelect+` AND a.id=$4`, s.schoolID, u.Role, u.ClassIDs, id)
+	data, err := one(r.Context(), tx, scheduleSelect+` AND a.id=$4`, s.schoolID, u.Scope == auth.ScopeAssignedClasses, u.ClassIDs, id)
 	if err != nil {
 		dbError(w, err)
 		return
@@ -157,7 +158,7 @@ func (s *Service) schedule(w http.ResponseWriter, r *http.Request) {
 		dbError(w, err)
 		return
 	}
-	data, err = one(r.Context(), tx, scheduleSelect+` AND a.id=$4`, s.schoolID, u.Role, u.ClassIDs, id)
+	data, err = one(r.Context(), tx, scheduleSelect+` AND a.id=$4`, s.schoolID, u.Scope == auth.ScopeAssignedClasses, u.ClassIDs, id)
 	if err != nil {
 		dbError(w, err)
 		return

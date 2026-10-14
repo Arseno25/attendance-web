@@ -31,7 +31,7 @@ Input array `{expected: anonymous_subject_id|null, predicted: anonymous_subject_
 3. Aktifkan kamera untuk deteksi frame dan kotak wajah. Kamera berhenti pada hidden/offline/expiry/leave; izin kamera ditolak menampilkan pesan. Kotak unknown tidak membocorkan nama kandidat; kehadiran otomatis belum aktif.
 4. Revoke pada panel langsung menghapus pairing/session; heartbeat berikutnya menghentikan kiosk. Jika layanan/kamera gagal, petugas menggunakan manual attendance. Jika API/DB down, pakai SOP administratif offline, kemudian input setelah pulih.
 
-Wali/consent di detail siswa hanya untuk officer dengan `consents.manage`. Verifikasi dilakukan lewat prosedur sekolah; record menyimpan referensi privat, tidak mengunggah scan identitas. Withdrawal langsung menutup eligibility. Petugas enroll/revoke memakai `/admin/biometrics` tanpa akses akademik tambahan. Ambil3–5frame berbeda untuk enrollment provisional; status wajah harus menunjukkan consent berlaku. Ciphertext dihapus saat withdrawal/revoke/siswa nonaktif, dan worker menghapus ciphertext consent expired. Gallery eligible dibaca dari DB per frame, tanpa cache template. G2/G3 tetap memerlukan evaluasi/restore produksi.
+Pendaftaran wajah menggunakan Wajah siswa (`/admin/biometrics`) untuk petugas berizin. Siswa aktif dapat didaftarkan tanpa persetujuan wali di lokal maupun produksi. Ambil 3–5 foto berbeda yang lolos pemeriksaan kualitas. Penghapusan manual atau penonaktifan siswa menghapus data wajah; riwayat persetujuan lama tidak lagi menentukan kelayakan. G2/G3 tetap memerlukan evaluasi sebelum absensi otomatis.
 
 Import di `/admin/students/import`: satu kelas, UTF8CSV header `nis,nisn,full_name`, max500rows/120KiBfile. Preview15menit, creator-only commit atomik; siswa duplikat/kelas invalid menyebabkan rollback. Payload expired dipurge worker setiap1menit; committed segera dihapus. Retry committed sama tidak membuat duplikat.
 
@@ -80,3 +80,28 @@ Atas permintaan pengguna, fixture demo akademik/absensi dihapus dari database pr
 Sebelum perubahan, dump PostgreSQL18 format custom dialirkan langsung ke GnuPG AES256; backup terenkripsi `.tools/sidebar-reset/pre-reset.dump.gpg` dan kunci pemulihan terpisah di directory private ignored dengan permission 0600. Dekripsi dan daftar TOC `pg_restore --list` diverifikasi. Backup tidak dibuka ke browser atau Git.
 
 Reset diuji dahulu dalam transaksi ROLLBACK. Identitas fixture, dependensi tidak terduga, perbandingan seluruh baris akun/perangkat/sekolah/audit dan trigger enabled diperiksa sebelum COMMIT aktual. Empat trigger riwayat pada tabel fixture saja ditangguhkan dalam transaksi dan diaktifkan kembali sebelum commit; FK dan proteksi audit tetap aktif. Setelah reset, semua tabel demo operasional tersebut kosong, akun dan perangkat masing-masing tetap 1. Log/rencana SQL lokal di `.tools/sidebar-reset/` (ignored), tidak menjadi endpoint reset atau migrasi produk. File seed pengembangan hanya memastikan tenant dummy dan tidak membuat ulang fixture akademik/absensi.
+
+
+## Pendaftaran wajah — 14 Oktober 2026
+
+Pengelolaan kamera dipusatkan di **Wajah siswa** (`/admin/biometrics`). Cari nama/NIS, klik ikon wajah, aktifkan kamera, ambil 3–5 foto berbeda, lalu simpan. Modal menampilkan status dan kamera. Detail siswa tidak memuat bagian wali atau persetujuan. API guardian/consent/withdraw dan permission `consents.manage` telah dihapus.
+
+Kebijakan berlaku sama di lokal dan produksi tanpa flag khusus. Template baru memakai konteks enkripsi null. Migrasi 00011 mempertahankan ciphertext, ID konteks enkripsi template lama, dan riwayat wali/persetujuan. Expiry/withdrawal lama tidak lagi menghapus atau memblokir template. Siswa nonaktif dan penghapusan manual tetap menutup pendaftaran dan galeri. Rollback kebijakan memerlukan backup terverifikasi.
+
+Akurasi dan pemeriksaan keaslian wajah belum dievaluasi; absensi otomatis tetap tertutup. Kamera dan data wajah nyata tidak dipakai untuk tes perubahan ini.
+
+Verifikasi: tes API dengan PostgreSQL nyata dan `-race` lolos, termasuk expiry/withdrawal historis yang tidak lagi memblokir galeri serta penonaktifan siswa yang tetap menghapus template. Tes AI menerima konteks baru/null dan konteks enkripsi lama. Browser memverifikasi status wajah lama tetap terbaca, tidak ada bagian wali di detail siswa, tema tersimpan setelah reload, serta lebar halaman ponsel tanpa overflow. Backup terenkripsi terverifikasi dan fingerprint data sebelum/sesudah migrasi identik.
+
+Tema berada di **Pengaturan → Tampilan**: Terang, Gelap, Sistem; pilihan otomatis tersimpan per peramban. Semua pengguna login dapat mengakses Tampilan. Urutan tab adalah Sekolah lalu Tampilan; Sekolah terbuka pertama bagi pengelola berizin, sedangkan pengguna lainnya langsung membuka Tampilan. Tab Sekolah dan API pengaturan sekolah tetap memerlukan pengelola penuh dengan izin `school.write`.
+
+## Identitas sekolah dan foto profil — 14 Oktober 2026
+
+Pengelola penuh dengan izin `school.write` membuka Pengaturan sekolah untuk mengubah nama sekolah, nama aplikasi, alamat, telepon, email, dan logo. Nama dan logo tampil di halaman masuk dan sidebar; alamat/kontak hanya tersedia melalui endpoint pengaturan yang berizin. Waktu sekolah tidak diubah. Akun saya menyediakan foto profil pengguna sendiri, pratinjau gambar, simpan, dan hapus; foto tampil di menu akun tanpa mengubah password atau izin.
+
+Endpoint baru: `GET /api/v1/school/branding` dan `GET /api/v1/school/logo` untuk identitas publik; `GET/PATCH /api/v1/school/settings` dan `PUT/DELETE /api/v1/school/logo` untuk pengelola; `GET/PUT/DELETE /api/v1/auth/profile/photo` untuk pemilik akun. Semua penulisan menggunakan origin/CSRF dan pemeriksaan sesi/izin terkini. Foto akun memakai `private, no-store` dan tidak dapat dibaca akun lain.
+
+JPG/PNG maksimal 2 MB dan 12 megapiksel diperiksa sebelum decode, orientasi JPEG EXIF/PNG eXIf diterapkan, gambar diperkecil hingga 512 piksel, kemudian di-encode ulang tanpa metadata. Binary tersimpan di PostgreSQL dan ikut backup database. Audit hanya mencatat tindakan, bukan file atau kontak pribadi. Migrasi 00010 menambahkan kolom dengan default dan tidak mengubah akun maupun data wajah sebelumnya. Rollback ditolak bila pengaturan/gambar baru masih berisi data.
+
+Teks antarmuka menggunakan peran, hak akses, daftar siswa, kode penghubung, dan foto pendaftaran. Detail implementasi tetap berada di API/log untuk pengembang. Tidak ada pengunggahan foto atau perubahan identitas sekolah pengguna selama verifikasi browser; pengujian upload menggunakan gambar sintetis dalam schema database sementara.
+
+Verifikasi akhir: seluruh tes Go dengan `-race`/database nyata, 51 tes UI Node, 65 tes AI, dan satu tes Python lolos; lint/typecheck/build/Go vet juga lolos. Delapan orientasi JPEG, orientasi PNG, metadata rusak, batas gambar, akses foto antar-akun, dan CSRF diuji. Browser desktop/mobile memperlihatkan form pengaturan/profil tanpa overflow, pemilih gambar berbahasa Indonesia, dan identitas sekolah di halaman masuk; tidak ada error console. Backup terenkripsi berhasil diverifikasi sebelum migrasi 00010; fingerprint data sekolah, akun, dan wajah lama tetap sama. Tiga fixture form lama yang sebelumnya gagal sudah disesuaikan dengan schema peran saat ini.

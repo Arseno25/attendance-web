@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { toast } from 'vue-sonner'
+import { Download } from '@lucide/vue'
 import { importSchema, importCommitSchema } from '~/lib/validation/master'
 import type { Result } from '~/types/auth'
 import type { SchoolClass } from '~/types/master'
@@ -70,8 +71,8 @@ async function dryRun() {
         body: { class_id: classId.value, csv: csv.value },
       })
     ).data
-    if (preview.value.valid) toast.success('Preview CSV siap. Periksa data sebelum mengimpor.')
-    else toast.warning('CSV memerlukan perbaikan. Periksa kesalahan pada preview.')
+    if (preview.value.valid) toast.success('Data siap diperiksa. Tinjau sebelum menambahkan siswa.')
+    else toast.warning('File perlu diperbaiki. Periksa baris yang ditandai.')
   } catch (e) {
     toast.error(apiMessage(e))
   } finally {
@@ -127,6 +128,18 @@ if (canWrite.value) {
       >
         <template #actions>
           <Button
+            as-child
+            variant="outline"
+          >
+            <a
+              href="/contoh-siswa.csv"
+              download
+            >
+              <Download />
+              Unduh contoh
+            </a>
+          </Button>
+          <Button
             v-if="canWrite"
             type="submit"
             form="import-preview"
@@ -155,8 +168,9 @@ if (canWrite.value) {
         <CardHeader>
           <CardTitle>File CSV & kelas tujuan</CardTitle>
           <CardDescription>
-            Header wajib: nis,nisn,full_name. Satu file untuk satu kelas, maksimal 500 siswa. NIS
-            existing ditolak. Preview berlaku 15 menit.
+            Gunakan contoh file untuk mengisi data siswa. Satu file untuk satu kelas, maksimal 500
+            siswa. NIS yang sudah terdaftar tidak dapat ditambahkan lagi. Hasil pemeriksaan berlaku
+            15 menit.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -227,7 +241,7 @@ if (canWrite.value) {
         class="min-w-0"
       >
         <CardHeader>
-          <CardTitle>Preview {{ preview.row_count }} siswa</CardTitle>
+          <CardTitle>Periksa {{ preview.row_count }} siswa</CardTitle>
           <CardDescription>
             Berlaku sampai {{ dateTime(preview.expires_at) }}. Semua baris disimpan dalam satu
             transaksi atau seluruhnya dibatalkan.
@@ -269,7 +283,7 @@ if (canWrite.value) {
               { id: 'nisn', label: 'NISN' },
               { id: 'nama', label: 'Nama' },
             ]"
-            caption="Preview data siswa yang akan diimport"
+            caption="Data siswa yang akan ditambahkan"
           >
             <template #cell-nis="{ item: row }">{{ row.nis }}</template>
             <template #cell-nisn="{ item: row }">{{ row.nisn || '—' }}</template>

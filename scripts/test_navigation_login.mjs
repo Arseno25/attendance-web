@@ -27,22 +27,22 @@ async function component(name, file) {
 }
 const Sidebar = await component('Sidebar', 'apps/web/app/components/AppSidebar.vue')
 const Login = await component('Login', 'apps/web/app/components/login-04/components/LoginForm.vue')
-Object.assign(globalThis, { computed, ref, watch, useFormValidation })
+Object.assign(globalThis, { computed, ref, watch, useFormValidation, useRuntimeConfig: () => ({ public: { apiBase: 'http://localhost/api/v1' } }), useSchoolBranding: () => ({ branding: ref({ app_name: 'Absensi Sekolah' }) }) })
 
 test('sidebar groups only authorized links, hides empty categories and reacts to access changes', () => {
-  const session = ref({ user: { role: 'super_admin' }, permissions: ['academics.read', 'attendance.read', 'devices.health', 'biometrics.enroll'] })
+  const session = ref({ user: { role: 'super_admin' }, permissions: ['academics.read', 'attendance.read', 'devices.health', 'biometrics.enroll', 'users.read', 'roles.manage', 'audit.read'] })
   globalThis.useAuth = () => ({ session })
   const page = Sidebar.setup({}, { expose() {} })
   assert.deepEqual(page.groups.value.map(g => g.title), ['Utama', 'Akademik', 'Kehadiran', 'Administrasi'])
   const links = page.groups.value.flatMap(g => g.items.map(i => i.url))
   assert.equal(new Set(links).size, links.length)
-  assert.equal(links.length, 11)
+  assert.equal(links.length, 13)
   session.value = { user: { role: 'operator' }, permissions: ['biometrics.enroll'] }
-  assert.deepEqual(page.groups.value.map(g => g.title), ['Utama', 'Kehadiran'])
-  assert.deepEqual(page.groups.value.flatMap(g => g.items.map(i => i.url)), ['/admin', '/admin/biometrics'])
+  assert.deepEqual(page.groups.value.map(g => g.title), ['Utama', 'Kehadiran', 'Administrasi'])
+  assert.deepEqual(page.groups.value.flatMap(g => g.items.map(i => i.url)), ['/admin', '/admin/biometrics', '/admin/settings'])
   session.value = { user: { role: 'teacher' }, permissions: ['academics.read', 'attendance.read'] }
   assert.ok(page.groups.value.flatMap(g => g.items).some(i => i.url === '/admin/reports'))
-  assert.ok(!page.groups.value.some(g => g.title === 'Administrasi'))
+  assert.ok(page.groups.value.flatMap(g => g.items).some(i => i.url === '/admin/settings'))
 })
 
 function loginContext(login, query = {}) {

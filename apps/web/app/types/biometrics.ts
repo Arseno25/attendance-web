@@ -12,7 +12,7 @@ export interface FaceOverlay {
 }
 export interface FaceStatus {
   enrolled: boolean
-  consent_eligible: boolean
+  enrollment_allowed: boolean
   pipeline_ready: boolean
   recognition_enabled: boolean
   block_reason: string | null

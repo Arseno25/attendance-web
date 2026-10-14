@@ -16,7 +16,7 @@ func Method(w http.ResponseWriter, r *http.Request, allowed ...string) bool {
 		return true
 	}
 	w.Header().Set("Allow", strings.Join(allowed, ", "))
-	Error(w, 405, "METHOD_NOT_ALLOWED", "Method tidak diizinkan")
+	Error(w, 405, "METHOD_NOT_ALLOWED", "Tindakan ini tidak tersedia.")
 	return false
 }
 
@@ -26,7 +26,7 @@ func Decode(w http.ResponseWriter, r *http.Request, target any) bool {
 func DecodeLimit(w http.ResponseWriter, r *http.Request, target any, limit int64) bool {
 	media, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || media != "application/json" {
-		Error(w, 400, "VALIDATION_ERROR", "Gunakan JSON yang valid")
+		Error(w, 400, "VALIDATION_ERROR", "Data belum dapat diproses. Muat ulang halaman dan coba lagi.")
 		return false
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, limit)
@@ -38,7 +38,7 @@ func DecodeLimit(w http.ResponseWriter, r *http.Request, target any, limit int64
 			return true
 		}
 	}
-	Error(w, 400, "VALIDATION_ERROR", "Request tidak valid atau terlalu besar")
+	Error(w, 400, "VALIDATION_ERROR", "Data belum sesuai atau terlalu banyak. Periksa isian dan coba lagi.")
 	return false
 }
 
@@ -58,7 +58,7 @@ func Pagination(w http.ResponseWriter, r *http.Request) (int, int, bool) {
 		}
 	}
 	if page < 1 || page > 100000 || size < 1 || size > 100 {
-		Error(w, 400, "VALIDATION_ERROR", "Pagination tidak valid")
+		Error(w, 400, "VALIDATION_ERROR", "Halaman yang dipilih tidak tersedia.")
 		return 0, 0, false
 	}
 	return page, size, true

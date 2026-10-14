@@ -62,7 +62,7 @@ async function save() {
       body: { decision: decision.value, reason: reason.value },
     })
     selected.value = null
-    toast.success('Keputusan tersimpan beserta histori dan audit.')
+    toast.success('Keputusan dan riwayat perubahannya tersimpan.')
     await load()
   } catch (error) {
     toast.error(apiMessage(error))

@@ -6,7 +6,8 @@ import { loginSchema, profileSchema, userSchema } from '../apps/web/app/lib/vali
 import { academicYearSchema, assignmentSchema, newClassSchema, newStudentSchema, placementSchema, studentFilterSchema, importSchema, importCommitSchema } from '../apps/web/app/lib/validation/master.ts'
 import { scheduleSchema, newScheduleSchema, sessionSchema, sessionFilterSchema, manualSchema, correctionSchema, decisionSchema, rosterFilterSchema } from '../apps/web/app/lib/validation/attendance.ts'
 import { reportSchema, auditSchema } from '../apps/web/app/lib/validation/reports.ts'
-import { pairingSchema, consentSchema, guardianSchema, reasonSchema, enrollmentSchema } from '../apps/web/app/lib/validation/consent-devices.ts'
+import { roleSchema } from '../apps/web/app/lib/validation/roles.ts'
+import { pairingSchema, reasonSchema, enrollmentSchema } from '../apps/web/app/lib/validation/biometrics-devices.ts'
 import { useFormValidation } from '../apps/web/app/composables/useFormValidation.ts'
 const { ref, nextTick, effectScope } = createRequire(resolve('apps/web/package.json'))('vue')
 const id = '11111111-1111-4111-8111-111111111111'
@@ -33,23 +34,25 @@ test('new passwords require eight characters, uppercase, lowercase, numbers and 
   for (const password of ['Abcd123!', 'Éé12345!', 'Ab12345🔒', ' Ab12!a ', 'Ab1!' + 'a'.repeat(200)]) {
     const result = profileSchema(profile.email).parse({ ...profile, current_password: 'old', new_password: password, confirm_password: password })
     assert.equal(result.new_password, password)
-    valid(userSchema(false), { ...user, password })
+    valid(userSchema(false, ['admin', 'teacher']), { ...user, password })
   }
   for (const password of ['Ab12!xy', 'abcd123!', 'ABCD123!', 'Abcdefg!', 'Abcd1234', 'Abcd123 ', 'Abcd123é']) {
     invalid(profileSchema(profile.email), { ...profile, current_password: 'old', new_password: password, confirm_password: password }, 'new_password')
-    invalid(userSchema(false), { ...user, password }, 'password')
+    invalid(userSchema(false, ['admin', 'teacher']), { ...user, password }, 'password')
   }
   invalid(profileSchema(profile.email), { ...profile, current_password: 'old', new_password: 'Abcd123!', confirm_password: 'different' }, 'confirm_password')
 })
 
-test('role grants cannot be duplicated or exceed the selected role', () => {
-  const user = { email: profile.email, full_name: 'Guru', role: 'teacher', password: 'Example123!', is_active: true, grants: ['reports.export'] }
-  valid(userSchema(false), user)
-  valid(userSchema(true), { ...user, password: '' })
-  invalid(userSchema(false), { ...user, password: 'short' }, 'password')
-  invalid(userSchema(false), { ...user, grants: ['attendance.manual'] }, 'grants')
-  invalid(userSchema(false), { ...user, grants: ['reports.export', 'reports.export'] }, 'grants')
-  invalid(userSchema(false), { ...user, full_name: '   ' }, 'full_name')
+test('user roles must exist and role permissions cannot be duplicated', () => {
+  const user = { email: profile.email, full_name: 'Guru', role: 'teacher', password: 'Example123!', is_active: true }
+  valid(userSchema(false, ['teacher']), user)
+  valid(userSchema(true, ['teacher']), { ...user, password: '' })
+  invalid(userSchema(false, ['teacher']), { ...user, password: 'short' }, 'password')
+  invalid(userSchema(false, ['teacher']), { ...user, role: 'unknown' }, 'role')
+  invalid(userSchema(false, ['teacher']), { ...user, full_name: '   ' }, 'full_name')
+  const role = { name: 'Guru', description: '', scope: 'assigned_classes', permissions: ['reports.export'] }
+  valid(roleSchema, role)
+  invalid(roleSchema, { ...role, permissions: ['reports.export', 'reports.export'] }, 'permissions')
 })
 
 test('academic and student forms require dates, references, names and valid statuses', () => {
@@ -58,8 +61,8 @@ test('academic and student forms require dates, references, names and valid stat
   invalid(academicYearSchema, { ...year, starts_on: '2027-02-29' }, 'starts_on')
   invalid(academicYearSchema, { ...year, ends_on: '2028-02-28' }, 'ends_on')
   invalid(newClassSchema, { academic_year_id: '', name: 'Kelas A', code: 'A', level: '', is_active: true }, 'academic_year_id')
-  valid(assignmentSchema, { class_id: id, teacher_id: id })
-  invalid(assignmentSchema, { class_id: id, teacher_id: '' }, 'teacher_id')
+  valid(assignmentSchema, { class_id: id, user_id: id })
+  invalid(assignmentSchema, { class_id: id, user_id: '' }, 'user_id')
   const student = { nis: '123', nisn: '', full_name: 'Siswa', class_id: id, status: 'active' }
   valid(newStudentSchema, student)
   invalid(newStudentSchema, { ...student, status: 'deleted' }, 'status')
@@ -105,16 +108,11 @@ test('report defaults preserve server dates while partial, reversed and overlong
   invalid(auditSchema, { from: '2026-10-14', to: '2026-10-13', actor_id: '', action: '', target_type: '' }, 'to')
 })
 
-test('consent, pairing and enrollment check references, future dates and encoded JPEG bounds', () => {
+test('pairing and enrollment check references and encoded JPEG bounds', () => {
   valid(pairingSchema, { pairing_token: 'a'.repeat(64), session_id: id })
   invalid(pairingSchema, { pairing_token: 'g'.repeat(64), session_id: id }, 'pairing_token')
   invalid(pairingSchema, { pairing_token: 'a'.repeat(64), session_id: 'open' }, 'session_id')
   invalid(reasonSchema, { reason: ' ' }, 'reason')
-  valid(guardianSchema, { full_name: 'Wali', relationship: 'parent', verification_ref: 'ref' })
-  invalid(guardianSchema, { full_name: 'Wali', relationship: 'friend', verification_ref: 'ref' }, 'relationship')
-  const consent = { guardian_id: id, policy_version: 'v1', evidence_ref: 'ref', valid_until: '2090-01-01T12:00' }
-  valid(consentSchema, consent)
-  invalid(consentSchema, { ...consent, valid_until: '2000-01-01T12:00' }, 'valid_until')
   const jpeg = '/9j/'
   valid(enrollmentSchema, { frames: [jpeg, jpeg, jpeg] })
   invalid(enrollmentSchema, { frames: [jpeg, jpeg] }, 'frames')

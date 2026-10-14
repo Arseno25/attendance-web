@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { toast } from 'vue-sonner'
-import { ChevronsUpDown, LogOut, UserRound } from '@lucide/vue'
+import { ChevronsUpDown, LogOut, UserRound, Settings } from '@lucide/vue'
 import { useSidebar } from '~/components/ui/sidebar'
-import { roleLabels } from '~/types/auth'
+import { displayRole } from '~/types/auth'
 
 const auth = useAuth()
+const config = useRuntimeConfig()
 const { isMobile } = useSidebar()
 const busy = ref(false)
 const user = computed(() => auth.session.value?.user)
@@ -43,12 +44,18 @@ async function logout() {
             class="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
           >
             <Avatar class="size-8 rounded-lg">
+              <AvatarImage
+                v-if="user.avatar_url"
+                :src="`${config.public.apiBase}${user.avatar_url}`"
+                :alt="user.full_name"
+                class="rounded-lg object-cover"
+              />
               <AvatarFallback class="rounded-lg">{{ initials }}</AvatarFallback>
             </Avatar>
             <div class="grid min-w-0 flex-1 text-left text-sm leading-tight">
               <span class="truncate font-medium">{{ user.full_name }}</span>
               <span class="truncate text-xs text-muted-foreground">
-                {{ roleLabels[user.role] }}
+                {{ displayRole(user) }}
               </span>
             </div>
             <ChevronsUpDown class="ml-auto size-4" />
@@ -67,7 +74,7 @@ async function logout() {
               variant="secondary"
               class="mt-1 w-fit"
             >
-              {{ roleLabels[user.role] }}
+              {{ displayRole(user) }}
             </Badge>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
@@ -75,6 +82,13 @@ async function logout() {
             <NuxtLink to="/admin/account">
               <UserRound />
               Akun saya
+            </NuxtLink>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem as-child>
+            <NuxtLink to="/admin/settings">
+              <Settings />
+              Pengaturan
             </NuxtLink>
           </DropdownMenuItem>
           <DropdownMenuSeparator />

@@ -1,14 +1,14 @@
 package auth
 
 import (
-	"attendance.local/api/internal/platform/httpresponse"
 	"context"
-	"github.com/jackc/pgx/v5"
 	"net/http"
-	"slices"
+
+	"attendance.local/api/internal/platform/httpresponse"
+	"github.com/jackc/pgx/v5"
 )
 
-// BeginAuthorized serializes school writes and checks live permissions after acquiring the lock. Alternatives allow any explicitly named permission.
+// BeginAuthorized serializes school writes and checks live permissions after acquiring the lock.
 func (s *Service) BeginAuthorized(w http.ResponseWriter, r *http.Request, permission string, write bool, alternatives ...string) (pgx.Tx, User, bool) {
 	actor, ok := s.Authenticate(w, r, write)
 	if !ok {
@@ -49,40 +49,23 @@ func (s *Service) BeginAuthorized(w http.ResponseWriter, r *http.Request, permis
 		httpresponse.Error(w, 401, "UNAUTHENTICATED", "Silakan masuk kembali")
 		return nil, User{}, false
 	}
-	actor.Grants = []string{}
-	actor.ClassIDs = []string{}
-	rows, err := tx.Query(r.Context(), `SELECT permission FROM permission_grants WHERE school_id=$1 AND user_id=$2`, s.schoolID, actor.ID)
-	if err == nil {
-		actor.Grants, err = pgx.CollectRows(rows, pgx.RowTo[string])
-	}
-	if err != nil {
+	if err = s.loadAccess(r.Context(), tx, &actor); err != nil {
 		fail()
 		databaseError(w, err)
 		return nil, User{}, false
 	}
-	allowed := slices.Contains(actor.Permissions(), permission)
+	allowed := permission == "" || actor.Can(permission, s.schoolID, "")
 	for _, alternative := range alternatives {
-		allowed = allowed || slices.Contains(actor.Permissions(), alternative)
+		allowed = allowed || actor.Can(alternative, s.schoolID, "")
 	}
-	// Manual operators need the scoped roster and may request corrections of their entries.
-	if (permission == "attendance.read" || permission == "corrections.request") && slices.Contains(actor.Permissions(), "attendance.manual") {
+	// Manual roster operators also access roster and correction endpoints.
+	if (permission == "attendance.read" || permission == "corrections.request") && actor.Can("attendance.manual", s.schoolID, "") {
 		allowed = true
 	}
 	if !allowed {
 		fail()
 		httpresponse.Error(w, 403, "FORBIDDEN", "Anda tidak memiliki izin untuk data ini")
 		return nil, User{}, false
-	}
-	if actor.Role == "teacher" {
-		rows, err = tx.Query(r.Context(), `SELECT DISTINCT a.class_id::text FROM teacher_assignments a JOIN classes c ON c.school_id=a.school_id AND c.id=a.class_id JOIN academic_years y ON y.school_id=c.school_id AND y.id=c.academic_year_id WHERE a.school_id=$1 AND a.teacher_id=$2 AND a.is_active AND c.is_active AND y.is_active AND a.starts_at<=statement_timestamp() AND a.ends_at>statement_timestamp()`, s.schoolID, actor.ID)
-		if err == nil {
-			actor.ClassIDs, err = pgx.CollectRows(rows, pgx.RowTo[string])
-		}
-		if err != nil {
-			fail()
-			databaseError(w, err)
-			return nil, User{}, false
-		}
 	}
 	return tx, actor, true
 }

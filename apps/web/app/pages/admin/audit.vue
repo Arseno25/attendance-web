@@ -29,9 +29,7 @@ const { errors, validate, clear } = useFormValidation(
 )
 const targets: Record<string, string> = {
   school: 'Sekolah',
-  guardian: 'Wali',
-  consent: 'Persetujuan biometrik',
-  device: 'Perangkat kiosk',
+  device: 'Perangkat absensi',
   import_batch: 'Batch import',
   user: 'Pengguna',
   session: 'Sesi akun',
@@ -52,13 +50,13 @@ const total = ref(0)
 const loading = ref(false)
 const message = ref('')
 const labels: Record<string, string> = {
+  'auth.photo_updated': 'Foto profil diperbarui',
+  'school.settings_updated': 'Pengaturan sekolah diperbarui',
+  'school.logo_updated': 'Logo sekolah diperbarui',
   'development.seed_reset': 'Data demo lokal direset',
-  'guardians.verified': 'Wali diverifikasi',
-  'consents.recorded': 'Consent dicatat',
-  'consents.withdrawn': 'Consent dicabut',
   'devices.created': 'Perangkat didaftarkan',
   'devices.revoked': 'Perangkat dicabut',
-  'devices.pairing_issued': 'Token pairing diterbitkan',
+  'devices.pairing_issued': 'Kode penghubung diterbitkan',
   'devices.paired': 'Perangkat dipasangkan',
   'students.import.previewed': 'Import ditinjau',
   'students.import.committed': 'Import siswa disimpan',
@@ -73,7 +71,7 @@ const labels: Record<string, string> = {
   'attendance.sessions.cancel': 'Sesi dibatalkan',
   'attendance.sessions.reconcile': 'Sesi direkonsiliasi',
   'attendance.manual.recorded': 'Absensi manual dicatat',
-  'attendance.roster.added': 'Roster ditambah',
+  'attendance.roster.added': 'Daftar siswa ditambah',
   'attendance.corrections.requested': 'Koreksi diajukan',
   'attendance.corrections.approved': 'Koreksi disetujui',
   'attendance.corrections.rejected': 'Koreksi ditolak',
@@ -147,8 +145,8 @@ await load()
 <template>
   <div class="flex min-w-0 flex-col gap-6">
     <PageHeader
-      title="Audit aktivitas"
-      description="Histori perubahan akun, data akademik, siswa, dan sesi, tanpa password atau data biometrik."
+      title="Riwayat aktivitas"
+      description="Histori perubahan akun, data akademik, siswa, dan sesi, tanpa password atau data wajah."
     >
       <template #actions>
         <Button
@@ -180,7 +178,7 @@ await load()
       <CardContent class="min-w-0 space-y-4">
         <form
           novalidate
-          aria-label="Filter audit"
+          aria-label="Filter riwayat"
           class="space-y-4"
           @submit.prevent="filter"
         >
@@ -348,16 +346,15 @@ await load()
         </div>
         <DataTable
           v-else
-          class="min-w-[760px]"
+          class="min-w-[560px]"
           :data="entries ?? []"
           :columns="[
             { id: 'waktu', label: 'Waktu', cellClass: 'whitespace-nowrap tabular-nums' },
             { id: 'aktivitas', label: 'Aktivitas' },
             { id: 'pelaku', label: 'Pelaku' },
             { id: 'target', label: 'Target' },
-            { id: 'request-id', label: 'Request ID', cellClass: 'font-mono text-xs' },
           ]"
-          caption="Audit aktivitas sekolah"
+          caption="Riwayat aktivitas sekolah"
           row-key="id"
           :loading="loading"
         >
@@ -365,18 +362,14 @@ await load()
             {{ date(entry.occurred_at) }}
           </template>
           <template #cell-aktivitas="{ item: entry }">
-            {{ labels[entry.action] ?? entry.action }}
+            {{ labels[entry.action] ?? 'Aktivitas lainnya' }}
           </template>
           <template #cell-pelaku="{ item: entry }">
             {{ entry.actor_name ?? 'Sistem / anonim' }}
           </template>
           <template #cell-target="{ item: entry }">
-            {{ targets[entry.target_type] ?? entry.target_type }}
-            <div class="text-xs text-muted-foreground">
-              {{ entry.target_id?.slice(0, 8) ?? '—' }}
-            </div>
+            {{ targets[entry.target_type] ?? 'Data sekolah' }}
           </template>
-          <template #cell-request-id="{ item: entry }">{{ entry.request_id }}</template>
           <template #empty>
             <Empty>
               <EmptyHeader>

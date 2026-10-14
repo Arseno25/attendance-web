@@ -172,7 +172,7 @@ await load()
             { id: 'kelas-jadwal', label: 'Kelas / jadwal', cellClass: 'font-medium' },
             { id: 'periode', label: 'Periode' },
             { id: 'status', label: 'Status' },
-            { id: 'tercatat-roster', label: 'Tercatat / roster', cellClass: 'tabular-nums' },
+            { id: 'tercatat-roster', label: 'Tercatat / siswa', cellClass: 'tabular-nums' },
             {
               id: 'tindakan',
               label: 'Tindakan',
@@ -253,7 +253,7 @@ await load()
         <DialogHeader>
           <DialogTitle>Buat sesi absensi</DialogTitle>
           <DialogDescription>
-            Sesi mengikuti jadwal dan kalender. Roster dibekukan saat sesi dibuka.
+            Sesi mengikuti jadwal dan kalender. Daftar siswa dibekukan saat sesi dibuka.
           </DialogDescription>
         </DialogHeader>
         <form

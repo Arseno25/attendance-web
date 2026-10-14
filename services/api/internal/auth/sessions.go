@@ -14,29 +14,47 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-func (s *Service) grants(ctx context.Context, u *User) error {
-	u.Grants = []string{}
+func (s *Service) loadAccess(ctx context.Context, q interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+}, u *User) error {
+	u.PermissionsList = []string{}
+	u.PermissionKeys = []string{}
 	u.ClassIDs = []string{}
-	rows, err := s.pool.Query(ctx, "SELECT permission FROM permission_grants WHERE school_id=$1 AND user_id=$2 ORDER BY permission", s.schoolID, u.ID)
+	err := q.QueryRow(ctx, `SELECT r.name,r.scope,
+		COALESCE(array(SELECT permission FROM role_permissions rp WHERE rp.school_id=r.school_id AND rp.role_id=r.id ORDER BY permission),ARRAY[]::text[])
+		FROM roles r WHERE r.school_id=$1 AND r.key=$2`, s.schoolID, u.Role).
+		Scan(&u.RoleName, &u.Scope, &u.PermissionsList)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var grant string
-		if err = rows.Scan(&grant); err != nil {
+	u.PermissionKeys = append([]string{}, u.PermissionsList...)
+	if u.Scope == ScopeAssignedClasses {
+		rows, err := q.Query(ctx, `SELECT DISTINCT a.class_id::text
+			FROM user_class_assignments a
+			JOIN classes c ON c.school_id=a.school_id AND c.id=a.class_id
+			JOIN academic_years y ON y.school_id=c.school_id AND y.id=c.academic_year_id
+		WHERE a.school_id=$1 AND a.user_id=$2 AND a.is_active AND c.is_active AND y.is_active
+			AND a.starts_at<=statement_timestamp() AND a.ends_at>statement_timestamp()
+		ORDER BY a.class_id::text`, s.schoolID, u.ID)
+		if err != nil {
 			return err
 		}
-		u.Grants = append(u.Grants, grant)
+		defer rows.Close()
+		for rows.Next() {
+			var classID string
+			if err = rows.Scan(&classID); err != nil {
+				return err
+			}
+			u.ClassIDs = append(u.ClassIDs, classID)
+		}
+		return rows.Err()
 	}
-	if err = rows.Err(); err != nil {
-		return err
-	}
-	rows.Close()
-	if u.Role == "teacher" {
-		err = s.pool.QueryRow(ctx, `SELECT ARRAY(SELECT DISTINCT a.class_id::text FROM teacher_assignments a JOIN classes c ON c.school_id=a.school_id AND c.id=a.class_id JOIN academic_years y ON y.school_id=c.school_id AND y.id=c.academic_year_id JOIN users t ON t.id=a.teacher_id AND t.school_id=a.school_id WHERE a.school_id=$1 AND a.teacher_id=$2 AND t.is_active AND t.role='teacher' AND a.is_active AND c.is_active AND y.is_active AND a.starts_at<=statement_timestamp() AND a.ends_at>statement_timestamp())`, s.schoolID, u.ID).Scan(&u.ClassIDs)
-	}
-	return err
+	return nil
+}
+
+func (s *Service) loadSessionAccess(ctx context.Context, u *User) error {
+	return s.loadAccess(ctx, s.pool, u)
 }
 
 func (s *Service) session(ctx context.Context, token string) (User, error) {
@@ -49,7 +67,7 @@ func (s *Service) session(ctx context.Context, token string) (User, error) {
  RETURNING u.id::text,u.school_id::text,u.email,u.full_name,u.role,u.is_active`, tokenHash(token), s.schoolID).
 		Scan(&u.ID, &u.SchoolID, &u.Email, &u.FullName, &u.Role, &u.Active)
 	if err == nil {
-		err = s.grants(ctx, &u)
+		err = s.loadSessionAccess(ctx, &u)
 	}
 	return u, err
 }
@@ -59,11 +77,16 @@ func (s *Service) sessionData(w http.ResponseWriter, r *http.Request, u User, to
 		ID       string `json:"id"`
 		Name     string `json:"name"`
 		Timezone string `json:"timezone"`
+		AppName  string `json:"app_name"`
+		LogoURL  string `json:"logo_url"`
 	}
-	if err := s.pool.QueryRow(r.Context(), "SELECT id::text,name,timezone FROM schools WHERE id=$1", s.schoolID).Scan(&school.ID, &school.Name, &school.Timezone); err != nil {
+	var logoRevision, photoRevision string
+	if err := s.pool.QueryRow(r.Context(), "SELECT id::text,name,timezone,app_name,COALESCE(md5(logo),''),COALESCE((SELECT md5(avatar) FROM users WHERE school_id=$1 AND id=$2),'') FROM schools WHERE id=$1", s.schoolID, u.ID).Scan(&school.ID, &school.Name, &school.Timezone, &school.AppName, &logoRevision, &photoRevision); err != nil {
 		databaseError(w, err)
 		return
 	}
+	school.LogoURL = imageURL("/school/logo", logoRevision)
+	u.AvatarURL = imageURL("/auth/profile/photo", photoRevision)
 	httpresponse.Data(w, 200, map[string]any{"user": u, "permissions": u.Permissions(), "school": school, "csrf_token": csrfToken(token)})
 }
 
@@ -182,7 +205,7 @@ func (s *Service) login(w http.ResponseWriter, r *http.Request) {
 		databaseError(w, err)
 		return
 	}
-	if err = s.grants(r.Context(), &u); err != nil {
+	if err = s.loadSessionAccess(r.Context(), &u); err != nil {
 		databaseError(w, err)
 		return
 	}
@@ -235,6 +258,9 @@ func (s *Service) Bootstrap(ctx context.Context, email, name, password, schoolNa
 	defer tx.Rollback(context.Background())
 	_, err = tx.Exec(ctx, "INSERT INTO schools(id,name) VALUES($1,$2) ON CONFLICT(id) DO NOTHING", s.schoolID, strings.TrimSpace(schoolName))
 	if err != nil {
+		return err
+	}
+	if err = seedBuiltinRoles(ctx, tx, s.schoolID); err != nil {
 		return err
 	}
 	var active bool

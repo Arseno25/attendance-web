@@ -1,5 +1,8 @@
 # Kelanjutan lokal — 13 Oktober 2026
 
+
+Catatan historis: modul wali/persetujuan telah dihapus dari alur aktif pada 14 Oktober 2026. Pendaftaran tanpa persetujuan berlaku di lokal dan produksi; tema kini berada di Pengaturan → Tampilan. Lihat [runbook terkini](LOCAL-RUNBOOK.md).
+
 Plan: `07-IMPLEMENTATION-PLAN.md`, base `8ea8321`. Pengguna meminta meneruskan seluruh plan, kamera tersedia, dataset akan didaftarkan, model dipasang oleh agent; Coolify ditunda atas instruksi pengguna dan semua pekerjaan fokus lokal.
 
 ## Status dan dependency

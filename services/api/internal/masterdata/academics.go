@@ -9,8 +9,8 @@ import (
 
 const yearColumns = `y.id::text AS id,y.school_id::text AS school_id,y.name,y.starts_on::text AS starts_on,y.ends_on::text AS ends_on,y.timezone,y.is_active,y.created_at,y.updated_at`
 const classColumns = `c.id::text AS id,c.school_id::text AS school_id,c.academic_year_id::text AS academic_year_id,c.code,c.name,c.level,c.is_active,c.created_at,c.updated_at,y.name AS academic_year_name,y.is_active AS year_active`
-const yearSelect = `SELECT ` + yearColumns + ` FROM academic_years y WHERE y.school_id=$1 AND ($2::text!='teacher' OR EXISTS(SELECT 1 FROM classes c WHERE c.academic_year_id=y.id AND c.school_id=y.school_id AND c.id=ANY($3::uuid[])))`
-const classSelect = `SELECT ` + classColumns + ` FROM classes c JOIN academic_years y ON y.id=c.academic_year_id AND y.school_id=c.school_id WHERE c.school_id=$1 AND ($2::text!='teacher' OR c.id=ANY($3::uuid[]))`
+const yearSelect = `SELECT ` + yearColumns + ` FROM academic_years y WHERE y.school_id=$1 AND (NOT $2::boolean OR EXISTS(SELECT 1 FROM classes c WHERE c.academic_year_id=y.id AND c.school_id=y.school_id AND c.id=ANY($3::uuid[])))`
+const classSelect = `SELECT ` + classColumns + ` FROM classes c JOIN academic_years y ON y.id=c.academic_year_id AND y.school_id=c.school_id WHERE c.school_id=$1 AND (NOT $2::boolean OR c.id=ANY($3::uuid[]))`
 
 func (s *Service) years(w http.ResponseWriter, r *http.Request) {
 	if !httpresponse.Method(w, r, "GET", "POST") {
@@ -27,7 +27,7 @@ func (s *Service) years(w http.ResponseWriter, r *http.Request) {
 	}
 	defer sc.tx.Rollback(context.Background())
 	if !write {
-		s.list(w, r, sc, yearSelect, s.schoolID, sc.user.Role, sc.classes)
+		s.list(w, r, sc, yearSelect, s.schoolID, sc.classScoped, sc.classes)
 		return
 	}
 	var in struct {
@@ -55,7 +55,7 @@ func (s *Service) years(w http.ResponseWriter, r *http.Request) {
 		dbError(w, err)
 		return
 	}
-	entity, err := one(r.Context(), sc.tx, yearSelect+` AND y.id=$4`, s.schoolID, sc.user.Role, sc.classes, id)
+	entity, err := one(r.Context(), sc.tx, yearSelect+` AND y.id=$4`, s.schoolID, sc.classScoped, sc.classes, id)
 	if err != nil {
 		dbError(w, err)
 		return
@@ -99,7 +99,7 @@ func (s *Service) year(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer sc.tx.Rollback(context.Background())
-	entity, err := one(r.Context(), sc.tx, yearSelect+` AND y.id=$4`, s.schoolID, sc.user.Role, sc.classes, id)
+	entity, err := one(r.Context(), sc.tx, yearSelect+` AND y.id=$4`, s.schoolID, sc.classScoped, sc.classes, id)
 	if err != nil {
 		dbError(w, err)
 		return
@@ -163,7 +163,7 @@ func (s *Service) year(w http.ResponseWriter, r *http.Request) {
 		dbError(w, err)
 		return
 	}
-	entity, err = one(r.Context(), sc.tx, yearSelect+` AND y.id=$4`, s.schoolID, sc.user.Role, sc.classes, id)
+	entity, err = one(r.Context(), sc.tx, yearSelect+` AND y.id=$4`, s.schoolID, sc.classScoped, sc.classes, id)
 	if err != nil {
 		dbError(w, err)
 		return
@@ -199,7 +199,7 @@ func (s *Service) classes(w http.ResponseWriter, r *http.Request) {
 			invalid(w, "Pencarian terlalu panjang")
 			return
 		}
-		s.list(w, r, sc, classSelect+` AND ($4='' OR c.academic_year_id=NULLIF($4,'')::uuid) AND ($5='' OR (c.is_active=NULLIF($5,'')::boolean AND ($5='false' OR y.is_active))) AND (c.code ILIKE $6 OR c.name ILIKE $6)`, s.schoolID, sc.user.Role, sc.classes, year, active, "%"+search+"%")
+		s.list(w, r, sc, classSelect+` AND ($4='' OR c.academic_year_id=NULLIF($4,'')::uuid) AND ($5='' OR (c.is_active=NULLIF($5,'')::boolean AND ($5='false' OR y.is_active))) AND (c.code ILIKE $6 OR c.name ILIKE $6)`, s.schoolID, sc.classScoped, sc.classes, year, active, "%"+search+"%")
 		return
 	}
 	var in struct {
@@ -229,7 +229,7 @@ func (s *Service) classes(w http.ResponseWriter, r *http.Request) {
 		dbError(w, err)
 		return
 	}
-	entity, err := one(r.Context(), sc.tx, classSelect+` AND c.id=$4`, s.schoolID, sc.user.Role, sc.classes, id)
+	entity, err := one(r.Context(), sc.tx, classSelect+` AND c.id=$4`, s.schoolID, sc.classScoped, sc.classes, id)
 	if err != nil {
 		dbError(w, err)
 		return
@@ -254,7 +254,7 @@ func (s *Service) class(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer sc.tx.Rollback(context.Background())
-	entity, err := one(r.Context(), sc.tx, classSelect+` AND c.id=$4`, s.schoolID, sc.user.Role, sc.classes, id)
+	entity, err := one(r.Context(), sc.tx, classSelect+` AND c.id=$4`, s.schoolID, sc.classScoped, sc.classes, id)
 	if err != nil {
 		dbError(w, err)
 		return
@@ -301,7 +301,7 @@ func (s *Service) class(w http.ResponseWriter, r *http.Request) {
 		dbError(w, err)
 		return
 	}
-	entity, err = one(r.Context(), sc.tx, classSelect+` AND c.id=$4`, s.schoolID, sc.user.Role, sc.classes, id)
+	entity, err = one(r.Context(), sc.tx, classSelect+` AND c.id=$4`, s.schoolID, sc.classScoped, sc.classes, id)
 	if err != nil {
 		dbError(w, err)
 		return

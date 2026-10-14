@@ -6,8 +6,11 @@ UV := $(CURDIR)/.tools/uv
 GOOSE := $(CURDIR)/.tools/goose
 GOOSE_VERSION := v3.29.0
 GOOSE_TAGS := no_clickhouse,no_libsql,no_mssql,no_mysql,no_sqlite3,no_vertica,no_ydb
+DEV_ADMIN_EMAIL ?= admin@school.test
+DEV_ADMIN_NAME ?= Admin Lokal
+DEV_SCHOOL_NAME ?= Sekolah Demo
 
-.PHONY: setup tools env check lint test build db-up db-stop migrate migration-status db-test seed dev-web dev-api dev-ai compose-check
+.PHONY: setup tools env check lint test build db-up db-stop migrate migration-status db-test seed dev-bootstrap dev-web dev-api dev-ai compose-check
 
 tools: $(UV) $(GOOSE)
 
@@ -71,6 +74,12 @@ db-test:
 seed:
 	@test "$$SEED_DEVELOPMENT" = 1 || { echo 'Dummy data only: run SEED_DEVELOPMENT=1 make seed on a development DB'; exit 1; }
 	psql "$$DATABASE_URL" -v ON_ERROR_STOP=1 -f services/api/seeds/development.sql
+
+dev-bootstrap:
+	@test "$(DEVELOPMENT_MODE)" = 1 || { echo 'Refusing dev bootstrap: set DEVELOPMENT_MODE=1 explicitly'; exit 1; }
+	@test -x .tools/bootstrap || { echo 'Build the bootstrap CLI first with make build'; exit 1; }
+	@python3 -c 'import ipaddress, os, sys; from urllib.parse import urlsplit; local=lambda host: host == "localhost" or (":" in host or all(char.isdigit() or char == "." for char in host)) and ipaddress.ip_address(host).is_loopback; origins=[urlsplit(os.environ["WEB_ORIGIN"]).hostname or "", urlsplit(os.environ["DATABASE_URL"]).hostname or ""]; sys.exit(0 if all(map(local, origins)) else 1)' || { echo 'Refusing dev bootstrap: WEB_ORIGIN and DATABASE_URL must both point to loopback'; exit 1; }
+	@printf '%s\n' 'Password1!' | .tools/bootstrap --email "$(DEV_ADMIN_EMAIL)" --name "$(DEV_ADMIN_NAME)" --school-name "$(DEV_SCHOOL_NAME)"
 
 dev-web:
 	npm --prefix apps/web run dev -- --host 127.0.0.1 --port "$${NUXT_PORT:-3000}"

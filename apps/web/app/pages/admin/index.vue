@@ -89,7 +89,7 @@ if (canView.value) {
         >
           <NuxtLink to="/admin/audit">
             <ScrollText />
-            Audit aktivitas
+            Riwayat aktivitas
           </NuxtLink>
         </Button>
       </CardContent>

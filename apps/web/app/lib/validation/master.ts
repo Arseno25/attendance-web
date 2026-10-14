@@ -27,7 +27,7 @@ export const classSchema = z.object({
   is_active: z.boolean(),
 })
 export const newClassSchema = classSchema.extend({ academic_year_id: uuid })
-export const assignmentSchema = z.object({ teacher_id: uuid, class_id: uuid })
+export const assignmentSchema = z.object({ user_id: uuid, class_id: uuid })
 export const studentStatus = z.enum(['active', 'inactive', 'graduated', 'transferred'], {
   error: 'Pilih status siswa yang valid.',
 })

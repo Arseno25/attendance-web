@@ -154,7 +154,7 @@ async function saveEntry() {
         method: 'POST',
         body: { student_id: form.student_id, reason: form.reason },
       })
-      toast.success('Siswa ditambahkan ke roster dengan alasan tercatat.')
+      toast.success('Siswa ditambahkan ke daftar siswa dengan alasan tercatat.')
     } else if (sheet.value === 'checkout') {
       await request('/attendances/check-out', {
         method: 'POST',
@@ -356,10 +356,10 @@ await load()
       <Card class="min-w-0">
         <CardHeader class="flex flex-row flex-wrap items-center justify-between gap-4">
           <div>
-            <CardTitle>Roster siswa</CardTitle>
+            <CardTitle>Daftar siswa siswa</CardTitle>
             <CardDescription class="mt-1.5">
               {{ session.recorded_count }} dari {{ session.roster_count }} siswa memiliki catatan.
-              Roster tetap saat siswa pindah kelas.
+              Daftar siswa tetap saat siswa pindah kelas.
             </CardDescription>
           </div>
           <Button
@@ -368,7 +368,7 @@ await load()
             @click="addRoster"
           >
             <Plus />
-            Tambah ke roster
+            Tambah ke daftar siswa
           </Button>
         </CardHeader>
         <CardContent class="min-w-0 space-y-4">
@@ -452,7 +452,7 @@ await load()
             class="space-y-3"
             role="status"
           >
-            <span class="sr-only">Memuat roster</span>
+            <span class="sr-only">Memuat daftar siswa</span>
             <Skeleton
               v-for="n in 4"
               :key="n"
@@ -476,7 +476,7 @@ await load()
                 hidden: !(canManual || canRequest),
               },
             ]"
-            caption="Roster dan catatan absensi siswa"
+            caption="Daftar siswa dan catatan absensi siswa"
             row-key="id"
             :loading="loading"
           >
@@ -549,7 +549,7 @@ await load()
                   <EmptyDescription>
                     {{
                       session?.status === 'scheduled'
-                        ? 'Roster tersedia setelah sesi dibuka.'
+                        ? 'Daftar siswa tersedia setelah sesi dibuka.'
                         : 'Siswa yang masuk setelah waktu mulai dapat ditambahkan dengan alasan.'
                     }}
                   </EmptyDescription>
@@ -589,7 +589,7 @@ await load()
                 : sheet === 'manual'
                   ? 'Catat absensi manual'
                   : sheet === 'add'
-                    ? 'Tambah siswa ke roster'
+                    ? 'Tambah siswa ke daftar siswa'
                     : 'Ajukan koreksi'
             }}
           </DialogTitle>
@@ -597,16 +597,16 @@ await load()
             {{
               selected
                 ? `${selected.full_name} · ${selected.nis}`
-                : 'Siswa aktif yang belum termasuk roster sesi ini.'
+                : 'Siswa aktif yang belum termasuk daftar siswa sesi ini.'
             }}
             {{
               sheet === 'checkout'
-                ? 'Waktu pulang memakai jam server setelah verifikasi petugas.'
+                ? 'Waktu pulang tercatat setelah petugas memeriksa data siswa.'
                 : sheet === 'manual'
-                  ? 'Waktu hadir dan status terlambat dihitung server.'
+                  ? 'Waktu hadir dan keterlambatan dihitung otomatis.'
                   : sheet === 'correction'
                     ? 'Catatan berubah setelah petugas berbeda menyetujui.'
-                    : 'Tambahan roster disimpan dengan alasan dan audit.'
+                    : 'Tambahan daftar siswa disimpan dengan alasan dan riwayat.'
             }}
           </DialogDescription>
         </DialogHeader>
@@ -650,7 +650,7 @@ await load()
                 </SelectContent>
               </Select>
               <FieldDescription v-if="!candidates.length">
-                Semua siswa aktif kelas ini sudah termasuk roster.
+                Semua siswa aktif kelas ini sudah termasuk daftar siswa.
               </FieldDescription>
               <FieldError
                 v-if="errors.student_id"
@@ -781,9 +781,9 @@ await load()
           <AlertDialogDescription>
             {{
               action === 'reconcile'
-                ? 'Siswa tanpa catatan akan menjadi alfa. Selesaikan koreksi pending dan tinjau roster terlebih dahulu; izin/sakit tetap dipertahankan.'
+                ? 'Siswa tanpa catatan akan menjadi alfa. Selesaikan koreksi yang menunggu keputusan dan periksa daftar siswa terlebih dahulu; izin dan sakit tetap dipertahankan.'
                 : action === 'open'
-                  ? 'Roster siswa akan dibekukan berdasarkan penempatan pada waktu mulai jadwal.'
+                  ? 'Daftar siswa ditetapkan berdasarkan kelas pada waktu sesi dimulai.'
                   : action === 'close'
                     ? 'Pencatatan manual berhenti. Koreksi tetap dapat diajukan sebelum rekonsiliasi.'
                     : 'Sesi yang belum dibuka dibatalkan tanpa membuat catatan alfa.'

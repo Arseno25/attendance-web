@@ -10,7 +10,9 @@ import (
 	"strconv"
 )
 
-type Config struct{ Address, DatabaseURL, WebOrigin, SchoolID, AIBaseURL, AIServiceToken string }
+type Config struct {
+	Address, DatabaseURL, WebOrigin, SchoolID, AIBaseURL, AIServiceToken string
+}
 
 func Load() (Config, error) {
 	c := Config{Address: os.Getenv("API_ADDRESS"), DatabaseURL: os.Getenv("DATABASE_URL"), WebOrigin: os.Getenv("WEB_ORIGIN"), SchoolID: os.Getenv("SCHOOL_ID"), AIBaseURL: os.Getenv("AI_BASE_URL"), AIServiceToken: os.Getenv("AI_SERVICE_TOKEN")}
@@ -33,6 +35,7 @@ func Load() (Config, error) {
 	if origin.Scheme == "http" && origin.Hostname() != "localhost" && !net.ParseIP(origin.Hostname()).IsLoopback() {
 		return c, errors.New("public WEB_ORIGIN requires HTTPS")
 	}
+
 	id := c.SchoolID
 	if len(id) != 36 || id[8] != '-' || id[13] != '-' || id[18] != '-' || id[23] != '-' {
 		return c, errors.New("SCHOOL_ID must be a UUID")

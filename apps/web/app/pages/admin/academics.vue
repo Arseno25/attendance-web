@@ -9,7 +9,7 @@ import {
 import { statusVariant } from '~/lib/status'
 import { Plus } from '@lucide/vue'
 import type { Result } from '~/types/auth'
-import type { AcademicYear, Assignment, SchoolClass, TeacherOption } from '~/types/master'
+import type { AcademicYear, Assignment, ClassAssignmentUser, SchoolClass } from '~/types/master'
 
 definePageMeta({ layout: 'admin', middleware: ['auth', 'academics'] })
 const { request, canWrite, options, dateTime } = useMasterData()
@@ -26,7 +26,7 @@ const classes = ref<SchoolClass[]>([])
 const assignments = ref<Assignment[]>([])
 const yearOptions = ref<AcademicYear[]>([])
 const classOptions = ref<SchoolClass[]>([])
-const teachers = ref<TeacherOption[]>([])
+const assignedUsers = ref<ClassAssignmentUser[]>([])
 const revoke = ref<Assignment | null>(null)
 const form = reactive({
   name: '',
@@ -37,7 +37,7 @@ const form = reactive({
   level: '',
   academic_year_id: '',
   class_id: '',
-  teacher_id: '',
+  user_id: '',
 })
 const { errors, validate, clear } = useFormValidation(
   () =>
@@ -53,12 +53,12 @@ const { errors, validate, clear } = useFormValidation(
 const labels: Record<string, string> = {
   years: 'tahun ajaran',
   classes: 'kelas',
-  assignments: 'penugasan',
+  assignments: 'penugasan kelas',
 }
 const paths: Record<string, string> = {
   years: '/academic-years',
   classes: '/classes',
-  assignments: '/teacher-assignments',
+  assignments: '/class-assignments',
 }
 let loadSequence = 0
 async function load() {
@@ -103,16 +103,16 @@ async function show(item?: AcademicYear | SchoolClass) {
       level: '',
       academic_year_id: '',
       class_id: '',
-      teacher_id: '',
+      user_id: '',
     },
     item ?? {},
   )
   try {
     if (tab.value === 'classes') yearOptions.value = await options<AcademicYear>('/academic-years')
     if (tab.value === 'assignments') {
-      ;[classOptions.value, teachers.value] = await Promise.all([
+      ;[classOptions.value, assignedUsers.value] = await Promise.all([
         options<SchoolClass>('/classes', { active: 'true' }),
-        options<TeacherOption>('/teacher-options'),
+        options<ClassAssignmentUser>('/class-assignment-users'),
       ])
     }
     open.value = true
@@ -141,7 +141,7 @@ async function save() {
               is_active: form.is_active,
               ...(!editing.value ? { academic_year_id: form.academic_year_id } : {}),
             }
-          : { teacher_id: form.teacher_id, class_id: form.class_id }
+          : { user_id: form.user_id, class_id: form.class_id }
     await request(`${paths[tab.value]}${editing.value ? `/${editing.value}` : ''}`, {
       method: editing.value ? 'PATCH' : 'POST',
       body,
@@ -160,7 +160,7 @@ async function revokeAssignment() {
   saving.value = true
   message.value = ''
   try {
-    await request(`/teacher-assignments/${revoke.value.id}`, {
+    await request(`/class-assignments/${revoke.value.id}`, {
       method: 'PATCH',
       body: { is_active: false },
     })
@@ -190,7 +190,7 @@ function openRevocation(item: Assignment) {
       title="Data akademik"
       :description="
         canWrite
-          ? 'Kelola tahun ajaran, kelas, dan penugasan guru.'
+          ? 'Kelola tahun ajaran, kelas, dan penugasan kelas.'
           : 'Kelas dan penugasan yang dapat Anda akses.'
       "
     >
@@ -231,7 +231,7 @@ function openRevocation(item: Assignment) {
           value="assignments"
           :disabled="loading"
         >
-          Guru
+          Penugasan kelas
         </TabsTrigger>
       </TabsList>
       <Card class="min-w-0">
@@ -403,8 +403,8 @@ function openRevocation(item: Assignment) {
               :data="assignments ?? []"
               :columns="[
                 {
-                  id: 'guru',
-                  label: 'Guru',
+                  id: 'pengguna',
+                  label: 'Pengguna',
                 },
                 {
                   id: 'kelas-tahun-ajaran',
@@ -423,8 +423,8 @@ function openRevocation(item: Assignment) {
               row-key="id"
               :loading="loading"
             >
-              <template #cell-guru="{ item }">
-                <div class="font-medium">{{ item.teacher_name }}</div>
+              <template #cell-pengguna="{ item }">
+                <div class="font-medium">{{ item.user_name }}</div>
                 <div class="text-xs text-muted-foreground">
                   {{ dateTime(item.starts_at) }} – {{ dateTime(item.ends_at) }}
                 </div>
@@ -449,7 +449,7 @@ function openRevocation(item: Assignment) {
               <template #cell-tindakan="{ item }">
                 <TableActions
                   v-if="item.is_active"
-                  :label="item.teacher_name"
+                  :label="item.user_name"
                   :disabled="saving"
                   :actions="[
                     {
@@ -517,7 +517,7 @@ function openRevocation(item: Assignment) {
                 ? 'Tanggal dikunci setelah kelas dibuat. Aktivasi menggantikan tahun yang sebelumnya aktif.'
                 : tab === 'classes'
                   ? 'Kelas selalu terikat pada satu tahun ajaran.'
-                  : 'Guru mendapat akses siswa pada kelas ini selama tahun ajaran aktif.'
+                  : 'Pengguna dengan peran berscope kelas mendapat akses selama penugasan aktif.'
             }}
           </DialogDescription>
         </DialogHeader>
@@ -687,38 +687,38 @@ function openRevocation(item: Assignment) {
               </Field>
             </template>
             <template v-else>
-              <Field :data-invalid="!!errors.teacher_id">
-                <FieldLabel for="assignment-teacher">Guru</FieldLabel>
+              <Field :data-invalid="!!errors.user_id">
+                <FieldLabel for="assignment-user">Pengguna dengan peran kelas</FieldLabel>
                 <Select
-                  v-model="form.teacher_id"
+                  v-model="form.user_id"
                   :disabled="saving"
                 >
                   <SelectTrigger
-                    id="assignment-teacher"
-                    :aria-invalid="!!errors.teacher_id"
-                    :aria-describedby="errors.teacher_id ? 'assignment-teacher-error' : undefined"
+                    id="assignment-user"
+                    :aria-invalid="!!errors.user_id"
+                    :aria-describedby="errors.user_id ? 'assignment-user-error' : undefined"
                     class="w-full"
                   >
-                    <SelectValue placeholder="Pilih guru aktif" />
+                    <SelectValue placeholder="Pilih pengguna aktif" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem
-                      v-for="teacher in teachers"
-                      :key="teacher.id"
-                      :value="teacher.id"
+                      v-for="user in assignedUsers"
+                      :key="user.id"
+                      :value="user.id"
                     >
-                      {{ teacher.name }}
+                      {{ user.name }} · {{ user.role }}
                     </SelectItem>
                   </SelectContent>
                 </Select>
-                <FieldDescription v-if="!teachers.length">
-                  Buat akun guru aktif melalui Pengguna & peran terlebih dahulu.
+                <FieldDescription v-if="!assignedUsers.length">
+                  Buat pengguna aktif dengan peran berscope kelas terlebih dahulu.
                 </FieldDescription>
                 <FieldError
-                  v-if="errors.teacher_id"
-                  id="assignment-teacher-error"
+                  v-if="errors.user_id"
+                  id="assignment-user-error"
                 >
-                  {{ errors.teacher_id }}
+                  {{ errors.user_id }}
                 </FieldError>
               </Field>
               <Field :data-invalid="!!errors.class_id">
@@ -807,10 +807,10 @@ function openRevocation(item: Assignment) {
         "
       >
         <AlertDialogHeader>
-          <AlertDialogTitle>Cabut penugasan guru?</AlertDialogTitle>
+          <AlertDialogTitle>Cabut penugasan kelas?</AlertDialogTitle>
           <AlertDialogDescription>
-            {{ revoke?.teacher_name }} akan kehilangan akses ke {{ revoke?.class_name }} dari
-            penugasan ini. Histori penugasan tetap tersimpan.
+            {{ revoke?.user_name }} akan kehilangan akses ke {{ revoke?.class_name }} dari penugasan
+            ini. Histori penugasan tetap tersimpan.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <Alert

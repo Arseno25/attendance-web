@@ -2,7 +2,7 @@
 import { toast } from 'vue-sonner'
 import { Save } from '@lucide/vue'
 import { profileSchema } from '~/lib/validation/auth'
-import { roleLabels } from '~/types/auth'
+import { displayRole } from '~/types/auth'
 
 definePageMeta({ layout: 'admin', middleware: ['auth'] })
 useHead({ title: 'Akun saya' })
@@ -16,6 +16,16 @@ const form = reactive({
   confirm_password: '',
 })
 const busy = ref(false)
+const photoBusy = ref(false)
+const initials = computed(() =>
+  auth.session.value?.user.full_name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((word) => word[0])
+    .join('')
+    .toUpperCase(),
+)
 const { errors, validate, clear } = useFormValidation(
   () => profileSchema(auth.session.value?.user.email ?? ''),
   () => form,
@@ -35,8 +45,15 @@ function reset() {
   clear()
 }
 
+async function photoUpdated() {
+  try {
+    await auth.load()
+  } catch {
+    toast.warning('Foto disimpan. Muat ulang halaman untuk memperbarui menu akun.')
+  }
+}
 async function save() {
-  if (busy.value || !validate()) return
+  if (busy.value || photoBusy.value || !validate()) return
   busy.value = true
 
   try {
@@ -68,7 +85,7 @@ reset()
         <Button
           type="submit"
           form="account-form"
-          :disabled="busy"
+          :disabled="busy || photoBusy"
         >
           <Spinner v-if="busy" />
           <Save v-else />
@@ -88,6 +105,18 @@ reset()
           <CardDescription>Peran dan izin dikelola administrator sekolah.</CardDescription>
         </CardHeader>
         <CardContent>
+          <div class="mb-6">
+            <ImageUploadField
+              label="Foto profil"
+              endpoint="/auth/profile/photo"
+              :value="auth.session.value?.user.avatar_url"
+              :initials="initials"
+              :disabled="busy"
+              @updated="photoUpdated"
+              @busy-change="photoBusy = $event"
+            />
+          </div>
+          <Separator class="mb-6" />
           <FieldGroup>
             <Field :data-invalid="!!errors.full_name">
               <FieldLabel for="account-name">Nama lengkap</FieldLabel>
@@ -95,7 +124,7 @@ reset()
                 id="account-name"
                 v-model="form.full_name"
                 autocomplete="name"
-                :disabled="busy"
+                :disabled="busy || photoBusy"
                 :aria-invalid="!!errors.full_name"
                 :aria-describedby="errors.full_name ? 'account-name-error' : undefined"
               />
@@ -113,7 +142,7 @@ reset()
                 v-model="form.email"
                 type="email"
                 autocomplete="username"
-                :disabled="busy"
+                :disabled="busy || photoBusy"
                 :aria-invalid="!!errors.email"
                 :aria-describedby="errors.email ? 'account-email-error' : undefined"
               />
@@ -128,7 +157,7 @@ reset()
               <FieldLabel>Peran</FieldLabel>
               <div>
                 <Badge variant="secondary">
-                  {{ auth.session.value ? roleLabels[auth.session.value.user.role] : '—' }}
+                  {{ auth.session.value ? displayRole(auth.session.value.user) : '—' }}
                 </Badge>
               </div>
             </Field>
@@ -153,7 +182,7 @@ reset()
                 type="password"
                 autocomplete="new-password"
                 minlength="8"
-                :disabled="busy"
+                :disabled="busy || photoBusy"
                 :aria-invalid="!!errors.new_password"
                 :aria-describedby="
                   errors.new_password
@@ -179,7 +208,7 @@ reset()
                 v-model="form.confirm_password"
                 type="password"
                 autocomplete="new-password"
-                :disabled="busy"
+                :disabled="busy || photoBusy"
                 :aria-invalid="!!errors.confirm_password"
                 :aria-describedby="
                   errors.confirm_password
@@ -204,7 +233,7 @@ reset()
                 v-model="form.current_password"
                 type="password"
                 autocomplete="current-password"
-                :disabled="busy"
+                :disabled="busy || photoBusy"
                 :aria-invalid="!!errors.current_password"
                 :aria-describedby="
                   errors.current_password

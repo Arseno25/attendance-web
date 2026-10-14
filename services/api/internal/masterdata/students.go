@@ -12,8 +12,8 @@ import (
 
 const studentSelect = `SELECT st.id::text AS id,st.school_id::text AS school_id,st.nis,st.nisn,st.full_name,st.status,st.created_at,st.updated_at,
  latest.class_id::text AS class_id,latest.class_name,latest.academic_year_id::text AS academic_year_id,latest.year_name AS academic_year_name
- FROM students st LEFT JOIN LATERAL(SELECT e.class_id,c.name AS class_name,e.academic_year_id,y.name AS year_name FROM student_enrollments e JOIN classes c ON c.id=e.class_id AND c.school_id=e.school_id JOIN academic_years y ON y.id=e.academic_year_id AND y.school_id=e.school_id WHERE e.student_id=st.id AND e.school_id=st.school_id AND ($4='' OR e.academic_year_id=NULLIF($4,'')::uuid) AND ($2::text!='teacher' OR e.class_id=ANY($3::uuid[])) AND e.joined_at<=statement_timestamp() ORDER BY e.joined_at DESC LIMIT 1) latest ON true
- WHERE st.school_id=$1 AND ($2::text!='teacher' OR (st.status='active' AND EXISTS(SELECT 1 FROM student_enrollments e WHERE e.school_id=st.school_id AND e.student_id=st.id AND e.class_id=ANY($3::uuid[]) AND e.joined_at<=statement_timestamp() AND e.left_at>statement_timestamp())))`
+ FROM students st LEFT JOIN LATERAL(SELECT e.class_id,c.name AS class_name,e.academic_year_id,y.name AS year_name FROM student_enrollments e JOIN classes c ON c.id=e.class_id AND c.school_id=e.school_id JOIN academic_years y ON y.id=e.academic_year_id AND y.school_id=e.school_id WHERE e.student_id=st.id AND e.school_id=st.school_id AND ($4='' OR e.academic_year_id=NULLIF($4,'')::uuid) AND (NOT $2::boolean OR e.class_id=ANY($3::uuid[])) AND e.joined_at<=statement_timestamp() ORDER BY e.joined_at DESC LIMIT 1) latest ON true
+ WHERE st.school_id=$1 AND (NOT $2::boolean OR (st.status='active' AND EXISTS(SELECT 1 FROM student_enrollments e WHERE e.school_id=st.school_id AND e.student_id=st.id AND e.class_id=ANY($3::uuid[]) AND e.joined_at<=statement_timestamp() AND e.left_at>statement_timestamp())))`
 const studentColumns = `id::text AS id,school_id::text AS school_id,nis,nisn,full_name,status,created_at,updated_at`
 
 func studentStatus(status string) bool {
@@ -55,7 +55,7 @@ func (s *Service) students(w http.ResponseWriter, r *http.Request) {
 			invalid(w, "Filter siswa tidak valid")
 			return
 		}
-		s.list(w, r, sc, studentSelect+` AND ($4='' OR latest.academic_year_id IS NOT NULL) AND ($5='' OR latest.class_id=NULLIF($5,'')::uuid) AND (st.nis ILIKE $6 OR st.full_name ILIKE $6) AND ($7='' OR st.status=$7)`, s.schoolID, sc.user.Role, sc.classes, year, class, "%"+search+"%", status)
+		s.list(w, r, sc, studentSelect+` AND ($4='' OR latest.academic_year_id IS NOT NULL) AND ($5='' OR latest.class_id=NULLIF($5,'')::uuid) AND (st.nis ILIKE $6 OR st.full_name ILIKE $6) AND ($7='' OR st.status=$7)`, s.schoolID, sc.classScoped, sc.classes, year, class, "%"+search+"%", status)
 		return
 	}
 	var in struct {
@@ -88,7 +88,7 @@ func (s *Service) students(w http.ResponseWriter, r *http.Request) {
 		dbError(w, err)
 		return
 	}
-	entity, err := one(r.Context(), sc.tx, studentSelect+` AND st.id=$5`, s.schoolID, sc.user.Role, sc.classes, "", id)
+	entity, err := one(r.Context(), sc.tx, studentSelect+` AND st.id=$5`, s.schoolID, sc.classScoped, sc.classes, "", id)
 	if err != nil {
 		dbError(w, err)
 		return
@@ -113,13 +113,13 @@ func (s *Service) student(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer sc.tx.Rollback(context.Background())
-	entity, err := one(r.Context(), sc.tx, studentSelect+` AND st.id=$5`, s.schoolID, sc.user.Role, sc.classes, "", id)
+	entity, err := one(r.Context(), sc.tx, studentSelect+` AND st.id=$5`, s.schoolID, sc.classScoped, sc.classes, "", id)
 	if err != nil {
 		dbError(w, err)
 		return
 	}
 	if !write {
-		history, err := rows(r.Context(), sc.tx, `SELECT e.id::text AS id,e.class_id::text AS class_id,c.name AS class_name,c.code AS class_code,e.academic_year_id::text AS academic_year_id,y.name AS academic_year_name,e.joined_at,e.left_at,e.reason FROM student_enrollments e JOIN classes c ON c.id=e.class_id AND c.school_id=e.school_id JOIN academic_years y ON y.id=e.academic_year_id AND y.school_id=e.school_id WHERE e.school_id=$1 AND e.student_id=$2 AND ($3!='teacher' OR e.class_id=ANY($4::uuid[])) ORDER BY e.joined_at DESC`, s.schoolID, id, sc.user.Role, sc.classes)
+		history, err := rows(r.Context(), sc.tx, `SELECT e.id::text AS id,e.class_id::text AS class_id,c.name AS class_name,c.code AS class_code,e.academic_year_id::text AS academic_year_id,y.name AS academic_year_name,e.joined_at,e.left_at,e.reason FROM student_enrollments e JOIN classes c ON c.id=e.class_id AND c.school_id=e.school_id JOIN academic_years y ON y.id=e.academic_year_id AND y.school_id=e.school_id WHERE e.school_id=$1 AND e.student_id=$2 AND (NOT $3::boolean OR e.class_id=ANY($4::uuid[])) ORDER BY e.joined_at DESC`, s.schoolID, id, sc.classScoped, sc.classes)
 		if err != nil {
 			dbError(w, err)
 			return

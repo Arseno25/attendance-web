@@ -33,7 +33,9 @@ class ImageError(ValueError):
 def jpeg_size(raw):
     """Inspect SOF dimensions before allocating a decoded image."""
     if len(raw) < 4 or raw[:2] != b"\xff\xd8" or raw[-2:] != b"\xff\xd9":
-        raise ImageError("INVALID_IMAGE", "Gunakan JPEG kamera yang valid")
+        raise ImageError(
+            "INVALID_IMAGE", "Foto belum dapat diproses. Ambil ulang dari kamera."
+        )
     offset = 2
     while offset + 4 <= len(raw):
         if raw[offset] != 255:
@@ -63,12 +65,16 @@ def jpeg_size(raw):
                 )
             return width, height
         offset += size
-    raise ImageError("INVALID_IMAGE", "Header JPEG tidak valid")
+    raise ImageError(
+        "INVALID_IMAGE", "Foto belum dapat dibaca. Ambil ulang dari kamera."
+    )
 
 
 def decode_image(value):
     if not value or len(value) > ((MAX_IMAGE_BYTES + 2) // 3) * 4:
-        raise ImageError("IMAGE_TOO_LARGE", "JPEG maksimal 384 KiB")
+        raise ImageError(
+            "IMAGE_TOO_LARGE", "Foto terlalu besar. Ambil ulang dari kamera."
+        )
     try:
         raw = base64.b64decode(value, validate=True)
     except ValueError, binascii.Error:
@@ -76,11 +82,15 @@ def decode_image(value):
             "INVALID_IMAGE", "Gunakan base64 JPEG tanpa data URL"
         ) from None
     if len(raw) > MAX_IMAGE_BYTES:
-        raise ImageError("IMAGE_TOO_LARGE", "JPEG maksimal 384 KiB")
+        raise ImageError(
+            "IMAGE_TOO_LARGE", "Foto terlalu besar. Ambil ulang dari kamera."
+        )
     expected = jpeg_size(raw)
     frame = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
     if frame is None or (frame.shape[1], frame.shape[0]) != expected:
-        raise ImageError("INVALID_IMAGE", "JPEG tidak dapat dibaca")
+        raise ImageError(
+            "INVALID_IMAGE", "Foto belum dapat dibaca. Ambil ulang dari kamera."
+        )
     return frame, hashlib.sha256(raw).digest()
 
 
@@ -263,17 +273,17 @@ class Pipeline:
 
     def enroll(self, frames, cipher, school_id, student_id, consent_id):
         if not 3 <= len(frames) <= 5:
-            raise ImageError("FRAME_COUNT", "Ambil 3–5 frame kamera")
+            raise ImageError("FRAME_COUNT", "Ambil 3–5 foto dari kamera.")
         vectors, seen = [], set()
         for value in frames:
             frame, digest = decode_image(value)
             if digest in seen:
-                raise ImageError("DUPLICATE_FRAME", "Ambil frame kamera yang berbeda")
+                raise ImageError("DUPLICATE_FRAME", "Ambil foto kamera yang berbeda.")
             seen.add(digest)
             faces = self.detect(frame)
             if len(faces) != 1:
                 raise ImageError(
-                    "FACE_COUNT", "Setiap frame harus berisi tepat satu wajah"
+                    "FACE_COUNT", "Pastikan setiap foto hanya menampilkan satu wajah."
                 )
             self.check_quality(frame, faces[0])
             vector = self.feature(frame, faces[0])
@@ -281,7 +291,7 @@ class Pipeline:
             if any(float(vector @ previous) < 0.6 for previous in vectors):
                 raise ImageError(
                     "INCONSISTENT_IDENTITY",
-                    "Frame wajah tidak konsisten; ulangi pengambilan",
+                    "Foto menampilkan wajah yang berbeda. Ulangi pengambilan.",
                 )
             vectors.append(vector)
         result = cipher.encrypt(

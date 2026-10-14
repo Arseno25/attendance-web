@@ -64,11 +64,11 @@ func (s *Service) recognize(w http.ResponseWriter, r *http.Request) {
 	in.TrackID = strings.ToLower(in.TrackID)
 	taken, err := time.Parse(time.RFC3339Nano, in.CapturedAt)
 	if !httpresponse.ValidID(in.EventID) || !httpresponse.ValidID(in.TrackID) || err != nil || math.Abs(time.Since(taken).Seconds()) > 30 || !aiclient.ValidateImage(in.Image) {
-		invalid(w, "Frame JPEG, event/track UUID dan waktu pengambilan (maksimal 30 detik) wajib valid")
+		invalid(w, "Foto kamera belum dapat diproses. Ambil ulang dan coba lagi.")
 		return
 	}
 	gallery := []aiclient.Template{}
-	records, err := tx.Query(r.Context(), `SELECT f.student_id::text,f.consent_id::text,f.ciphertext,f.nonce,f.key_id,f.model_sha256 FROM face_templates f JOIN students st ON st.school_id=f.school_id AND st.id=f.student_id JOIN biometric_consents c ON c.school_id=f.school_id AND c.id=f.consent_id AND c.student_id=f.student_id JOIN attendance_session_participants p ON p.school_id=f.school_id AND p.student_id=f.student_id AND p.session_id=$2 WHERE f.school_id=$1 AND st.status='active' AND c.withdrawn_at IS NULL AND c.valid_until>clock_timestamp() AND NOT EXISTS(SELECT 1 FROM biometric_tombstones t WHERE t.school_id=f.school_id AND t.consent_id=f.consent_id) ORDER BY f.student_id LIMIT 3001`, s.schoolID, device["session_id"])
+	records, err := tx.Query(r.Context(), `SELECT f.student_id::text,COALESCE(f.consent_id::text,''),f.ciphertext,f.nonce,f.key_id,f.model_sha256 FROM face_templates f JOIN students st ON st.school_id=f.school_id AND st.id=f.student_id JOIN attendance_session_participants p ON p.school_id=f.school_id AND p.student_id=f.student_id AND p.session_id=$2 WHERE f.school_id=$1 AND st.status='active' ORDER BY f.student_id LIMIT 3001`, s.schoolID, device["session_id"])
 	if err != nil {
 		dbError(w, err)
 		return
@@ -113,7 +113,7 @@ func (s *Service) recognize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if result.EventID != in.EventID || result.GalleryRevision != revision || len(result.Faces) > 100 {
-		httpresponse.Error(w, 503, "AI_INVALID_RESPONSE", "Respons layanan wajah tidak valid")
+		httpresponse.Error(w, 503, "AI_INVALID_RESPONSE", "Pendaftaran wajah belum dapat disimpan. Coba lagi nanti.")
 		return
 	}
 	for _, face := range result.Faces {
@@ -169,7 +169,7 @@ func (s *Service) acceptRecognition(r *http.Request, tx pgx.Tx, device map[strin
 	if cookie == nil {
 		return nil, errState
 	}
-	err := tx.QueryRow(r.Context(), `SELECT p.full_name,ds.paired_by::text,clock_timestamp(),a.late_after FROM attendance_session_participants p JOIN attendance_sessions a ON a.school_id=p.school_id AND a.id=p.session_id JOIN students st ON st.school_id=p.school_id AND st.id=p.student_id JOIN face_templates f ON f.school_id=st.school_id AND f.student_id=st.id JOIN biometric_consents c ON c.school_id=f.school_id AND c.id=f.consent_id AND c.student_id=f.student_id JOIN device_sessions ds ON ds.school_id=p.school_id AND ds.session_id=p.session_id JOIN users u ON u.school_id=ds.school_id AND u.id=ds.paired_by WHERE p.school_id=$1 AND p.session_id=$2 AND p.student_id=$3 AND ds.token_hash=$4 AND ds.expires_at>clock_timestamp() AND u.is_active AND st.status='active' AND a.status='open' AND a.starts_at<=clock_timestamp() AND a.closes_at>clock_timestamp() AND c.withdrawn_at IS NULL AND c.valid_until>clock_timestamp() AND f.model_sha256=$5 AND NOT EXISTS(SELECT 1 FROM biometric_tombstones t WHERE t.school_id=c.school_id AND t.consent_id=c.id)`, s.schoolID, device["session_id"], student, deviceHash(cookie.Value), result.ModelSHA).Scan(&name, &actor, &now, &late)
+	err := tx.QueryRow(r.Context(), `SELECT p.full_name,ds.paired_by::text,clock_timestamp(),a.late_after FROM attendance_session_participants p JOIN attendance_sessions a ON a.school_id=p.school_id AND a.id=p.session_id JOIN students st ON st.school_id=p.school_id AND st.id=p.student_id JOIN face_templates f ON f.school_id=st.school_id AND f.student_id=st.id JOIN device_sessions ds ON ds.school_id=p.school_id AND ds.session_id=p.session_id JOIN users u ON u.school_id=ds.school_id AND u.id=ds.paired_by WHERE p.school_id=$1 AND p.session_id=$2 AND p.student_id=$3 AND ds.token_hash=$4 AND ds.expires_at>clock_timestamp() AND u.is_active AND st.status='active' AND a.status='open' AND a.starts_at<=clock_timestamp() AND a.closes_at>clock_timestamp() AND f.model_sha256=$5`, s.schoolID, device["session_id"], student, deviceHash(cookie.Value), result.ModelSHA).Scan(&name, &actor, &now, &late)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, errState
 	}

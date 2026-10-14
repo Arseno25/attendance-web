@@ -14,7 +14,6 @@ import (
 )
 
 const templateMetadata = `id::text AS id,created_at,model_sha256,frame_count,status`
-const consentEligibility = `SELECT c.id::text FROM biometric_consents c JOIN students st ON st.school_id=c.school_id AND st.id=c.student_id WHERE c.school_id=$1 AND c.student_id=$2 AND st.status='active' AND c.withdrawn_at IS NULL AND c.valid_until>clock_timestamp() AND NOT EXISTS(SELECT 1 FROM biometric_tombstones t WHERE t.school_id=c.school_id AND t.consent_id=c.id) ORDER BY c.created_at DESC LIMIT 1`
 
 func (s *Service) biometricRead(w http.ResponseWriter, r *http.Request) (*scope, bool) {
 	tx, user, ok := s.auth.BeginAuthorized(w, r, "biometrics.enroll", false, "biometrics.revoke")
@@ -54,8 +53,8 @@ func (s *Service) faceStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer sc.tx.Rollback(context.Background())
-	var found bool
-	if err := sc.tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM students WHERE school_id=$1 AND id=$2)`, s.schoolID, id).Scan(&found); err != nil {
+	var found, active bool
+	if err := sc.tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM students WHERE school_id=$1 AND id=$2), EXISTS(SELECT 1 FROM students WHERE school_id=$1 AND id=$2 AND status='active')`, s.schoolID, id).Scan(&found, &active); err != nil {
 		dbError(w, err)
 		return
 	}
@@ -63,30 +62,20 @@ func (s *Service) faceStatus(w http.ResponseWriter, r *http.Request) {
 		httpresponse.Error(w, 404, "NOT_FOUND", "Siswa tidak ditemukan")
 		return
 	}
-	var consent string
-	err := sc.tx.QueryRow(r.Context(), consentEligibility, s.schoolID, id).Scan(&consent)
+	metadata, err := one(r.Context(), sc.tx, `SELECT f.id::text AS id,f.created_at,f.model_sha256,f.frame_count,f.status FROM face_templates f JOIN students st ON st.school_id=f.school_id AND st.id=f.student_id WHERE f.school_id=$1 AND f.student_id=$2 AND st.status='active'`, s.schoolID, id)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		dbError(w, err)
 		return
 	}
-	eligible := err == nil
-	var metadata map[string]any
-	if eligible {
-		metadata, err = one(r.Context(), sc.tx, `SELECT f.id::text AS id,f.created_at,f.model_sha256,f.frame_count,f.status FROM face_templates f JOIN students st ON st.school_id=f.school_id AND st.id=f.student_id JOIN biometric_consents c ON c.school_id=f.school_id AND c.id=f.consent_id AND c.student_id=f.student_id WHERE f.school_id=$1 AND f.student_id=$2 AND st.status='active' AND c.withdrawn_at IS NULL AND c.valid_until>clock_timestamp() AND NOT EXISTS(SELECT 1 FROM biometric_tombstones t WHERE t.school_id=f.school_id AND t.consent_id=f.consent_id)`, s.schoolID, id)
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			dbError(w, err)
-			return
-		}
-	}
 	state := s.ai.Status(r.Context())
-	httpresponse.Data(w, 200, map[string]any{"enrolled": metadata != nil, "consent_eligible": eligible, "pipeline_ready": state.PipelineReady, "recognition_enabled": state.RecognitionEnabled, "block_reason": state.BlockReason, "template": metadata, "evaluation": state.Evaluation})
+	httpresponse.Data(w, 200, map[string]any{"enrolled": metadata != nil, "enrollment_allowed": active, "pipeline_ready": state.PipelineReady, "recognition_enabled": state.RecognitionEnabled, "block_reason": state.BlockReason, "template": metadata, "evaluation": state.Evaluation})
 }
 
 func (s *Service) enrollFace(w http.ResponseWriter, r *http.Request) {
 	if !httpresponse.Method(w, r, "POST") {
 		return
 	}
-	sc, id, ok := s.consentStudent(w, r, "biometrics.enroll", true)
+	sc, id, ok := s.biometricStudent(w, r, "biometrics.enroll", true)
 	if !ok {
 		return
 	}
@@ -101,16 +90,6 @@ func (s *Service) enrollFace(w http.ResponseWriter, r *http.Request) {
 		httpresponse.Error(w, 409, "STUDENT_NOT_ACTIVE", "Siswa harus aktif untuk mendaftarkan wajah")
 		return
 	}
-	var consent string
-	err = sc.tx.QueryRow(r.Context(), consentEligibility, s.schoolID, id).Scan(&consent)
-	if errors.Is(err, pgx.ErrNoRows) {
-		httpresponse.Error(w, 410, "CONSENT_REQUIRED", "Consent wali belum tersedia, kedaluwarsa atau sudah dicabut")
-		return
-	}
-	if err != nil {
-		dbError(w, err)
-		return
-	}
 	var in struct {
 		Frames []string `json:"frames"`
 	}
@@ -118,22 +97,22 @@ func (s *Service) enrollFace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(in.Frames) < 3 || len(in.Frames) > 5 {
-		invalid(w, "Ambil 3–5 frame JPEG kamera")
+		invalid(w, "Ambil 3–5 foto dari kamera.")
 		return
 	}
 	for _, frame := range in.Frames {
 		if !aiclient.ValidateImage(frame) {
-			invalid(w, "Gunakan base64 JPEG 160–1280 piksel, maksimal 384 KiB per frame")
+			invalid(w, "Foto belum dapat diproses. Ambil ulang dari kamera.")
 			return
 		}
 	}
-	result, err := s.ai.Enroll(r.Context(), s.schoolID, id, consent, in.Frames)
+	result, err := s.ai.Enroll(r.Context(), s.schoolID, id, "", in.Frames)
 	if err != nil {
 		var validation *aiclient.ValidationError
 		if errors.As(err, &validation) {
 			httpresponse.Error(w, 422, validation.Code, validation.Message)
 		} else {
-			httpresponse.Error(w, 503, "AI_UNAVAILABLE", "Layanan wajah belum tersedia; coba kembali")
+			httpresponse.Error(w, 503, "AI_UNAVAILABLE", "Pendaftaran wajah belum tersedia. Coba lagi nanti.")
 		}
 		return
 	}
@@ -141,13 +120,13 @@ func (s *Service) enrollFace(w http.ResponseWriter, r *http.Request) {
 	ciphertext, err := base64.StdEncoding.Strict().DecodeString(result.Ciphertext)
 	nonce, nonceErr := base64.StdEncoding.Strict().DecodeString(result.Nonce)
 	if err != nil || nonceErr != nil || len(ciphertext) != 528 || len(nonce) != 12 || len(result.ModelSHA) != 64 || modelErr != nil || result.FrameCount != len(in.Frames) || result.KeyID == "" || len(result.KeyID) > 80 || result.Status != "provisional" {
-		httpresponse.Error(w, 503, "AI_INVALID_RESPONSE", "Respons layanan wajah tidak valid")
+		httpresponse.Error(w, 503, "AI_INVALID_RESPONSE", "Pendaftaran wajah belum dapat disimpan. Coba lagi nanti.")
 		return
 	}
 	_, err = sc.tx.Exec(r.Context(), `DELETE FROM face_templates WHERE school_id=$1 AND student_id=$2`, s.schoolID, id)
 	var metadata map[string]any
 	if err == nil {
-		metadata, err = one(r.Context(), sc.tx, `INSERT INTO face_templates(school_id,student_id,consent_id,ciphertext,nonce,key_id,model_sha256,frame_count,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING `+templateMetadata, s.schoolID, id, consent, ciphertext, nonce, result.KeyID, result.ModelSHA, result.FrameCount, sc.user.ID)
+		metadata, err = one(r.Context(), sc.tx, `INSERT INTO face_templates(school_id,student_id,consent_id,ciphertext,nonce,key_id,model_sha256,frame_count,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING `+templateMetadata, s.schoolID, id, nil, ciphertext, nonce, result.KeyID, result.ModelSHA, result.FrameCount, sc.user.ID)
 	}
 	if err != nil {
 		dbError(w, err)
@@ -172,7 +151,7 @@ func (s *Service) facePreview(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.auth.Authenticate(w, r, true); !ok {
 		return
 	}
-	sc, id, ok := s.consentStudent(w, r, "biometrics.enroll", false)
+	sc, id, ok := s.biometricStudent(w, r, "biometrics.enroll", false)
 	if !ok {
 		return
 	}
@@ -186,15 +165,6 @@ func (s *Service) facePreview(w http.ResponseWriter, r *http.Request) {
 		httpresponse.Error(w, 409, "STUDENT_NOT_ACTIVE", "Siswa harus aktif untuk menggunakan kamera wajah")
 		return
 	}
-	var consent string
-	if err := sc.tx.QueryRow(r.Context(), consentEligibility, s.schoolID, id).Scan(&consent); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			httpresponse.Error(w, 410, "CONSENT_REQUIRED", "Consent wali belum tersedia, kedaluwarsa atau sudah dicabut")
-		} else {
-			dbError(w, err)
-		}
-		return
-	}
 	var in struct {
 		Image string `json:"image"`
 	}
@@ -202,7 +172,7 @@ func (s *Service) facePreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !aiclient.ValidateImage(in.Image) {
-		httpresponse.Error(w, 422, "INVALID_IMAGE", "Gunakan base64 JPEG 160–1280 piksel, maksimal 384 KiB")
+		httpresponse.Error(w, 422, "INVALID_IMAGE", "Foto belum dapat diproses. Ambil ulang dari kamera.")
 		return
 	}
 	result, err := s.ai.FacePreview(r.Context(), in.Image)
@@ -211,16 +181,7 @@ func (s *Service) facePreview(w http.ResponseWriter, r *http.Request) {
 		if errors.As(err, &validation) {
 			httpresponse.Error(w, 422, "INVALID_IMAGE", "Gambar kamera tidak dapat diproses; ambil ulang")
 		} else {
-			httpresponse.Error(w, 503, "AI_UNAVAILABLE", "Layanan wajah belum tersedia; coba kembali")
-		}
-		return
-	}
-	// Consent can expire while inference is running even though revocations are serialized by the school lock.
-	if err := sc.tx.QueryRow(r.Context(), consentEligibility, s.schoolID, id).Scan(&consent); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			httpresponse.Error(w, 410, "CONSENT_REQUIRED", "Consent wali belum tersedia, kedaluwarsa atau sudah dicabut")
-		} else {
-			dbError(w, err)
+			httpresponse.Error(w, 503, "AI_UNAVAILABLE", "Pendaftaran wajah belum tersedia. Coba lagi nanti.")
 		}
 		return
 	}
@@ -231,7 +192,7 @@ func (s *Service) revokeFace(w http.ResponseWriter, r *http.Request) {
 	if !httpresponse.Method(w, r, "POST") {
 		return
 	}
-	sc, id, ok := s.consentStudent(w, r, "biometrics.revoke", true)
+	sc, id, ok := s.biometricStudent(w, r, "biometrics.revoke", true)
 	if !ok {
 		return
 	}
@@ -244,7 +205,7 @@ func (s *Service) revokeFace(w http.ResponseWriter, r *http.Request) {
 	}
 	in.Reason = strings.TrimSpace(in.Reason)
 	if !text(in.Reason, 500) {
-		invalid(w, "Alasan pencabutan wajah wajib diisi")
+		invalid(w, "Isi alasan penghapusan data wajah.")
 		return
 	}
 	command, err := sc.tx.Exec(r.Context(), `DELETE FROM face_templates WHERE school_id=$1 AND student_id=$2`, s.schoolID, id)
@@ -259,4 +220,27 @@ func (s *Service) revokeFace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpresponse.Data(w, 200, map[string]any{"enrolled": false, "deleted_templates": command.RowsAffected(), "recognition_enabled": false})
+}
+
+func (s *Service) biometricStudent(w http.ResponseWriter, r *http.Request, perm string, write bool) (*scope, string, bool) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return nil, "", false
+	}
+	sc, ok := s.begin(w, r, perm, write)
+	if !ok {
+		return nil, "", false
+	}
+	var found bool
+	err := sc.tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM students WHERE school_id=$1 AND id=$2)`, s.schoolID, id).Scan(&found)
+	if err != nil || !found {
+		_ = sc.tx.Rollback(context.Background())
+		if err != nil {
+			dbError(w, err)
+		} else {
+			httpresponse.Error(w, 404, "NOT_FOUND", "Siswa tidak ditemukan")
+		}
+		return nil, "", false
+	}
+	return sc, id, true
 }

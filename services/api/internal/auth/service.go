@@ -8,7 +8,6 @@ import (
 	"errors"
 	"net/http"
 	"net/mail"
-	"slices"
 	"strings"
 	"time"
 
@@ -43,8 +42,15 @@ func (s *Service) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/auth/logout", s.logout)
 	mux.HandleFunc("/api/v1/auth/me", s.me)
 	mux.HandleFunc("/api/v1/auth/profile", s.profile)
+	mux.HandleFunc("/api/v1/auth/profile/photo", s.photo)
+	mux.HandleFunc("/api/v1/school/settings", s.schoolSettings)
+	mux.HandleFunc("/api/v1/school/branding", s.branding)
+	mux.HandleFunc("/api/v1/school/logo", s.logo)
 	mux.HandleFunc("/api/v1/users", s.users)
 	mux.HandleFunc("/api/v1/users/{id}", s.updateUser)
+	mux.HandleFunc("/api/v1/permissions", s.permissionCatalog)
+	mux.HandleFunc("/api/v1/roles", s.roles)
+	mux.HandleFunc("/api/v1/roles/{id}", s.roleByID)
 	mux.HandleFunc("/api/v1/audit-logs", s.auditLogs)
 }
 
@@ -59,24 +65,12 @@ func normalizeEmail(email string) (string, error) {
 
 func validName(name string) bool { return len(strings.TrimSpace(name)) > 0 && len([]rune(name)) <= 120 }
 
-func validRole(role string) bool { _, ok := rolePermissions[role]; return ok }
-func validGrants(grants []string) bool {
-	for i, grant := range grants {
-		if !slices.Contains(Grantable, grant) || slices.Contains(grants[:i], grant) {
-			return false
-		}
-	}
-	return true
+func roleExists(ctx context.Context, tx pgx.Tx, schoolID, key string) (bool, error) {
+	var exists bool
+	err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM roles WHERE school_id=$1 AND key=$2)", schoolID, key).Scan(&exists)
+	return exists, err
 }
 
-func grantsForRole(role string, grants []string) bool {
-	for _, grant := range grants {
-		if !GrantAllowed(role, grant) {
-			return false
-		}
-	}
-	return true
-}
 func tokenHash(token string) []byte { sum := sha256.Sum256([]byte(token)); return sum[:] }
 func csrfToken(token string) string {
 	sum := sha256.Sum256([]byte("attendance-csrf-v1:" + token))

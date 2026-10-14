@@ -101,10 +101,12 @@ func (f profileFixture) user(t *testing.T, email, role string, grants []string) 
 	if err := f.pool.QueryRow(context.Background(), `INSERT INTO users(school_id,email,full_name,password_hash,role) VALUES($1,$2,'User',$3,$4) RETURNING id::text`, profileSchool, email, f.hash, role).Scan(&id); err != nil {
 		t.Fatal(err)
 	}
-	for _, grant := range grants {
-		f.exec(t, `INSERT INTO permission_grants(school_id,user_id,permission,granted_by) VALUES($1,$2,$3,$2)`, profileSchool, id, grant)
+	for _, permission := range grants {
+		f.exec(t, `INSERT INTO role_permissions(school_id,role_id,permission)
+			SELECT school_id,id,$3 FROM roles WHERE school_id=$1 AND key=$2
+			ON CONFLICT(school_id,role_id,permission) DO NOTHING`, profileSchool, role, permission)
 	}
-	return User{ID: id, SchoolID: profileSchool, Email: email, FullName: "User", Role: role, Active: true, Grants: grants, ClassIDs: []string{}}
+	return User{ID: id, SchoolID: profileSchool, Email: email, FullName: "User", Role: role, Active: true, ClassIDs: []string{}}
 }
 
 func (f profileFixture) cookie(t *testing.T, userID string) *http.Cookie {
@@ -176,7 +178,7 @@ func TestProfilePreservesTeacherScopeAndOperatorAccess(t *testing.T) {
 	if err := f.pool.QueryRow(ctx, `INSERT INTO classes(school_id,academic_year_id,code,name) VALUES($1,$2,'A','Class A') RETURNING id::text`, profileSchool, yearID).Scan(&classID); err != nil {
 		t.Fatal(err)
 	}
-	f.exec(t, `INSERT INTO teacher_assignments(school_id,teacher_id,class_id,academic_year_id,starts_at,ends_at) VALUES($1,$2,$3,$4,now()-interval '1 hour',now()+interval '1 hour')`, profileSchool, teacher.ID, classID, yearID)
+	f.exec(t, `INSERT INTO user_class_assignments(school_id,user_id,class_id,academic_year_id,starts_at,ends_at) VALUES($1,$2,$3,$4,now()-interval '1 hour',now()+interval '1 hour')`, profileSchool, teacher.ID, classID, yearID)
 	operator := f.user(t, "operator@example.test", "operator", []string{"attendance.manual"})
 	for _, user := range []User{teacher, operator} {
 		t.Run(user.Role, func(t *testing.T) {
@@ -184,7 +186,7 @@ func TestProfilePreservesTeacherScopeAndOperatorAccess(t *testing.T) {
 			other := f.cookie(t, user.ID)
 			w := f.call("PATCH", "/auth/profile", map[string]string{"full_name": "  Updated User  ", "email": " " + strings.ToUpper(user.Email) + " "}, cookie, csrfToken(cookie.Value), f.s.origin)
 			u, csrf := profileResponse(t, w, 200, "")
-			if u.ID != user.ID || u.FullName != "Updated User" || u.Email != user.Email || u.Role != user.Role || !u.Active || !reflect.DeepEqual(u.Grants, user.Grants) || csrf != csrfToken(cookie.Value) || len(w.Result().Cookies()) != 0 {
+			if u.ID != user.ID || u.FullName != "Updated User" || u.Email != user.Email || u.Role != user.Role || !u.Active || csrf != csrfToken(cookie.Value) || len(w.Result().Cookies()) != 0 {
 				t.Fatal("name-only edit changed credentials, access, or session")
 			}
 			if user.Role == "teacher" && !reflect.DeepEqual(u.ClassIDs, []string{classID}) {

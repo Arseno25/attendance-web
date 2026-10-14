@@ -4,12 +4,14 @@ const title = computed(
   () =>
     ({
       '/admin': 'Ringkasan',
+      '/admin/settings': 'Pengaturan',
       '/admin/account': 'Akun saya',
       '/admin/biometrics': 'Wajah siswa',
       '/admin/students/import': 'Import siswa',
-      '/admin/devices': 'Perangkat kiosk',
+      '/admin/devices': 'Perangkat absensi',
       '/admin/users': 'Pengguna & peran',
-      '/admin/audit': 'Audit aktivitas',
+      '/admin/roles': 'Peran & akses',
+      '/admin/audit': 'Riwayat aktivitas',
       '/admin/reports': 'Laporan kehadiran',
       '/admin/academics': 'Data akademik',
       '/admin/students': 'Siswa',
@@ -48,6 +50,5 @@ const title = computed(
         </BreadcrumbList>
       </Breadcrumb>
     </div>
-    <div class="ml-auto shrink-0 pr-4 lg:pr-6"><ModeToggle /></div>
   </header>
 </template>

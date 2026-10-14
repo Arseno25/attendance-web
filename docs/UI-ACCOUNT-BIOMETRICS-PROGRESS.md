@@ -1,5 +1,8 @@
 # UI, akun dan pendaftaran wajah — 14 Oktober 2026
 
+
+Catatan historis: modul wali/persetujuan telah dihapus dari alur aktif pada 14 Oktober 2026. Pendaftaran tanpa persetujuan berlaku di lokal dan produksi; tema kini berada di Pengaturan → Tampilan. Lihat [runbook terkini](LOCAL-RUNBOOK.md).
+
 Pekerjaan lanjutan dijalankan di lokal sesuai arahan pengguna. Dashboard tetap mengikuti shadcn-vue New York/dashboard-01 yang sudah terpasang, menggunakan komponen registry. Pengguna mengonfirmasi belum memiliki dataset wajah uji independen; akurasi/liveness tetap **belum dievaluasi** dan kehadiran otomatis tidak diaktifkan.
 
 ## Perubahan

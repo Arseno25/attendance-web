@@ -1,8 +1,8 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Local provisional biometric workflow",
-    "version": "1.0.0"
+    "title": "Biometric enrollment and attendance",
+    "version": "1.1.0"
   },
   "paths": {
     "/api/v1/biometrics/students": {
@@ -169,7 +169,7 @@
     "/api/v1/students/{id}/enrollments": {
       "post": {
         "summary": "Enroll provisional face template",
-        "description": "Live biometrics.enroll, active student and current guardian consent. 3\u20135 distinct quality-checked JPEGs; JSON <=2 MiB. Frames/vectors ephemeral; only AES-GCM ciphertext stored. Registration does not approve automatic attendance.",
+        "description": "Live biometrics.enroll and active student required in local and production. 3–5 distinct quality-checked JPEGs; JSON <=2 MiB. Only encrypted templates stored. Guardian consent is not part of enrollment. Automatic attendance remains disabled until evaluation.",
         "security": [
           {
             "UserCookie": []
@@ -192,7 +192,7 @@
             "description": "Service unavailable; no automatic attendance"
           },
           "409": {
-            "description": "Student inactive"
+            "description": "Student is inactive"
           },
           "410": {
             "description": "Consent unavailable, expired or withdrawn"
@@ -388,7 +388,7 @@
     "/api/v1/students/{id}/face-preview": {
       "post": {
         "summary": "Check enrollment camera frame quality",
-        "description": "Live biometrics.enroll, active student and eligible guardian consent, rechecked after inference. Strict JSON <=512 KiB; raw base64 JPEG <=384 KiB and dimensions 160\u20131280. Frames remain ephemeral; preview exposes only normalized geometry and quality, never identity or embeddings.",
+        "description": "Live biometrics.enroll and active student, rechecked after inference. Strict JSON <=512 KiB; raw base64 JPEG <=384 KiB and dimensions 160–1280. Ephemeral frames; only geometry and quality returned. No guardian consent required.",
         "security": [
           {
             "UserCookie": []
@@ -408,7 +408,7 @@
             "description": "Service unavailable; no automatic attendance"
           },
           "409": {
-            "description": "Student inactive"
+            "description": "Student is inactive"
           },
           "410": {
             "description": "Consent unavailable, expired or withdrawn"
@@ -584,9 +584,6 @@
           "enrolled": {
             "type": "boolean"
           },
-          "consent_eligible": {
-            "type": "boolean"
-          },
           "pipeline_ready": {
             "type": "boolean"
           },
@@ -625,16 +622,20 @@
                 "const": false
               }
             }
+          },
+          "enrollment_allowed": {
+            "type": "boolean",
+            "description": "Student is active; enrollment additionally requires live officer permission, valid frames and a ready pipeline."
           }
         },
         "required": [
           "enrolled",
-          "consent_eligible",
           "pipeline_ready",
           "recognition_enabled",
           "block_reason",
           "template",
-          "evaluation"
+          "evaluation",
+          "enrollment_allowed"
         ],
         "additionalProperties": false
       },
@@ -646,7 +647,7 @@
             "items": {
               "type": "string",
               "maxLength": 524288,
-              "description": "Raw base64 JPEG; decoded <=384 KiB; header dimensions 160\u20131280 per axis, no data URL."
+              "description": "Raw base64 JPEG; decoded <=384 KiB; header dimensions 160–1280 per axis, no data URL."
             },
             "minItems": 3,
             "maxItems": 5
@@ -677,7 +678,7 @@
           "image": {
             "type": "string",
             "maxLength": 524288,
-            "description": "Raw base64 JPEG; decoded <=384 KiB; header dimensions 160\u20131280 per axis, no data URL."
+            "description": "Raw base64 JPEG; decoded <=384 KiB; header dimensions 160–1280 per axis, no data URL."
           },
           "event_id": {
             "type": "string",

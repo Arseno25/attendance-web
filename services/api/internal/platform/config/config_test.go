@@ -39,3 +39,15 @@ func TestAuthConfigRequiresSchoolAndPublicHTTPS(t *testing.T) {
 		t.Fatal("public insecure auth origin accepted")
 	}
 }
+
+func TestPublicAndLocalConfig(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://localhost/attendance")
+	t.Setenv("SCHOOL_ID", "00000000-0000-4000-8000-000000000001")
+	t.Setenv("API_ADDRESS", "127.0.0.1:8080")
+	for _, origin := range []string{"http://localhost:3000", "https://attendance.example.com"} {
+		t.Setenv("WEB_ORIGIN", origin)
+		if _, err := Load(); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

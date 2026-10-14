@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { toast } from 'vue-sonner'
-import { deviceSchema, reasonSchema } from '~/lib/validation/consent-devices'
+import { deviceSchema, reasonSchema } from '~/lib/validation/biometrics-devices'
 import { statusVariant } from '~/lib/status'
 import type { Result } from '~/types/auth'
 definePageMeta({ layout: 'admin', middleware: ['auth', 'devices'] })
@@ -58,7 +58,7 @@ async function act(kind: 'create' | 'revoke' | 'pair', id?: string) {
           { method: 'POST' },
         )
       ).data
-      toast.success('Token pairing siap digunakan.')
+      toast.success('Kode penghubung siap digunakan.')
     } else {
       await request(kind === 'create' ? '/devices' : `/devices/${revoking.value?.id}/revoke`, {
         method: 'POST',
@@ -69,7 +69,7 @@ async function act(kind: 'create' | 'revoke' | 'pair', id?: string) {
       toast.success(
         kind === 'create'
           ? 'Perangkat didaftarkan.'
-          : 'Perangkat dicabut; sesi kiosk langsung tidak berlaku.',
+          : 'Perangkat dicabut; sesi absensi langsung tidak berlaku.',
       )
       await load()
     }
@@ -96,8 +96,8 @@ function openRevocation(item: Device) {
 <template>
   <div class="flex min-w-0 flex-col gap-6">
     <PageHeader
-      title="Perangkat kiosk"
-      description="Daftarkan perangkat, pasangkan pada sesi dan pantau heartbeat."
+      title="Perangkat absensi"
+      description="Hubungkan perangkat untuk absensi dan lihat status koneksinya."
     >
       <template #actions>
         <div class="flex gap-2">
@@ -131,8 +131,8 @@ function openRevocation(item: Device) {
       <CardHeader>
         <CardTitle>Perangkat terdaftar</CardTitle>
         <CardDescription>
-          Token pairing hanya berlaku sekali selama 5 menit. Sesi kiosk berlaku 10 menit dan harus
-          dipasangkan ulang oleh operator.
+          Kode penghubung berlaku sekali selama 5 menit. Perangkat perlu dihubungkan kembali setelah
+          10 menit.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -143,7 +143,7 @@ function openRevocation(item: Device) {
             { id: 'perangkat', label: 'Perangkat', cellClass: 'font-medium' },
             { id: 'lokasi', label: 'Lokasi' },
             { id: 'status', label: 'Status' },
-            { id: 'heartbeat-terakhir', label: 'Heartbeat terakhir' },
+            { id: 'heartbeat-terakhir', label: 'Koneksi terakhir' },
             {
               id: 'tindakan',
               label: 'Tindakan',
@@ -151,7 +151,7 @@ function openRevocation(item: Device) {
               cellClass: 'text-right',
             },
           ]"
-          caption="Perangkat dan heartbeat terakhir"
+          caption="Perangkat dan koneksi terakhir"
           row-key="id"
           :loading="loading"
         >
@@ -172,7 +172,7 @@ function openRevocation(item: Device) {
               :disabled="busy"
               :actions="[
                 {
-                  label: 'Token pairing',
+                  label: 'Kode penghubung',
                   icon: 'pair',
                   onSelect: () => {
                     act('pair', item.id)
@@ -230,7 +230,7 @@ function openRevocation(item: Device) {
         <DialogHeader>
           <DialogTitle>Daftar perangkat</DialogTitle>
           <DialogDescription>
-            Perangkat baru memerlukan pairing sebelum digunakan.
+            Hubungkan perangkat dengan sesi absensi sebelum digunakan.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -321,7 +321,8 @@ function openRevocation(item: Device) {
         <AlertDialogHeader>
           <AlertDialogTitle>Cabut perangkat</AlertDialogTitle>
           <AlertDialogDescription>
-            Perangkat {{ revoking?.name }} dan semua sesi pairing akan langsung dinonaktifkan.
+            Perangkat {{ revoking?.name }} tidak dapat digunakan untuk absensi setelah
+            dinonaktifkan.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <form
@@ -385,14 +386,14 @@ function openRevocation(item: Device) {
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Token pairing sekali pakai</DialogTitle>
+          <DialogTitle>Kode penghubung sekali pakai</DialogTitle>
           <DialogDescription>
-            Masukkan token ini di halaman absensi pada perangkat tujuan. Token tidak disimpan di
-            browser.
+            Masukkan kode ini di halaman absensi pada perangkat yang ingin dihubungkan. Kode hanya
+            dapat digunakan sekali.
           </DialogDescription>
         </DialogHeader>
         <Field>
-          <FieldLabel for="pairing-token">Token pairing</FieldLabel>
+          <FieldLabel for="pairing-token">Kode penghubung</FieldLabel>
           <Input
             id="pairing-token"
             :model-value="pairing?.pairing_token"

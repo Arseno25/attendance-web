@@ -14,13 +14,15 @@ export interface SchoolClass {
   academic_year_name: string
   is_active: boolean
 }
-export interface TeacherOption {
+export interface ClassAssignmentUser {
   id: string
   name: string
+  role: string
 }
 export interface Assignment {
   id: string
-  teacher_name: string
+  user_id: string
+  user_name: string
   class_name: string
   academic_year_name: string
   starts_at: string

@@ -64,7 +64,11 @@ type Template struct {
 
 func (c *Client) Enroll(ctx context.Context, school, student, consent string, frames []string) (Template, error) {
 	var out Template
-	err := c.call(ctx, "POST", "/internal/v1/enroll", map[string]any{"school_id": school, "student_id": student, "consent_id": consent, "frames": frames}, &out)
+	var contextConsent any
+	if consent != "" {
+		contextConsent = consent
+	}
+	err := c.call(ctx, "POST", "/internal/v1/enroll", map[string]any{"school_id": school, "student_id": student, "consent_id": contextConsent, "frames": frames}, &out)
 	return out, err
 }
 

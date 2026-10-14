@@ -180,7 +180,7 @@ func (s *Service) kioskSession(w http.ResponseWriter, r *http.Request) {
 	var device, deviceName, sessionName string
 	err := tx.QueryRow(r.Context(), `DELETE FROM device_pairing_tokens p USING camera_devices d WHERE p.school_id=$1 AND p.token_hash=$2 AND p.expires_at>clock_timestamp() AND d.school_id=p.school_id AND d.id=p.device_id AND d.revoked_at IS NULL RETURNING p.device_id::text,d.name`, s.schoolID, deviceHash(in.Token)).Scan(&device, &deviceName)
 	if err != nil {
-		httpresponse.Error(w, 401, "INVALID_PAIRING_TOKEN", "Token tidak valid, kedaluwarsa atau sudah digunakan")
+		httpresponse.Error(w, 401, "INVALID_PAIRING_TOKEN", "Kode penghubung tidak valid, sudah berakhir, atau telah digunakan.")
 		return
 	}
 	var open bool
@@ -232,7 +232,7 @@ func (s *Service) kioskAuth(w http.ResponseWriter, r *http.Request, write bool) 
 			return nil, nil, false
 		}
 		if subtle.ConstantTimeCompare([]byte(expected), []byte(r.Header.Get("X-CSRF-Token"))) != 1 {
-			httpresponse.Error(w, 403, "FORBIDDEN", "Token CSRF tidak valid")
+			httpresponse.Error(w, 403, "FORBIDDEN", "Halaman sudah tidak berlaku. Muat ulang dan coba lagi.")
 			return nil, nil, false
 		}
 	}

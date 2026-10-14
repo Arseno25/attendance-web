@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { loginSchema } from '~/lib/validation/auth'
 const auth = useAuth()
+const { branding } = useSchoolBranding()
 const route = useRoute()
 const email = ref('')
 const password = ref('')
@@ -59,7 +60,9 @@ async function submit() {
               >
                 Selamat datang kembali
               </h1>
-              <p class="text-balance text-muted-foreground">Masuk ke akun Absensi Sekolah.</p>
+              <p class="text-balance text-muted-foreground">
+                Masuk ke akun {{ branding.app_name }}.
+              </p>
             </div>
             <Alert
               v-if="message"

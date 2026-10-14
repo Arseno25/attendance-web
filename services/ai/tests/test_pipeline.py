@@ -123,8 +123,9 @@ def test_enrollment_consistency_duplicate_and_ciphertext_only(monkeypatch):
         pipeline.enroll([frames[0]] * 3, cipher, "s", "st", "co")
     values = iter([vector(0), vector(1)])
     monkeypatch.setattr(pipeline, "feature", lambda frame, face: next(values))
-    with pytest.raises(ImageError, match="konsisten"):
+    with pytest.raises(ImageError) as raised:
         pipeline.enroll(frames, cipher, "s", "st", "co")
+    assert raised.value.code == "INCONSISTENT_IDENTITY"
 
 
 def test_matching_unknown_spoof_ambiguity_and_stability_cannot_identify():
@@ -186,3 +187,54 @@ def test_actual_pinned_cpu_models_smoke_without_biometric_data():
     feature = pipeline.feature(synthetic, face)
     assert feature.shape == (128,) and np.isfinite(feature).all()
     assert float(np.linalg.norm(feature)) == pytest.approx(1, abs=0.0001)
+
+
+def test_enrollment_nullable_context_preserves_legacy_binding(monkeypatch):
+    from app import main
+
+    cipher = TemplateCipher(b"k" * 32, "local-test")
+    pipeline = fake_pipeline(monkeypatch)
+    monkeypatch.setattr(main, "get_pipeline", lambda: pipeline)
+    monkeypatch.setattr(main, "get_cipher", lambda: cipher)
+    monkeypatch.setenv("AI_SERVICE_TOKEN", "a" * 48)
+    school = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    student = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+    with TestClient(app) as client:
+        response = client.post(
+            "/internal/v1/enroll",
+            json={
+                "school_id": school,
+                "student_id": student,
+                "consent_id": None,
+                "frames": [image(i) for i in (1, 2, 3)],
+            },
+            headers={"Authorization": "Bearer " + "a" * 48},
+        )
+    assert response.status_code == 200
+    template = response.json()
+    assert template["recognition_enabled"] is False
+    assert np.allclose(cipher.decrypt(template, school, student, None), vector())
+    with pytest.raises(InvalidTag):
+        cipher.decrypt(
+            template, school, student, "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+        )
+    legacy = cipher.encrypt(vector(), school, student, "consent", "a" * 64)
+    assert np.allclose(cipher.decrypt(legacy, school, student, "consent"), vector())
+    with pytest.raises(InvalidTag):
+        cipher.decrypt(legacy, school, student, None)
+
+
+def test_gallery_accepts_unbound_and_legacy_encryption_context():
+    from app.main import GalleryTemplate
+
+    fields = {
+        "student_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "ciphertext": "A" * 704,
+        "nonce": "A" * 16,
+        "model_sha256": "a" * 64,
+        "key_id": "synthetic",
+    }
+    assert GalleryTemplate(**fields).consent_id is None
+    assert GalleryTemplate(**fields, consent_id=None).consent_id is None
+    legacy = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+    assert str(GalleryTemplate(**fields, consent_id=legacy).consent_id) == legacy

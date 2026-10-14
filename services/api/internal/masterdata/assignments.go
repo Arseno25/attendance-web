@@ -1,62 +1,68 @@
 package masterdata
 
 import (
-	"attendance.local/api/internal/platform/httpresponse"
 	"context"
 	"net/http"
+	"strings"
 	"time"
+
+	"attendance.local/api/internal/platform/httpresponse"
 )
 
-const assignmentSelect = `SELECT a.id::text AS id,a.teacher_id::text AS teacher_id,u.full_name AS teacher_name,a.class_id::text AS class_id,c.code AS class_code,c.name AS class_name,a.academic_year_id::text AS academic_year_id,y.name AS academic_year_name,a.starts_at,a.ends_at,a.is_active,a.revoked_at,a.created_at,(a.is_active AND u.is_active AND u.role='teacher' AND c.is_active AND y.is_active AND a.starts_at<=statement_timestamp() AND a.ends_at>statement_timestamp()) AS is_current FROM teacher_assignments a JOIN users u ON u.id=a.teacher_id AND u.school_id=a.school_id JOIN classes c ON c.id=a.class_id AND c.school_id=a.school_id JOIN academic_years y ON y.id=a.academic_year_id AND y.school_id=a.school_id WHERE a.school_id=$1 AND ($2!='teacher' OR a.teacher_id=$3::uuid)`
+const assignmentSelect = `SELECT a.id::text AS id,a.user_id::text AS user_id,u.full_name AS user_name,a.class_id::text AS class_id,c.code AS class_code,c.name AS class_name,a.academic_year_id::text AS academic_year_id,y.name AS academic_year_name,a.starts_at,a.ends_at,a.is_active,a.revoked_at,a.created_at,(a.is_active AND u.is_active AND r.scope='assigned_classes' AND c.is_active AND y.is_active AND a.starts_at<=statement_timestamp() AND a.ends_at>statement_timestamp()) AS is_current FROM user_class_assignments a JOIN users u ON u.id=a.user_id AND u.school_id=a.school_id JOIN roles r ON r.school_id=u.school_id AND r.key=u.role JOIN classes c ON c.id=a.class_id AND c.school_id=a.school_id JOIN academic_years y ON y.id=a.academic_year_id AND y.school_id=a.school_id WHERE a.school_id=$1 AND (NOT $2::boolean OR a.user_id=$3::uuid)`
 
 func (s *Service) assignments(w http.ResponseWriter, r *http.Request) {
 	if !httpresponse.Method(w, r, "GET", "POST") {
 		return
 	}
 	write := r.Method == "POST"
-	perm := "academics.read"
+	permission := "academics.read"
 	if write {
-		perm = "academics.write"
+		permission = "academics.write"
 	}
-	sc, ok := s.begin(w, r, perm, write)
+	sc, ok := s.begin(w, r, permission, write)
 	if !ok {
 		return
 	}
 	defer sc.tx.Rollback(context.Background())
 	if !write {
-		class, ok := filterID(w, r, "class_id")
-		if !ok {
+		classID, valid := filterID(w, r, "class_id")
+		if !valid {
 			return
 		}
-		s.list(w, r, sc, assignmentSelect+` AND ($4='' OR a.class_id=NULLIF($4,'')::uuid)`, s.schoolID, sc.user.Role, sc.user.ID, class)
+		s.list(w, r, sc, assignmentSelect+` AND ($4='' OR a.class_id=NULLIF($4,'')::uuid) AND (NOT $5::boolean OR a.class_id=ANY($6::uuid[]))`, s.schoolID, sc.classScoped, sc.user.ID, classID, sc.classScoped, sc.classes)
 		return
 	}
-	var in struct {
-		Teacher string `json:"teacher_id"`
-		Class   string `json:"class_id"`
-		Start   string `json:"starts_at"`
-		End     string `json:"ends_at"`
+	var input struct {
+		User  string `json:"user_id"`
+		Class string `json:"class_id"`
+		Start string `json:"starts_at"`
+		End   string `json:"ends_at"`
 	}
-	if !httpresponse.Decode(w, r, &in) {
+	if !httpresponse.Decode(w, r, &input) {
 		return
 	}
-	if !httpresponse.ValidID(in.Teacher) || !httpresponse.ValidID(in.Class) {
-		invalid(w, "Guru dan kelas wajib dipilih")
+	input.User = strings.ToLower(input.User)
+	input.Class = strings.ToLower(input.Class)
+	if !httpresponse.ValidID(input.User) || !httpresponse.ValidID(input.Class) {
+		invalid(w, "Pengguna dan kelas wajib dipilih")
 		return
 	}
-	bounds, err := s.classBounds(r, sc, in.Class)
+	bounds, err := s.classBounds(r, sc, input.Class)
 	if err != nil {
 		dbError(w, err)
 		return
 	}
 	var eligible bool
-	err = sc.tx.QueryRow(r.Context(), `SELECT role='teacher' AND is_active FROM users WHERE school_id=$1 AND id=$2`, s.schoolID, in.Teacher).Scan(&eligible)
+	err = sc.tx.QueryRow(r.Context(), `SELECT u.is_active AND r.scope='assigned_classes'
+		FROM users u JOIN roles r ON r.school_id=u.school_id AND r.key=u.role
+		WHERE u.school_id=$1 AND u.id=$2`, s.schoolID, input.User).Scan(&eligible)
 	if err != nil {
 		dbError(w, err)
 		return
 	}
 	if !eligible {
-		invalid(w, "Penugasan memerlukan akun guru aktif")
+		invalid(w, "Penugasan memerlukan pengguna aktif dengan peran berscope kelas")
 		return
 	}
 	var start time.Time
@@ -69,33 +75,34 @@ func (s *Service) assignments(w http.ResponseWriter, r *http.Request) {
 	if start.Before(lower) {
 		start = lower
 	}
-	if in.Start != "" {
-		start, err = time.Parse(time.RFC3339Nano, in.Start)
+	if input.Start != "" {
+		start, err = time.Parse(time.RFC3339Nano, input.Start)
 	}
 	if err != nil {
 		invalid(w, "Waktu mulai tidak valid")
 		return
 	}
-	if in.End != "" {
-		end, err = time.Parse(time.RFC3339Nano, in.End)
+	if input.End != "" {
+		end, err = time.Parse(time.RFC3339Nano, input.End)
 	}
 	if err != nil || !start.Before(end) || start.Before(lower) || end.After(bounds["ends_at"].(time.Time)) {
 		invalid(w, "Periode penugasan harus di dalam tahun ajaran")
 		return
 	}
 	var id string
-	err = sc.tx.QueryRow(r.Context(), `INSERT INTO teacher_assignments(school_id,teacher_id,class_id,academic_year_id,starts_at,ends_at) VALUES($1,$2,$3,$4,$5,$6) RETURNING id::text`, s.schoolID, in.Teacher, in.Class, bounds["academic_year_id"], start, end).Scan(&id)
+	err = sc.tx.QueryRow(r.Context(), `INSERT INTO user_class_assignments(school_id,user_id,class_id,academic_year_id,starts_at,ends_at) VALUES($1,$2,$3,$4,$5,$6) RETURNING id::text`, s.schoolID, input.User, input.Class, bounds["academic_year_id"], start, end).Scan(&id)
 	if err != nil {
 		dbError(w, err)
 		return
 	}
-	entity, err := one(r.Context(), sc.tx, assignmentSelect+` AND a.id=$4`, s.schoolID, sc.user.Role, sc.user.ID, id)
+	entity, err := one(r.Context(), sc.tx, assignmentSelect+` AND a.id=$4`, s.schoolID, false, sc.user.ID, id)
 	if err != nil {
 		dbError(w, err)
 		return
 	}
-	s.finish(w, r, sc, 201, entity, "academics.assignments.created", "teacher_assignment", nil)
+	s.finish(w, r, sc, 201, entity, "academics.assignments.created", "user_class_assignment", nil)
 }
+
 func (s *Service) assignment(w http.ResponseWriter, r *http.Request) {
 	if !httpresponse.Method(w, r, "PATCH") {
 		return
@@ -109,18 +116,18 @@ func (s *Service) assignment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer sc.tx.Rollback(context.Background())
-	var in struct {
+	var input struct {
 		Active *bool `json:"is_active"`
 	}
-	if !httpresponse.Decode(w, r, &in) {
+	if !httpresponse.Decode(w, r, &input) {
 		return
 	}
-	if in.Active == nil || *in.Active {
+	if input.Active == nil || *input.Active {
 		invalid(w, "Penugasan hanya dapat dicabut; buat penugasan baru untuk mengganti periode")
 		return
 	}
 	var active bool
-	if err := sc.tx.QueryRow(r.Context(), `SELECT is_active FROM teacher_assignments WHERE school_id=$1 AND id=$2`, s.schoolID, id).Scan(&active); err != nil {
+	if err := sc.tx.QueryRow(r.Context(), `SELECT is_active FROM user_class_assignments WHERE school_id=$1 AND id=$2`, s.schoolID, id).Scan(&active); err != nil {
 		dbError(w, err)
 		return
 	}
@@ -128,7 +135,7 @@ func (s *Service) assignment(w http.ResponseWriter, r *http.Request) {
 		conflict(w, "Penugasan sudah dicabut")
 		return
 	}
-	result, err := sc.tx.Exec(r.Context(), `UPDATE teacher_assignments SET is_active=false,revoked_at=clock_timestamp() WHERE school_id=$1 AND id=$2 AND is_active`, s.schoolID, id)
+	result, err := sc.tx.Exec(r.Context(), `UPDATE user_class_assignments SET is_active=false,revoked_at=clock_timestamp() WHERE school_id=$1 AND id=$2 AND is_active`, s.schoolID, id)
 	if err != nil {
 		dbError(w, err)
 		return
@@ -137,13 +144,14 @@ func (s *Service) assignment(w http.ResponseWriter, r *http.Request) {
 		conflict(w, "Penugasan tidak tersedia atau sudah dicabut")
 		return
 	}
-	entity, err := one(r.Context(), sc.tx, assignmentSelect+` AND a.id=$4`, s.schoolID, sc.user.Role, sc.user.ID, id)
+	entity, err := one(r.Context(), sc.tx, assignmentSelect+` AND a.id=$4`, s.schoolID, false, sc.user.ID, id)
 	if err != nil {
 		dbError(w, err)
 		return
 	}
-	s.finish(w, r, sc, 200, entity, "academics.assignments.revoked", "teacher_assignment", nil)
+	s.finish(w, r, sc, 200, entity, "academics.assignments.revoked", "user_class_assignment", nil)
 }
+
 func (s *Service) teachers(w http.ResponseWriter, r *http.Request) {
 	if !httpresponse.Method(w, r, "GET") {
 		return
@@ -153,12 +161,20 @@ func (s *Service) teachers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer sc.tx.Rollback(context.Background())
-	if sc.user.Role != "admin" && sc.user.Role != "super_admin" {
-		httpresponse.Error(w, 403, "FORBIDDEN", "Daftar guru hanya untuk pengelola akademik")
-		return
+	query := `SELECT u.id::text AS id,u.full_name AS name,r.key AS role,u.created_at
+		FROM users u JOIN roles r ON r.school_id=u.school_id AND r.key=u.role
+		WHERE u.school_id=$1 AND u.is_active AND r.scope='assigned_classes'`
+	if sc.classScoped {
+		query += ` AND u.id=$2`
 	}
-	s.list(w, r, sc, `SELECT id::text AS id,full_name AS name,created_at FROM users WHERE school_id=$1 AND role='teacher' AND is_active`, s.schoolID)
+	query += ` ORDER BY u.full_name COLLATE "C",u.id`
+	args := []any{s.schoolID}
+	if sc.classScoped {
+		args = append(args, sc.user.ID)
+	}
+	s.list(w, r, sc, query, args...)
 }
+
 func (s *Service) summary(w http.ResponseWriter, r *http.Request) {
 	if !httpresponse.Method(w, r, "GET") {
 		return
@@ -168,21 +184,21 @@ func (s *Service) summary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer sc.tx.Rollback(context.Background())
-	var students, classes, teachers int
+	var students, classes, users int
 	var year *string
-	err := sc.tx.QueryRow(r.Context(), `SELECT count(*) FROM (`+studentSelect+` AND st.status='active') visible`, s.schoolID, sc.user.Role, sc.classes, "").Scan(&students)
+	err := sc.tx.QueryRow(r.Context(), `SELECT count(*) FROM (`+studentSelect+` AND st.status='active') visible`, s.schoolID, sc.classScoped, sc.classes, "").Scan(&students)
 	if err == nil {
-		err = sc.tx.QueryRow(r.Context(), `SELECT count(*) FROM (`+classSelect+` AND c.is_active AND y.is_active) visible`, s.schoolID, sc.user.Role, sc.classes).Scan(&classes)
+		err = sc.tx.QueryRow(r.Context(), `SELECT count(*) FROM (`+classSelect+` AND c.is_active AND y.is_active) visible`, s.schoolID, sc.classScoped, sc.classes).Scan(&classes)
 	}
 	if err == nil {
-		err = sc.tx.QueryRow(r.Context(), `SELECT count(DISTINCT a.teacher_id) FROM (`+assignmentSelect+`) a WHERE a.is_current`, s.schoolID, sc.user.Role, sc.user.ID).Scan(&teachers)
+		err = sc.tx.QueryRow(r.Context(), `SELECT count(DISTINCT a.user_id) FROM (`+assignmentSelect+`) a WHERE a.is_current AND (NOT $2::boolean OR a.user_id::uuid=$3::uuid) AND (NOT $4::boolean OR a.class_id::uuid=ANY($5::uuid[]))`, s.schoolID, false, sc.user.ID, sc.classScoped, sc.classes).Scan(&users)
 	}
 	if err == nil {
-		err = sc.tx.QueryRow(r.Context(), `SELECT max(name) FROM (`+yearSelect+` AND y.is_active) visible`, s.schoolID, sc.user.Role, sc.classes).Scan(&year)
+		err = sc.tx.QueryRow(r.Context(), `SELECT max(name) FROM (`+yearSelect+` AND y.is_active) visible`, s.schoolID, sc.classScoped, sc.classes).Scan(&year)
 	}
 	if err != nil {
 		dbError(w, err)
 		return
 	}
-	httpresponse.Data(w, 200, map[string]any{"students": students, "classes": classes, "teachers": teachers, "active_year": year})
+	httpresponse.Data(w, 200, map[string]any{"students": students, "classes": classes, "assigned_users": users, "active_year": year})
 }

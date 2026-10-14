@@ -35,12 +35,15 @@ export function captureJpeg(video: HTMLVideoElement) {
   canvas.height = Math.round(video.videoHeight * scale)
   if (Math.min(canvas.width, canvas.height) < 160) throw new Error('Resolusi kamera terlalu kecil.')
   const context = canvas.getContext('2d')
-  if (!context) throw new Error('Browser tidak mendukung pengambilan frame.')
+  if (!context)
+    throw new Error('Kamera tidak dapat mengambil foto di peramban ini. Coba peramban lain.')
   context.drawImage(video, 0, 0, canvas.width, canvas.height)
   const image = canvas.toDataURL('image/jpeg', 0.75).split(',')[1]
   canvas.width = 0
   canvas.height = 0
   if (!image || image.length > 384 * 1024)
-    throw new Error('Frame terlalu besar. Kurangi resolusi kamera dan coba lagi.')
+    throw new Error(
+      'Foto terlalu besar. Gunakan pengaturan kamera yang lebih rendah dan coba lagi.',
+    )
   return image
 }

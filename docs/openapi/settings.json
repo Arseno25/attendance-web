@@ -1,0 +1,433 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "School identity and account photos",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/v1/school/branding": {
+      "get": {
+        "summary": "GET /school/branding",
+        "description": "Photo access is restricted to the signed-in account. School settings and logo writes require school.write and the existing school administrator policy. Public branding excludes school contact details. Images are rebuilt without metadata and stored in PostgreSQL.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success; JSON data/request_id envelope, or normalized PNG/JPEG for image GET."
+          },
+          "400": {
+            "description": "Invalid form data."
+          },
+          "401": {
+            "description": "Sign-in required."
+          },
+          "403": {
+            "description": "Missing permission or invalid origin/CSRF."
+          },
+          "404": {
+            "description": "Image or active school unavailable."
+          },
+          "413": {
+            "description": "Image exceeds 2 MB."
+          },
+          "422": {
+            "description": "Image cannot be processed."
+          }
+        }
+      }
+    },
+    "/api/v1/school/settings": {
+      "get": {
+        "summary": "GET /school/settings",
+        "description": "Photo access is restricted to the signed-in account. School settings and logo writes require school.write and the existing school administrator policy. Public branding excludes school contact details. Images are rebuilt without metadata and stored in PostgreSQL.",
+        "security": [
+          {
+            "UserCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success; JSON data/request_id envelope, or normalized PNG/JPEG for image GET."
+          },
+          "400": {
+            "description": "Invalid form data."
+          },
+          "401": {
+            "description": "Sign-in required."
+          },
+          "403": {
+            "description": "Missing permission or invalid origin/CSRF."
+          },
+          "404": {
+            "description": "Image or active school unavailable."
+          },
+          "413": {
+            "description": "Image exceeds 2 MB."
+          },
+          "422": {
+            "description": "Image cannot be processed."
+          }
+        }
+      },
+      "patch": {
+        "summary": "PATCH /school/settings",
+        "description": "Photo access is restricted to the signed-in account. School settings and logo writes require school.write and the existing school administrator policy. Public branding excludes school contact details. Images are rebuilt without metadata and stored in PostgreSQL.",
+        "security": [
+          {
+            "UserCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success; JSON data/request_id envelope, or normalized PNG/JPEG for image GET."
+          },
+          "400": {
+            "description": "Invalid form data."
+          },
+          "401": {
+            "description": "Sign-in required."
+          },
+          "403": {
+            "description": "Missing permission or invalid origin/CSRF."
+          },
+          "404": {
+            "description": "Image or active school unavailable."
+          },
+          "413": {
+            "description": "Image exceeds 2 MB."
+          },
+          "422": {
+            "description": "Image cannot be processed."
+          }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 120
+                  },
+                  "app_name": {
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "address": {
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "phone": {
+                    "type": "string",
+                    "maxLength": 30
+                  },
+                  "email": {
+                    "type": "string",
+                    "maxLength": 254
+                  }
+                },
+                "required": [
+                  "name",
+                  "app_name"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/school/logo": {
+      "get": {
+        "summary": "GET /school/logo",
+        "description": "Photo access is restricted to the signed-in account. School settings and logo writes require school.write and the existing school administrator policy. Public branding excludes school contact details. Images are rebuilt without metadata and stored in PostgreSQL.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success; JSON data/request_id envelope, or normalized PNG/JPEG for image GET."
+          },
+          "400": {
+            "description": "Invalid form data."
+          },
+          "401": {
+            "description": "Sign-in required."
+          },
+          "403": {
+            "description": "Missing permission or invalid origin/CSRF."
+          },
+          "404": {
+            "description": "Image or active school unavailable."
+          },
+          "413": {
+            "description": "Image exceeds 2 MB."
+          },
+          "422": {
+            "description": "Image cannot be processed."
+          }
+        }
+      },
+      "put": {
+        "summary": "PUT /school/logo",
+        "description": "Photo access is restricted to the signed-in account. School settings and logo writes require school.write and the existing school administrator policy. Public branding excludes school contact details. Images are rebuilt without metadata and stored in PostgreSQL.",
+        "security": [
+          {
+            "UserCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success; JSON data/request_id envelope, or normalized PNG/JPEG for image GET."
+          },
+          "400": {
+            "description": "Invalid form data."
+          },
+          "401": {
+            "description": "Sign-in required."
+          },
+          "403": {
+            "description": "Missing permission or invalid origin/CSRF."
+          },
+          "404": {
+            "description": "Image or active school unavailable."
+          },
+          "413": {
+            "description": "Image exceeds 2 MB."
+          },
+          "422": {
+            "description": "Image cannot be processed."
+          }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Raw JPG/PNG file, at most 2 MB, 32\u20134096 pixels on each side and at most 12 megapixels. JPEG/PNG orientation is applied; output max side is 512 pixels.",
+          "content": {
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "maxLength": 2097152
+              }
+            },
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "maxLength": 2097152
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "DELETE /school/logo",
+        "description": "Photo access is restricted to the signed-in account. School settings and logo writes require school.write and the existing school administrator policy. Public branding excludes school contact details. Images are rebuilt without metadata and stored in PostgreSQL.",
+        "security": [
+          {
+            "UserCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success; JSON data/request_id envelope, or normalized PNG/JPEG for image GET."
+          },
+          "400": {
+            "description": "Invalid form data."
+          },
+          "401": {
+            "description": "Sign-in required."
+          },
+          "403": {
+            "description": "Missing permission or invalid origin/CSRF."
+          },
+          "404": {
+            "description": "Image or active school unavailable."
+          },
+          "413": {
+            "description": "Image exceeds 2 MB."
+          },
+          "422": {
+            "description": "Image cannot be processed."
+          }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/auth/profile/photo": {
+      "get": {
+        "summary": "GET /auth/profile/photo",
+        "description": "Photo access is restricted to the signed-in account. School settings and logo writes require school.write and the existing school administrator policy. Public branding excludes school contact details. Images are rebuilt without metadata and stored in PostgreSQL.",
+        "security": [
+          {
+            "UserCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success; JSON data/request_id envelope, or normalized PNG/JPEG for image GET."
+          },
+          "400": {
+            "description": "Invalid form data."
+          },
+          "401": {
+            "description": "Sign-in required."
+          },
+          "403": {
+            "description": "Missing permission or invalid origin/CSRF."
+          },
+          "404": {
+            "description": "Image or active school unavailable."
+          },
+          "413": {
+            "description": "Image exceeds 2 MB."
+          },
+          "422": {
+            "description": "Image cannot be processed."
+          }
+        }
+      },
+      "put": {
+        "summary": "PUT /auth/profile/photo",
+        "description": "Photo access is restricted to the signed-in account. School settings and logo writes require school.write and the existing school administrator policy. Public branding excludes school contact details. Images are rebuilt without metadata and stored in PostgreSQL.",
+        "security": [
+          {
+            "UserCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success; JSON data/request_id envelope, or normalized PNG/JPEG for image GET."
+          },
+          "400": {
+            "description": "Invalid form data."
+          },
+          "401": {
+            "description": "Sign-in required."
+          },
+          "403": {
+            "description": "Missing permission or invalid origin/CSRF."
+          },
+          "404": {
+            "description": "Image or active school unavailable."
+          },
+          "413": {
+            "description": "Image exceeds 2 MB."
+          },
+          "422": {
+            "description": "Image cannot be processed."
+          }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Raw JPG/PNG file, at most 2 MB, 32\u20134096 pixels on each side and at most 12 megapixels. JPEG/PNG orientation is applied; output max side is 512 pixels.",
+          "content": {
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "maxLength": 2097152
+              }
+            },
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "maxLength": 2097152
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "DELETE /auth/profile/photo",
+        "description": "Photo access is restricted to the signed-in account. School settings and logo writes require school.write and the existing school administrator policy. Public branding excludes school contact details. Images are rebuilt without metadata and stored in PostgreSQL.",
+        "security": [
+          {
+            "UserCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success; JSON data/request_id envelope, or normalized PNG/JPEG for image GET."
+          },
+          "400": {
+            "description": "Invalid form data."
+          },
+          "401": {
+            "description": "Sign-in required."
+          },
+          "403": {
+            "description": "Missing permission or invalid origin/CSRF."
+          },
+          "404": {
+            "description": "Image or active school unavailable."
+          },
+          "413": {
+            "description": "Image exceeds 2 MB."
+          },
+          "422": {
+            "description": "Image cannot be processed."
+          }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "UserCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "attendance_session"
+      }
+    }
+  }
+}

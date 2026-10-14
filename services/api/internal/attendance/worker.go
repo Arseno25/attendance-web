@@ -36,11 +36,6 @@ func (s *Service) Tick(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	// Expiry denies immediately in gallery queries; ciphertext is purged by this minute worker.
-	_, err = tx.Exec(ctx, `DELETE FROM face_templates f USING biometric_consents c WHERE f.school_id=$1 AND c.school_id=f.school_id AND c.id=f.consent_id AND c.valid_until<=clock_timestamp()`, s.schoolID)
-	if err != nil {
-		return err
-	}
 	if !active {
 		return tx.Commit(ctx)
 	}

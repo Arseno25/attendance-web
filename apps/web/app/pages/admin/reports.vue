@@ -101,7 +101,7 @@ async function exportCSV() {
   message.value = ''
   try {
     await download(applied.value)
-    toast.success('CSV siap diunduh. Ekspor seluruh hasil filter telah tercatat di audit.')
+    toast.success('Laporan siap diunduh.')
   } catch (error) {
     toast.error(apiMessage(error))
   } finally {
@@ -125,7 +125,7 @@ await load({ ...form })
   <div class="flex min-w-0 flex-col gap-6">
     <PageHeader
       title="Laporan kehadiran"
-      description="Rekap dari roster sesi, termasuk siswa yang belum memiliki catatan."
+      description="Rekap dari daftar siswa sesi, termasuk siswa yang belum memiliki catatan."
     >
       <template #actions>
         <Button
@@ -374,7 +374,7 @@ await load({ ...form })
         <CardTitle>Rekap harian</CardTitle>
         <CardDescription>
           {{ applied.from }} – {{ applied.to }}. Rekap seluruh hasil filter, termasuk hari tanpa
-          roster.
+          daftar siswa.
         </CardDescription>
       </CardHeader>
       <CardContent class="min-w-0">
@@ -429,7 +429,7 @@ await load({ ...form })
     </Card>
     <Card class="min-w-0">
       <CardHeader>
-        <CardTitle>Rincian roster</CardTitle>
+        <CardTitle>Rincian daftar siswa</CardTitle>
         <CardDescription v-if="applied">
           {{ applied.from }} – {{ applied.to }} · {{ total }} baris. Satu baris untuk satu siswa
           pada satu sesi.
@@ -507,10 +507,10 @@ await load({ ...form })
           <template #empty>
             <Empty>
               <EmptyHeader>
-                <EmptyTitle>Tidak ada roster sesuai filter</EmptyTitle>
+                <EmptyTitle>Tidak ada daftar siswa sesuai filter</EmptyTitle>
                 <EmptyDescription>
-                  Periksa tanggal dan kelas. Roster tersedia setelah sesi dibuka; sesi dibatalkan
-                  tidak masuk laporan.
+                  Periksa tanggal dan kelas. Daftar siswa tersedia setelah sesi dibuka; sesi
+                  dibatalkan tidak masuk laporan.
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>

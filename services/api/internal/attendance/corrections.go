@@ -1,6 +1,7 @@
 package attendance
 
 import (
+	"attendance.local/api/internal/auth"
 	"attendance.local/api/internal/platform/httpresponse"
 	"context"
 	"errors"
@@ -10,7 +11,7 @@ import (
 	"time"
 )
 
-const correctionSelect = `SELECT ac.id::text AS id,ac.session_id::text AS session_id,ac.student_id::text AS student_id,ac.requested_by::text AS requested_by,requester.full_name AS requester_name,p.nis,p.full_name,c.name AS class_name,se.date::text AS session_date,ac.previous_version,ac.previous_status,ac.new_status,ac.check_in_at,ac.reason,ac.status,ac.decided_by::text AS decided_by,ac.decision_reason,ac.decided_at,ac.created_at FROM attendance_corrections ac JOIN attendance_session_participants p ON p.school_id=ac.school_id AND p.session_id=ac.session_id AND p.student_id=ac.student_id JOIN attendance_sessions se ON se.school_id=ac.school_id AND se.id=ac.session_id JOIN classes c ON c.school_id=se.school_id AND c.id=se.class_id JOIN users requester ON requester.school_id=ac.school_id AND requester.id=ac.requested_by WHERE ac.school_id=$1 AND ($2::text!='teacher' OR se.class_id=ANY($3::uuid[])) AND ($2!='operator' OR ac.requested_by=$4::uuid)`
+const correctionSelect = `SELECT ac.id::text AS id,ac.session_id::text AS session_id,ac.student_id::text AS student_id,ac.requested_by::text AS requested_by,requester.full_name AS requester_name,p.nis,p.full_name,c.name AS class_name,se.date::text AS session_date,ac.previous_version,ac.previous_status,ac.new_status,ac.check_in_at,ac.reason,ac.status,ac.decided_by::text AS decided_by,ac.decision_reason,ac.decided_at,ac.created_at FROM attendance_corrections ac JOIN attendance_session_participants p ON p.school_id=ac.school_id AND p.session_id=ac.session_id AND p.student_id=ac.student_id JOIN attendance_sessions se ON se.school_id=ac.school_id AND se.id=ac.session_id JOIN classes c ON c.school_id=se.school_id AND c.id=se.class_id JOIN users requester ON requester.school_id=ac.school_id AND requester.id=ac.requested_by WHERE ac.school_id=$1 AND (NOT $2::boolean OR se.class_id=ANY($3::uuid[])) AND (NOT $4::boolean OR ac.requested_by=$5::uuid)`
 
 func (s *Service) corrections(w http.ResponseWriter, r *http.Request) {
 	if !httpresponse.Method(w, r, "GET", "POST") {
@@ -28,7 +29,7 @@ func (s *Service) corrections(w http.ResponseWriter, r *http.Request) {
 			invalid(w, "Status koreksi tidak valid")
 			return
 		}
-		s.list(w, r, tx, correctionSelect+` AND ($5='' OR ac.status=$5)`, s.schoolID, u.Role, u.ClassIDs, u.ID, status)
+		s.list(w, r, tx, correctionSelect+` AND ($6='' OR ac.status=$6)`, s.schoolID, u.Scope == auth.ScopeAssignedClasses, u.ClassIDs, u.Scope == auth.ScopeAssignedClasses, u.ID, status)
 		return
 	}
 	var in struct {
@@ -94,7 +95,7 @@ func (s *Service) corrections(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !exists {
-		httpresponse.Error(w, 404, "NOT_FOUND", "Siswa tidak termasuk roster sesi")
+		httpresponse.Error(w, 404, "NOT_FOUND", "Siswa tidak ada dalam daftar absensi ini.")
 		return
 	}
 	version := 0
@@ -110,7 +111,7 @@ func (s *Service) corrections(w http.ResponseWriter, r *http.Request) {
 		dbError(w, err)
 		return
 	}
-	data, err := one(r.Context(), tx, correctionSelect+` AND ac.id=$5`, s.schoolID, u.Role, u.ClassIDs, u.ID, id)
+	data, err := one(r.Context(), tx, correctionSelect+` AND ac.id=$6`, s.schoolID, u.Scope == auth.ScopeAssignedClasses, u.ClassIDs, u.Scope == auth.ScopeAssignedClasses, u.ID, id)
 	if err != nil {
 		dbError(w, err)
 		return
@@ -130,7 +131,7 @@ func (s *Service) correction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback(context.Background())
-	data, err := one(r.Context(), tx, correctionSelect+` AND ac.id=$5`, s.schoolID, u.Role, u.ClassIDs, u.ID, id)
+	data, err := one(r.Context(), tx, correctionSelect+` AND ac.id=$6`, s.schoolID, u.Scope == auth.ScopeAssignedClasses, u.ClassIDs, u.Scope == auth.ScopeAssignedClasses, u.ID, id)
 	if err != nil {
 		dbError(w, err)
 		return
@@ -162,7 +163,7 @@ func (s *Service) decision(w http.ResponseWriter, r *http.Request) {
 		invalid(w, "Keputusan dan alasan wajib valid")
 		return
 	}
-	data, err := one(r.Context(), tx, correctionSelect+` AND ac.id=$5 FOR UPDATE OF ac`, s.schoolID, u.Role, u.ClassIDs, u.ID, id)
+	data, err := one(r.Context(), tx, correctionSelect+` AND ac.id=$6 FOR UPDATE OF ac`, s.schoolID, u.Scope == auth.ScopeAssignedClasses, u.ClassIDs, u.Scope == auth.ScopeAssignedClasses, u.ID, id)
 	if err != nil {
 		dbError(w, err)
 		return
@@ -222,7 +223,7 @@ func (s *Service) decision(w http.ResponseWriter, r *http.Request) {
 		dbError(w, err)
 		return
 	}
-	data, err = one(r.Context(), tx, correctionSelect+` AND ac.id=$5`, s.schoolID, u.Role, u.ClassIDs, u.ID, id)
+	data, err = one(r.Context(), tx, correctionSelect+` AND ac.id=$6`, s.schoolID, u.Scope == auth.ScopeAssignedClasses, u.ClassIDs, u.Scope == auth.ScopeAssignedClasses, u.ID, id)
 	if err != nil {
 		dbError(w, err)
 		return

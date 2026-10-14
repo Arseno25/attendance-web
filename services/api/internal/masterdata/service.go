@@ -31,9 +31,6 @@ func New(pool *pgxpool.Pool, schoolID string, a *auth.Service) *Service {
 }
 func (s *Service) SetAI(client *aiclient.Client) { s.ai = client }
 func (s *Service) Register(m *http.ServeMux) {
-	m.HandleFunc("/api/v1/students/{id}/guardians", s.guardians)
-	m.HandleFunc("/api/v1/students/{id}/consents", s.consents)
-	m.HandleFunc("/api/v1/consents/{id}/withdraw", s.withdraw)
 	m.HandleFunc("/api/v1/students/{id}/face-status", s.faceStatus)
 	m.HandleFunc("/api/v1/students/{id}/face-preview", s.facePreview)
 	m.HandleFunc("/api/v1/biometrics/students", s.biometricStudents)
@@ -49,16 +46,17 @@ func (s *Service) Register(m *http.ServeMux) {
 	m.HandleFunc("/api/v1/students/imports/{id}/commit", s.importCommit)
 	m.HandleFunc("/api/v1/students/{id}", s.student)
 	m.HandleFunc("/api/v1/students/{id}/placements", s.placement)
-	m.HandleFunc("/api/v1/teacher-assignments", s.assignments)
-	m.HandleFunc("/api/v1/teacher-assignments/{id}", s.assignment)
-	m.HandleFunc("/api/v1/teacher-options", s.teachers)
+	m.HandleFunc("/api/v1/class-assignments", s.assignments)
+	m.HandleFunc("/api/v1/class-assignments/{id}", s.assignment)
+	m.HandleFunc("/api/v1/class-assignment-users", s.teachers)
 	m.HandleFunc("/api/v1/master-data/summary", s.summary)
 }
 
 type scope struct {
-	tx      pgx.Tx
-	user    auth.User
-	classes []string
+	tx          pgx.Tx
+	user        auth.User
+	classes     []string
+	classScoped bool
 }
 
 func (s *Service) begin(w http.ResponseWriter, r *http.Request, permission string, write bool) (*scope, bool) {
@@ -66,7 +64,7 @@ func (s *Service) begin(w http.ResponseWriter, r *http.Request, permission strin
 	if !ok {
 		return nil, false
 	}
-	return &scope{tx: tx, user: user, classes: user.ClassIDs}, true
+	return &scope{tx: tx, user: user, classes: user.ClassIDs, classScoped: user.Scope == auth.ScopeAssignedClasses}, true
 }
 func rows(ctx context.Context, tx pgx.Tx, query string, args ...any) ([]map[string]any, error) {
 	r, err := tx.Query(ctx, query, args...)

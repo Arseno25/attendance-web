@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+  Settings,
   Camera,
   CalendarDays,
   ClipboardCheck,
@@ -10,12 +11,14 @@ import {
   School,
   ScrollText,
   ScanFace,
+  Shield,
   Users,
 } from '@lucide/vue'
 import NavMain from '~/components/NavMain.vue'
 import NavUser from '~/components/NavUser.vue'
 
 const auth = useAuth()
+const config = useRuntimeConfig()
 const links = computed(() => [
   { title: 'Ringkasan', url: '/admin', icon: LayoutDashboard, category: 'Utama' },
   ...(auth.session.value?.permissions.includes('biometrics.enroll') ||
@@ -60,21 +63,53 @@ const links = computed(() => [
         },
       ]
     : []),
-  ...(['super_admin', 'admin', 'teacher'].includes(auth.session.value?.user.role ?? '')
+  ...(auth.session.value?.permissions.includes('attendance.read')
     ? [{ title: 'Laporan kehadiran', url: '/admin/reports', icon: FileDown, category: 'Kehadiran' }]
     : []),
   ...(auth.session.value?.permissions.includes('devices.health')
-    ? [{ title: 'Perangkat kiosk', url: '/admin/devices', icon: Camera, category: 'Administrasi' }]
-    : []),
-  ...(auth.session.value?.user.role === 'super_admin'
     ? [
-        { title: 'Pengguna & peran', url: '/admin/users', icon: Users, category: 'Administrasi' },
         {
-          title: 'Audit aktivitas',
-          url: '/admin/audit',
-          icon: ScrollText,
+          title: 'Perangkat absensi',
+          url: '/admin/devices',
+          icon: Camera,
           category: 'Administrasi',
         },
+      ]
+    : []),
+  { title: 'Pengaturan', url: '/admin/settings', icon: Settings, category: 'Administrasi' },
+  ...(auth.session.value?.user.role === 'super_admin'
+    ? [
+        ...(auth.session.value.permissions.includes('users.read') ||
+        auth.session.value.permissions.includes('users.write')
+          ? [
+              {
+                title: 'Pengguna & peran',
+                url: '/admin/users',
+                icon: Users,
+                category: 'Administrasi',
+              },
+            ]
+          : []),
+        ...(auth.session.value.permissions.includes('roles.manage')
+          ? [
+              {
+                title: 'Peran & akses',
+                url: '/admin/roles',
+                icon: Shield,
+                category: 'Administrasi',
+              },
+            ]
+          : []),
+        ...(auth.session.value.permissions.includes('audit.read')
+          ? [
+              {
+                title: 'Riwayat aktivitas',
+                url: '/admin/audit',
+                icon: ScrollText,
+                category: 'Administrasi',
+              },
+            ]
+          : []),
       ]
     : []),
 ])
@@ -98,10 +133,21 @@ const groups = computed(() =>
               <div
                 class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground"
               >
-                <School class="size-5" />
+                <img
+                  v-if="auth.session.value?.school.logo_url"
+                  :src="`${config.public.apiBase}${auth.session.value.school.logo_url}`"
+                  alt=""
+                  class="size-9 rounded-lg object-contain"
+                />
+                <School
+                  v-else
+                  class="size-5"
+                />
               </div>
               <div class="grid min-w-0 flex-1 gap-0.5 text-left">
-                <span class="truncate text-sm font-semibold">Absensi Sekolah</span>
+                <span class="truncate text-sm font-semibold">
+                  {{ auth.session.value?.school.app_name || 'Absensi Sekolah' }}
+                </span>
                 <span class="truncate text-xs text-muted-foreground">
                   {{ auth.session.value?.school.name }}
                 </span>

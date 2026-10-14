@@ -7,10 +7,8 @@ import type { Result } from '~/types/auth'
 import { statusLabels, type Student, type SchoolClass } from '~/types/master'
 definePageMeta({ layout: 'admin', middleware: ['auth', 'academics'] })
 const { request, options, canWrite, dateTime } = useMasterData()
-const auth = useAuth()
 const route = useRoute()
 const student = ref<Student | null>(null)
-const faceEnrollment = ref<{ refresh: () => Promise<void> } | null>(null)
 const message = ref('')
 const editOpen = ref(false)
 const placementOpen = ref(false)
@@ -61,7 +59,6 @@ async function savePlacement() {
 async function saved() {
   toast.success('Data siswa berhasil diperbarui.')
   await load()
-  await faceEnrollment.value?.refresh()
 }
 await load()
 </script>
@@ -189,21 +186,6 @@ await load()
           </DataTable>
         </CardContent>
       </Card>
-      <StudentConsent
-        v-if="auth.session.value?.permissions.includes('consents.manage')"
-        :student-id="student.id"
-        :student-name="student.full_name"
-        @changed="faceEnrollment?.refresh()"
-      />
-      <StudentFaceEnrollment
-        v-if="
-          auth.session.value?.permissions.includes('biometrics.enroll') ||
-          auth.session.value?.permissions.includes('biometrics.revoke')
-        "
-        ref="faceEnrollment"
-        :student-id="student.id"
-        :student-name="student.full_name"
-      />
       <StudentEditor
         v-if="canWrite"
         v-model:open="editOpen"

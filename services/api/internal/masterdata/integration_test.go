@@ -123,6 +123,21 @@ func TestMasterDatabaseScopesAndHistory(t *testing.T) {
 	classID := class["id"].(string)
 	class2 := expect(call("POST", "/classes", map[string]any{"academic_year_id": yearID, "code": "7B", "name": "Kelas 7B", "level": "7"}), 201)["data"].(map[string]any)
 	class2ID := class2["id"].(string)
+	customRole := expect(call("POST", "/roles", map[string]any{"name": "Pembaca Kelas Uji", "description": "", "scope": "assigned_classes", "permissions": []string{"academics.read", "students.read"}}), 201)["data"].(map[string]any)
+	customUser := expect(call("POST", "/users", map[string]any{"email": "class-reader@example.test", "full_name": "Pembaca Kelas", "role": customRole["key"], "password": password}), 201)["data"].(map[string]any)
+	customAssignment := expect(call("POST", "/class-assignments", map[string]any{"user_id": customUser["id"], "class_id": classID}), 201)["data"].(map[string]any)
+	if customAssignment["user_id"] != customUser["id"] {
+		t.Fatal("generic assignment response omitted user identity", customAssignment)
+	}
+	customAssignmentCookie, customAssignmentCSRF := cookie, csrf
+	login("class-reader@example.test")
+	customClasses := expect(call("GET", "/classes", nil), 200)["data"].([]any)
+	if len(customClasses) != 1 || customClasses[0].(map[string]any)["id"] != classID {
+		t.Fatal("custom assigned-class role did not stay in its assignment", customClasses)
+	}
+	expect(call("GET", "/classes/"+class2ID, nil), 404)
+	cookie, csrf = customAssignmentCookie, customAssignmentCSRF
+	login("owner@example.test")
 	expect(call("POST", "/classes", map[string]any{"academic_year_id": yearID, "code": "7a", "name": "Duplicate", "level": "7"}), 409)
 	expect(call("PATCH", "/academic-years/"+yearID, map[string]any{"starts_on": now.AddDate(0, -7, 0).Format("2006-01-02")}), 409)
 	student := expect(call("POST", "/students", map[string]any{"nis": "001", "full_name": "Siswa Uji", "class_id": classID}), 201)["data"].(map[string]any)
@@ -133,11 +148,11 @@ func TestMasterDatabaseScopesAndHistory(t *testing.T) {
 	expect(call("POST", "/students", map[string]any{"nis": "001", "full_name": "Duplicate", "class_id": classID}), 409)
 	teacher := expect(call("POST", "/users", map[string]any{"email": "teacher@example.test", "full_name": "Guru", "role": "teacher", "password": password}), 201)["data"].(map[string]any)
 	teacherID := teacher["id"].(string)
-	assignment := expect(call("POST", "/teacher-assignments", map[string]any{"teacher_id": teacherID, "class_id": classID}), 201)["data"].(map[string]any)
+	assignment := expect(call("POST", "/class-assignments", map[string]any{"user_id": teacherID, "class_id": classID}), 201)["data"].(map[string]any)
 	if assignment["is_current"] != true {
 		t.Fatal("new assignment response not current", assignment)
 	}
-	expect(call("POST", "/teacher-assignments", map[string]any{"teacher_id": teacherID, "class_id": classID}), 409)
+	expect(call("POST", "/class-assignments", map[string]any{"user_id": teacherID, "class_id": classID}), 409)
 	login("teacher@example.test")
 	expect(call("POST", "/students", map[string]any{"nis": "bad", "full_name": "Denied", "class_id": classID}), 403)
 	teacherList := expect(call("GET", "/classes", nil), 200)["data"].([]any)
@@ -169,7 +184,7 @@ func TestMasterDatabaseScopesAndHistory(t *testing.T) {
 		t.Fatal("teacher saw transferred student")
 	}
 	login("owner@example.test")
-	expect(call("PATCH", "/teacher-assignments/"+assignment["id"].(string), map[string]any{"is_active": false}), 200)
+	expect(call("PATCH", "/class-assignments/"+assignment["id"].(string), map[string]any{"is_active": false}), 200)
 	login("teacher@example.test")
 	classes := expect(call("GET", "/classes", nil), 200)["data"].([]any)
 	if len(classes) != 0 {
@@ -204,7 +219,7 @@ func TestMasterDatabaseScopesAndHistory(t *testing.T) {
 	expect(call("PATCH", "/academic-years/"+otherYear, map[string]any{"name": "Denied"}), 404)
 	expect(call("POST", "/students", map[string]any{"nis": "cross", "full_name": "Denied", "class_id": otherClass}), 404)
 	expect(call("POST", "/classes", map[string]any{"code": "cross", "name": "Denied", "academic_year_id": otherYear}), 404)
-	expect(call("PATCH", "/teacher-assignments/"+otherClass, map[string]any{"is_active": false}), 404)
+	expect(call("PATCH", "/class-assignments/"+otherClass, map[string]any{"is_active": false}), 404)
 	if _, err := pool.Exec(ctx, `INSERT INTO student_enrollments(school_id,student_id,class_id,academic_year_id,joined_at,left_at,reason) VALUES($1,$2,$3,$4,now(),now()+interval '1 day','cross')`, schoolID, studentID, otherClass, otherYear); err == nil {
 		t.Fatal("cross-school FK permitted placement")
 	}

@@ -173,6 +173,11 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          "avatar_url": {
+            "type": "string",
+            "readOnly": true,
+            "description": "Private photo path for the signed-in account; omitted when no photo exists."
           }
         },
         "additionalProperties": false
@@ -224,6 +229,12 @@
                     "type": "string"
                   },
                   "timezone": {
+                    "type": "string"
+                  },
+                  "app_name": {
+                    "type": "string"
+                  },
+                  "logo_url": {
                     "type": "string"
                   }
                 },

@@ -6,7 +6,7 @@ export function useApi() {
   return async <T>(
     path: string,
     options: {
-      method?: 'GET' | 'POST' | 'PATCH' | 'PUT'
+      method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
       body?: object
       query?: Record<string, string | number>
       signal?: AbortSignal

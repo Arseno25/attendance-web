@@ -118,8 +118,8 @@ func (s *Service) profile(w http.ResponseWriter, r *http.Request) {
 	}
 	var u User
 	var liveHash string
-	err = tx.QueryRow(r.Context(), "SELECT "+userColumns+",u.password_hash FROM users u WHERE u.school_id=$1 AND u.id=$2 FOR UPDATE", s.schoolID, actor.ID).
-		Scan(&u.ID, &u.SchoolID, &u.Email, &u.FullName, &u.Role, &u.Active, &u.Grants, &liveHash)
+	err = tx.QueryRow(r.Context(), "SELECT "+userColumns+",u.password_hash FROM users u JOIN roles r ON r.school_id=u.school_id AND r.key=u.role WHERE u.school_id=$1 AND u.id=$2 FOR UPDATE OF u", s.schoolID, actor.ID).
+		Scan(&u.ID, &u.SchoolID, &u.Email, &u.FullName, &u.Role, &u.Active, &u.RoleName, &u.Scope, &u.PermissionsList, &liveHash)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		databaseError(w, err)
 		return
@@ -162,7 +162,7 @@ func (s *Service) profile(w http.ResponseWriter, r *http.Request) {
 	if sensitive {
 		s.setCookie(w, token, false)
 	}
-	if err = s.grants(r.Context(), &u); err != nil {
+	if err = s.loadSessionAccess(r.Context(), &u); err != nil {
 		databaseError(w, err)
 		return
 	}

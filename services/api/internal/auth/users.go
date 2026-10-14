@@ -11,12 +11,12 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const userColumns = `u.id::text,u.school_id::text,u.email,u.full_name,u.role,u.is_active,
- ARRAY(SELECT permission FROM permission_grants g WHERE g.school_id=u.school_id AND g.user_id=u.id ORDER BY permission)`
+const userColumns = `u.id::text,u.school_id::text,u.email,u.full_name,u.role,u.is_active,r.name,r.scope,
+ COALESCE(array(SELECT permission FROM role_permissions rp WHERE rp.school_id=r.school_id AND rp.role_id=r.id ORDER BY permission),ARRAY[]::text[])`
 
 func scanUser(row pgx.Row) (User, error) {
-	u := User{ClassIDs: []string{}}
-	err := row.Scan(&u.ID, &u.SchoolID, &u.Email, &u.FullName, &u.Role, &u.Active, &u.Grants)
+	u := User{ClassIDs: []string{}, PermissionsList: []string{}}
+	err := row.Scan(&u.ID, &u.SchoolID, &u.Email, &u.FullName, &u.Role, &u.Active, &u.RoleName, &u.Scope, &u.PermissionsList)
 	return u, err
 }
 
@@ -51,7 +51,7 @@ func (s *Service) users(w http.ResponseWriter, r *http.Request) {
 		databaseError(w, err)
 		return
 	}
-	rows, err := s.pool.Query(r.Context(), "SELECT "+userColumns+" FROM users u WHERE u.school_id=$1 AND (u.email ILIKE $2 OR u.full_name ILIKE $2) ORDER BY u.created_at,u.id LIMIT $3 OFFSET $4", s.schoolID, "%"+search+"%", size, (page-1)*size)
+	rows, err := s.pool.Query(r.Context(), "SELECT "+userColumns+" FROM users u JOIN roles r ON r.school_id=u.school_id AND r.key=u.role WHERE u.school_id=$1 AND (u.email ILIKE $2 OR u.full_name ILIKE $2) ORDER BY u.created_at,u.id LIMIT $3 OFFSET $4", s.schoolID, "%"+search+"%", size, (page-1)*size)
 	if err != nil {
 		databaseError(w, err)
 		return
@@ -93,33 +93,20 @@ func (s *Service) adminTransaction(ctx context.Context, actor User) (pgx.Tx, err
 	return tx, nil
 }
 
-func (s *Service) replaceGrants(ctx context.Context, tx pgx.Tx, userID, actorID string, grants []string) error {
-	if _, err := tx.Exec(ctx, "DELETE FROM permission_grants WHERE school_id=$1 AND user_id=$2", s.schoolID, userID); err != nil {
-		return err
-	}
-	for _, grant := range grants {
-		if _, err := tx.Exec(ctx, "INSERT INTO permission_grants(school_id,user_id,permission,granted_by) VALUES($1,$2,$3,$4)", s.schoolID, userID, grant, actorID); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (s *Service) createUser(w http.ResponseWriter, r *http.Request, actor User) {
 	var input struct {
-		Email    string   `json:"email"`
-		FullName string   `json:"full_name"`
-		Role     string   `json:"role"`
-		Password string   `json:"password"`
-		Grants   []string `json:"grants"`
+		Email    string `json:"email"`
+		FullName string `json:"full_name"`
+		Role     string `json:"role"`
+		Password string `json:"password"`
 	}
 	if !httpresponse.Decode(w, r, &input) {
 		return
 	}
 	email, err := normalizeEmail(input.Email)
 	name := strings.TrimSpace(input.FullName)
-	if err != nil || !validName(name) || !validRole(input.Role) || !validGrants(input.Grants) || !grantsForRole(input.Role, input.Grants) {
-		httpresponse.Error(w, 400, "VALIDATION_ERROR", "Email, nama, peran atau izin tidak valid")
+	if err != nil || !validName(name) || strings.TrimSpace(input.Role) == "" {
+		httpresponse.Error(w, 400, "VALIDATION_ERROR", "Email, nama, atau peran tidak valid")
 		return
 	}
 	select {
@@ -141,11 +128,17 @@ func (s *Service) createUser(w http.ResponseWriter, r *http.Request, actor User)
 		return
 	}
 	defer tx.Rollback(context.Background())
+	valid, err := roleExists(r.Context(), tx, s.schoolID, input.Role)
+	if err != nil {
+		databaseError(w, err)
+		return
+	}
+	if !valid {
+		httpresponse.Error(w, 400, "VALIDATION_ERROR", "Peran tidak ditemukan di sekolah ini")
+		return
+	}
 	var id string
 	err = tx.QueryRow(r.Context(), "INSERT INTO users(school_id,email,full_name,password_hash,role) VALUES($1,$2,$3,$4,$5) RETURNING id::text", s.schoolID, email, name, hash, input.Role).Scan(&id)
-	if err == nil {
-		err = s.replaceGrants(r.Context(), tx, id, actor.ID, input.Grants)
-	}
 	if err == nil {
 		err = audit(r.Context(), tx, s.schoolID, actor.ID, "users.created", "user", id, w.Header().Get("X-Request-ID"))
 	}
@@ -156,9 +149,10 @@ func (s *Service) createUser(w http.ResponseWriter, r *http.Request, actor User)
 		databaseError(w, err)
 		return
 	}
-	u := User{ID: id, SchoolID: s.schoolID, Email: email, FullName: name, Role: input.Role, Active: true, Grants: input.Grants, ClassIDs: []string{}}
-	if u.Grants == nil {
-		u.Grants = []string{}
+	u := User{ID: id, SchoolID: s.schoolID, Email: email, FullName: name, Role: input.Role, Active: true, ClassIDs: []string{}}
+	if err := s.loadSessionAccess(r.Context(), &u); err != nil {
+		databaseError(w, err)
+		return
 	}
 	httpresponse.Data(w, 201, u)
 }
@@ -177,16 +171,15 @@ func (s *Service) updateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		Email    *string   `json:"email"`
-		FullName *string   `json:"full_name"`
-		Role     *string   `json:"role"`
-		Active   *bool     `json:"is_active"`
-		Grants   *[]string `json:"grants"`
+		Email    *string `json:"email"`
+		FullName *string `json:"full_name"`
+		Role     *string `json:"role"`
+		Active   *bool   `json:"is_active"`
 	}
 	if !httpresponse.Decode(w, r, &input) {
 		return
 	}
-	if input.Email == nil && input.FullName == nil && input.Role == nil && input.Active == nil && input.Grants == nil {
+	if input.Email == nil && input.FullName == nil && input.Role == nil && input.Active == nil {
 		httpresponse.Error(w, 400, "VALIDATION_ERROR", "Tidak ada perubahan")
 		return
 	}
@@ -196,7 +189,7 @@ func (s *Service) updateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback(context.Background())
-	u, err := scanUser(tx.QueryRow(r.Context(), "SELECT "+userColumns+" FROM users u WHERE u.school_id=$1 AND u.id=$2 FOR UPDATE", s.schoolID, id))
+	u, err := scanUser(tx.QueryRow(r.Context(), "SELECT "+userColumns+" FROM users u JOIN roles r ON r.school_id=u.school_id AND r.key=u.role WHERE u.school_id=$1 AND u.id=$2 FOR UPDATE OF u", s.schoolID, id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		httpresponse.Error(w, 404, "NOT_FOUND", "Pengguna tidak ditemukan")
 		return
@@ -218,16 +211,24 @@ func (s *Service) updateUser(w http.ResponseWriter, r *http.Request) {
 	if input.Active != nil {
 		u.Active = *input.Active
 	}
-	if input.Grants != nil {
-		u.Grants = *input.Grants
-	}
-	if err != nil || !validName(u.FullName) || !validRole(u.Role) || !validGrants(u.Grants) || !grantsForRole(u.Role, u.Grants) {
+	if err != nil || !validName(u.FullName) || strings.TrimSpace(u.Role) == "" {
 		httpresponse.Error(w, 400, "VALIDATION_ERROR", "Perubahan tidak valid")
 		return
 	}
 	if u.ID == actor.ID && (!u.Active || u.Role != "super_admin" || u.Email != previousEmail) {
 		httpresponse.Error(w, 409, "CONFLICT", "Anda tidak dapat mengurangi akses atau mengubah email akun sendiri")
 		return
+	}
+	if u.Role != previousRole {
+		valid, roleErr := roleExists(r.Context(), tx, s.schoolID, u.Role)
+		if roleErr != nil {
+			databaseError(w, roleErr)
+			return
+		}
+		if !valid {
+			httpresponse.Error(w, 400, "VALIDATION_ERROR", "Peran tidak ditemukan di sekolah ini")
+			return
+		}
 	}
 	if previousRole == "super_admin" && previousActive && (!u.Active || u.Role != "super_admin") {
 		var count int
@@ -242,10 +243,7 @@ func (s *Service) updateUser(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	_, err = tx.Exec(r.Context(), "UPDATE users SET email=$3,full_name=$4,role=$5,is_active=$6,updated_at=now() WHERE school_id=$1 AND id=$2", s.schoolID, id, u.Email, u.FullName, u.Role, u.Active)
-	if err == nil && input.Grants != nil {
-		err = s.replaceGrants(r.Context(), tx, id, actor.ID, u.Grants)
-	}
-	if err == nil && (u.Role != previousRole || u.Active != previousActive || u.Email != previousEmail || input.Grants != nil) {
+	if err == nil && (u.Role != previousRole || u.Active != previousActive || u.Email != previousEmail) {
 		_, err = tx.Exec(r.Context(), "DELETE FROM user_sessions WHERE school_id=$1 AND user_id=$2", s.schoolID, id)
 	}
 	if err == nil {
@@ -255,6 +253,10 @@ func (s *Service) updateUser(w http.ResponseWriter, r *http.Request) {
 		err = tx.Commit(r.Context())
 	}
 	if err != nil {
+		databaseError(w, err)
+		return
+	}
+	if err = s.loadSessionAccess(r.Context(), &u); err != nil {
 		databaseError(w, err)
 		return
 	}

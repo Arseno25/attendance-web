@@ -40,39 +40,15 @@ const newPassword = passwordRules.reduce(
   (schema, rule) => schema.refine(rule.test, { error: rule.message }),
   z.string(),
 )
-const roles = ['super_admin', 'admin', 'operator', 'teacher'] as const
-const grantIds = [
-  'biometrics.enroll',
-  'biometrics.revoke',
-  'consents.manage',
-  'attendance.manual',
-  'attendance.approve',
-  'reports.export',
-] as const
 export const loginSchema = z.object({ email, password: currentPassword })
-export function userSchema(editing: boolean) {
-  return z
-    .object({
-      full_name: requiredText('Nama', 120),
-      email,
-      role: z.enum(roles, { error: 'Pilih peran yang valid.' }),
-      password: editing ? z.string() : newPassword,
-      is_active: z.boolean(),
-      grants: z
-        .array(z.enum(grantIds, { error: 'Izin tidak valid.' }))
-        .refine((values) => new Set(values).size === values.length, 'Izin tidak boleh berulang.'),
-    })
-    .refine(
-      (value) =>
-        value.grants.every(
-          (grant) =>
-            ['admin', 'super_admin'].includes(value.role) ||
-            (value.role === 'operator' &&
-              ['biometrics.enroll', 'attendance.manual'].includes(grant)) ||
-            (value.role === 'teacher' && grant === 'reports.export'),
-        ),
-      { path: ['grants'], error: 'Izin tidak sesuai dengan peran yang dipilih.' },
-    )
+export function userSchema(editing: boolean, roleKeys: string[]) {
+  return z.object({
+    full_name: requiredText('Nama', 120),
+    email,
+    role: z.string().refine((value) => roleKeys.includes(value), 'Pilih peran sekolah yang valid.'),
+    password: editing ? z.string() : newPassword,
+    is_active: z.boolean(),
+  })
 }
 export function profileSchema(originalEmail: string) {
   return z

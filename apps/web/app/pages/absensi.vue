@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { toast } from 'vue-sonner'
 import { Camera, CameraOff, ShieldCheck } from '@lucide/vue'
-import { pairingSchema } from '../lib/validation/consent-devices.ts'
+import { pairingSchema } from '../lib/validation/biometrics-devices.ts'
 import { useFormValidation } from '../composables/useFormValidation.ts'
 import { faceOverlays } from '../lib/biometrics.ts'
 import type { FaceOverlay, Recognition } from '~/types/biometrics'
@@ -237,11 +237,10 @@ onBeforeUnmount(() => {
         <div>
           <p class="text-sm font-medium text-muted-foreground">Absensi sekolah</p>
           <h1 class="mt-1 text-2xl font-semibold tracking-tight">
-            {{ kiosk ? 'Kiosk absensi' : 'Pasangkan perangkat' }}
+            {{ kiosk ? 'Perangkat absensi' : 'Pasangkan perangkat' }}
           </h1>
         </div>
         <div class="ml-auto flex items-center gap-2">
-          <ModeToggle />
           <Badge :variant="kiosk ? 'success' : 'secondary'">
             <ShieldCheck class="mr-1 size-4" />
             {{ kiosk ? 'Perangkat terdaftar' : 'Belum terhubung' }}
@@ -260,9 +259,10 @@ onBeforeUnmount(() => {
         class="mx-auto w-full max-w-lg"
       >
         <CardHeader>
-          <CardTitle>Pairing oleh operator</CardTitle>
+          <CardTitle>Hubungkan perangkat</CardTitle>
           <CardDescription>
-            Masuk sebagai operator, pilih sesi terbuka dan masukkan token yang diterbitkan admin.
+            Masuk sebagai operator, pilih sesi terbuka dan masukkan kode penghubung yang diterbitkan
+            admin.
           </CardDescription>
           <CardAction>
             <Button
@@ -284,7 +284,7 @@ onBeforeUnmount(() => {
           >
             <FieldGroup>
               <Field :data-invalid="!!errors.pairing_token">
-                <FieldLabel for="kiosk-token">Token sekali pakai</FieldLabel>
+                <FieldLabel for="kiosk-token">Kode penghubung</FieldLabel>
                 <Input
                   id="kiosk-token"
                   v-model="pairingToken"
@@ -388,16 +388,14 @@ onBeforeUnmount(() => {
               aria-live="polite"
               class="text-sm text-muted-foreground"
             >
-              {{ cameraActive ? scanMessage || 'Memeriksa frame kamera…' : 'Kamera berhenti' }}
+              {{ cameraActive ? scanMessage || 'Memeriksa foto kamera…' : 'Kamera berhenti' }}
             </p>
           </CardContent>
         </Card>
         <Alert>
-          <AlertTitle>Akurasi & liveness belum dievaluasi</AlertTitle>
+          <AlertTitle>Absensi wajah belum tersedia</AlertTitle>
           <AlertDescription>
-            Frame kamera diproses untuk deteksi tanpa menyimpan foto. Kotak menampilkan nama hanya
-            setelah identitas diterima dan kehadiran terkonfirmasi. Absensi otomatis masih menunggu
-            evaluasi; gunakan absensi manual melalui petugas.
+            Absensi wajah belum siap digunakan. Untuk sementara, minta petugas mencatat kehadiran.
           </AlertDescription>
         </Alert>
       </template>

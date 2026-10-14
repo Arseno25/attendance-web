@@ -53,7 +53,7 @@ function stop() {
 function changed(value: boolean) {
   active.value = value
   stopPreview()
-  if (!value) message.value = 'Kamera berhenti. Aktifkan kembali untuk mengambil frame.'
+  if (!value) message.value = 'Kamera berhenti. Aktifkan kembali untuk mengambil foto.'
   if (value && props.enabled && !disposed) void check(generation)
 }
 
@@ -163,7 +163,7 @@ defineExpose({ stop })
       <Badge :variant="quality === 'ready' ? 'success' : 'secondary'">
         <Check v-if="quality === 'ready'" />
         {{
-          checking ? 'Memeriksa frame…' : quality === 'ready' ? 'Kualitas siap' : 'YuNet + SFace'
+          checking ? 'Memeriksa foto…' : quality === 'ready' ? 'Kualitas siap' : 'Pemeriksaan wajah'
         }}
       </Badge>
       <Button
@@ -201,17 +201,17 @@ defineExpose({ stop })
     </p>
     <div class="space-y-2">
       <div class="flex items-center justify-between text-sm">
-        <span>Frame pendaftaran</span>
+        <span>Foto pendaftaran</span>
         <span class="tabular-nums">{{ frames.length }} / 5 · minimal 3</span>
       </div>
       <Progress
         :model-value="frames.length * 20"
-        aria-label="Progres frame pendaftaran"
+        aria-label="Progres foto pendaftaran"
       />
     </div>
     <div
       class="grid grid-cols-5 gap-2"
-      aria-label="Frame sementara"
+      aria-label="Foto sementara"
     >
       <div
         v-for="index in 5"
@@ -221,15 +221,15 @@ defineExpose({ stop })
         <img
           v-if="frames[index - 1]"
           :src="`data:image/jpeg;base64,${frames[index - 1]}`"
-          :alt="`Frame ${index}`"
+          :alt="`Foto ${index}`"
           class="h-full w-full object-cover"
         />
         <span v-else>{{ index }}</span>
       </div>
     </div>
     <p class="text-sm text-muted-foreground">
-      Hadap depan, lalu ubah posisi kepala sedikit untuk frame berikutnya. Model memeriksa satu
-      wajah, ukuran, dan ketajaman; konsistensi identitas diperiksa saat disimpan.
+      Hadap depan, lalu ubah posisi kepala sedikit untuk foto berikutnya. Pastikan hanya satu wajah
+      terlihat jelas. Semua foto harus menampilkan siswa yang sama.
     </p>
     <div class="flex flex-wrap justify-end gap-2">
       <Button
@@ -239,7 +239,7 @@ defineExpose({ stop })
         @click="reset"
       >
         <RefreshCw />
-        Ulangi frame
+        Ulangi foto
       </Button>
       <Button
         type="button"
@@ -247,7 +247,7 @@ defineExpose({ stop })
         @click="capture"
       >
         <Camera />
-        Ambil frame
+        Ambil foto
       </Button>
     </div>
   </div>

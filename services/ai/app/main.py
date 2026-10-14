@@ -100,7 +100,7 @@ class StrictBody(BaseModel):
 class Enrollment(StrictBody):
     school_id: UUID
     student_id: UUID
-    consent_id: UUID
+    consent_id: UUID | None = None
     frames: list[str] = Field(min_length=3, max_length=5, repr=False)
 
 
@@ -110,7 +110,7 @@ class FacePreview(StrictBody):
 
 class GalleryTemplate(StrictBody):
     student_id: UUID
-    consent_id: UUID
+    consent_id: UUID | None = None
     ciphertext: str = Field(max_length=704, repr=False)
     nonce: str = Field(max_length=16, repr=False)
     model_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
@@ -169,7 +169,7 @@ def enroll(body: Enrollment, request: Request):
         cipher,
         str(body.school_id),
         str(body.student_id),
-        str(body.consent_id),
+        str(body.consent_id) if body.consent_id is not None else None,
     )
     return dict(
         result, recognition_enabled=False, block_reason="MODEL_LIVENESS_NOT_EVALUATED"

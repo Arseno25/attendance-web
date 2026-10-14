@@ -12,14 +12,14 @@ import (
 
 var errState = errors.New("session state conflict")
 
-const sessionSelect = `SELECT se.id::text AS id,se.schedule_id::text AS schedule_id,se.class_id::text AS class_id,c.name AS class_name,se.name,se.date::text,se.timezone,se.starts_at,se.late_after,se.closes_at,se.status,se.opened_at,se.closed_at,se.reconciled_at,se.created_at,(SELECT count(*) FROM attendance_session_participants p WHERE p.school_id=se.school_id AND p.session_id=se.id) AS roster_count,(SELECT count(*) FROM attendance_records ar WHERE ar.school_id=se.school_id AND ar.session_id=se.id) AS recorded_count FROM attendance_sessions se JOIN classes c ON c.school_id=se.school_id AND c.id=se.class_id WHERE se.school_id=$1 AND ($2::text!='teacher' OR se.class_id=ANY($3::uuid[]))`
+const sessionSelect = `SELECT se.id::text AS id,se.schedule_id::text AS schedule_id,se.class_id::text AS class_id,c.name AS class_name,se.name,se.date::text,se.timezone,se.starts_at,se.late_after,se.closes_at,se.status,se.opened_at,se.closed_at,se.reconciled_at,se.created_at,(SELECT count(*) FROM attendance_session_participants p WHERE p.school_id=se.school_id AND p.session_id=se.id) AS roster_count,(SELECT count(*) FROM attendance_records ar WHERE ar.school_id=se.school_id AND ar.session_id=se.id) AS recorded_count FROM attendance_sessions se JOIN classes c ON c.school_id=se.school_id AND c.id=se.class_id WHERE se.school_id=$1 AND (NOT $2::boolean OR se.class_id=ANY($3::uuid[]))`
 
 func (s *Service) getSession(r *http.Request, tx pgx.Tx, u auth.User, id string, lock bool) (map[string]any, error) {
 	q := sessionSelect + ` AND se.id=$4`
 	if lock {
 		q += ` FOR UPDATE OF se`
 	}
-	return one(r.Context(), tx, q, s.schoolID, u.Role, u.ClassIDs, id)
+	return one(r.Context(), tx, q, s.schoolID, u.Scope == auth.ScopeAssignedClasses, u.ClassIDs, id)
 }
 func (s *Service) createSession(ctx context.Context, tx pgx.Tx, scheduleID, day string) (string, error) {
 	var eligible bool
@@ -57,7 +57,7 @@ func (s *Service) sessions(w http.ResponseWriter, r *http.Request) {
 			invalid(w, "Filter tanggal atau kelas tidak valid")
 			return
 		}
-		s.list(w, r, tx, sessionSelect+` AND ($4='' OR se.date=NULLIF($4,'')::date) AND ($5='' OR se.class_id=NULLIF($5,'')::uuid)`, s.schoolID, u.Role, u.ClassIDs, day, class)
+		s.list(w, r, tx, sessionSelect+` AND ($4='' OR se.date=NULLIF($4,'')::date) AND ($5='' OR se.class_id=NULLIF($5,'')::uuid)`, s.schoolID, u.Scope == auth.ScopeAssignedClasses, u.ClassIDs, day, class)
 		return
 	}
 	var in struct {
@@ -257,7 +257,7 @@ func (s *Service) participants(w http.ResponseWriter, r *http.Request) {
 	if !write {
 		search, status := r.URL.Query().Get("search"), r.URL.Query().Get("status")
 		if len(search) > 100 || (status != "" && status != "not_recorded" && status != "pending_review" && !validStatus(status)) {
-			invalid(w, "Filter roster tidak valid")
+			invalid(w, "Periksa pilihan pencarian siswa.")
 			return
 		}
 		s.list(w, r, tx, participantSelect+` AND (p.full_name ILIKE $3 OR p.nis ILIKE $3) AND ($4='' OR coalesce(ar.status,'not_recorded')=$4)`, s.schoolID, id, "%"+search+"%", status)
@@ -271,7 +271,7 @@ func (s *Service) participants(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !httpresponse.ValidID(in.Student) || !text(in.Reason, 500) {
-		invalid(w, "Siswa dan alasan tambahan roster wajib diisi")
+		invalid(w, "Pilih siswa dan isi alasan penambahan.")
 		return
 	}
 	var now time.Time

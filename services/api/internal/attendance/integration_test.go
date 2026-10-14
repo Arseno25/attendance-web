@@ -173,24 +173,22 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 		t.Fatal("scheduled/closed sessions exposed", healthOptions)
 	}
 	login("owner@example.test")
-	// Lifecycle must be usable before any biometric model is enabled.
-	guardian := expect(call("POST", "/students/"+student["id"].(string)+"/guardians", map[string]any{"full_name": "Guardian", "relationship": "parent", "verification_ref": "PRIVATE-REF-001"}), 201)["data"].(map[string]any)
-	consent := expect(call("POST", "/students/"+student["id"].(string)+"/consents", map[string]any{"guardian_id": guardian["id"], "policy_version": "v1", "evidence_ref": "PRIVATE-CONSENT-001", "valid_until": time.Now().Add(24 * time.Hour).UTC().Format(time.RFC3339)}), 201)["data"].(map[string]any)
-	expect(call("POST", "/students/"+student["id"].(string)+"/consents", map[string]any{"guardian_id": guardian["id"], "policy_version": "v1", "evidence_ref": "duplicate", "valid_until": time.Now().Add(24 * time.Hour).UTC().Format(time.RFC3339)}), 409)
+	// Enrollment remains available before automatic recognition is evaluated.
+	expect(call("POST", "/students/"+student["id"].(string)+"/guardians", nil), 404)
+	expect(call("POST", "/students/"+student["id"].(string)+"/consents", nil), 404)
 	expect(call("POST", "/students/"+student["id"].(string)+"/enrollments", nil), 400)
-	expect(call("POST", "/consents/"+consent["id"].(string)+"/withdraw", map[string]string{"reason": "Withdrawn by guardian"}), 200)
 	face := expect(call("GET", "/students/"+student["id"].(string)+"/face-status", nil), 200)["data"].(map[string]any)
-	if face["consent_eligible"] != false || face["recognition_enabled"] != false {
+	if face["enrollment_allowed"] != true || face["recognition_enabled"] != false {
 		t.Fatal(face)
 	}
-	expect(call("POST", "/consents/"+consent["id"].(string)+"/withdraw", map[string]string{"reason": "Retry"}), 200)
 	device := expect(call("POST", "/devices", map[string]string{"name": "Gate", "location": "Entrance"}), 201)["data"].(map[string]any)
 	expect(call("GET", "/devices", nil), 200)
 	expect(call("POST", "/devices/"+device["id"].(string)+"/revoke", map[string]string{"reason": "Retired"}), 200)
 	expect(call("POST", "/devices/"+device["id"].(string)+"/pairing-token", nil), 409)
 	teacher := expect(call("POST", "/users", map[string]any{"email": "teacher@example.test", "full_name": "Teacher", "role": "teacher", "password": password}), 201)["data"].(map[string]any)
-	assignment := expect(call("POST", "/teacher-assignments", map[string]any{"teacher_id": teacher["id"], "class_id": class["id"]}), 201)["data"].(map[string]any)
-	operator := expect(call("POST", "/users", map[string]any{"email": "operator@example.test", "full_name": "Operator", "role": "operator", "password": password, "grants": []string{"attendance.manual"}}), 201)["data"].(map[string]any)
+	assignment := expect(call("POST", "/class-assignments", map[string]any{"user_id": teacher["id"], "class_id": class["id"]}), 201)["data"].(map[string]any)
+	operatorRole := expect(call("POST", "/roles", map[string]any{"name": "Attendance operator", "scope": "school", "permissions": []string{"attendance.manual"}}), 201)["data"].(map[string]any)
+	operator := expect(call("POST", "/users", map[string]any{"email": "operator@example.test", "full_name": "Operator", "role": operatorRole["key"], "password": password}), 201)["data"].(map[string]any)
 	scheduleBody := map[string]any{"class_id": class["id"], "name": "Daily", "weekdays": []int{1, 2, 3, 4, 5, 6, 7}, "checkin_start": "00:00", "checkin_cutoff": "00:01", "grace_minutes": 0, "close_time": "23:59"}
 	schedule := expect(call("POST", "/attendance-schedules", scheduleBody), 201)["data"].(map[string]any)
 	scheduleID := schedule["id"].(string)
@@ -322,8 +320,8 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 	manual2 := map[string]any{"event_id": "44444444-4444-4444-8444-444444444444", "session_id": sessionID, "student_id": student2["id"], "status": "sick", "reason": "Verified sickness"}
 	expect(call("POST", "/attendances/manual", manual2), 201)
 	login("teacher@example.test")
-	expect(call("GET", "/students/"+student["id"].(string)+"/guardians", nil), 403)
-	expect(call("GET", "/students/"+student["id"].(string)+"/consents", nil), 403)
+	expect(call("GET", "/students/"+student["id"].(string)+"/guardians", nil), 404)
+	expect(call("GET", "/students/"+student["id"].(string)+"/consents", nil), 404)
 	expect(call("POST", "/devices", map[string]string{"name": "Denied", "location": "Denied"}), 403)
 	expect(call("POST", "/kiosk/session", pairBody), 403)
 
@@ -373,7 +371,8 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 	}
 	expect(call("POST", "/attendance-sessions/"+sessionID+"/reconcile", map[string]any{"reason": "Pending request"}), 409)
 	// Approver is distinct from requester; teacher never receives approval grant.
-	expect(call("POST", "/users", map[string]any{"email": "approver@example.test", "full_name": "Approver", "role": "admin", "password": password, "grants": []string{"attendance.approve"}}), 201)
+	approverRole := expect(call("POST", "/roles", map[string]any{"name": "Attendance approver", "scope": "school", "permissions": []string{"attendance.approve", "attendance.read"}}), 201)["data"].(map[string]any)
+	expect(call("POST", "/users", map[string]any{"email": "approver@example.test", "full_name": "Approver", "role": approverRole["key"], "password": password}), 201)
 	login("approver@example.test")
 	expect(call("POST", "/attendance-corrections/"+own["id"].(string)+"/decision", map[string]any{"decision": "rejected", "reason": "Sick record correct"}), 200)
 	expect(call("POST", "/attendance-sessions/"+sessionID+"/reconcile", map[string]any{"reason": "Administrative review complete"}), 200)
@@ -387,9 +386,10 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 	if statuses[student["id"].(string)] != "excused" || statuses[student2["id"].(string)] != "sick" || statuses[student3["id"].(string)] != "absent" {
 		t.Fatal("reconcile overwrote statuses", statuses)
 	}
+	login("owner@example.test")
 	expect(call("POST", "/attendances/manual", map[string]any{"event_id": "55555555-5555-4555-8555-555555555555", "session_id": sessionID, "student_id": student3["id"], "status": "present", "reason": "Closed"}), 409)
 	login("owner@example.test")
-	expect(call("PATCH", "/teacher-assignments/"+assignment["id"].(string), map[string]any{"is_active": false}), 200)
+	expect(call("PATCH", "/class-assignments/"+assignment["id"].(string), map[string]any{"is_active": false}), 200)
 	login("teacher@example.test")
 	expect(call("GET", "/attendance-sessions/"+sessionID+"/participants", nil), 404)
 	login("owner@example.test")
@@ -428,7 +428,7 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 	expect(call("GET", "/reports/attendance?from=2026-02-02&to=2026-02-01", nil), 400)
 	expect(call("GET", "/reports/attendance?class_id=invalid", nil), 400)
 	expect(call("GET", "/reports/attendance?date="+day+"&from="+day+"&to="+day, nil), 400)
-	if _, err := pool.Exec(ctx, `INSERT INTO teacher_assignments(school_id,teacher_id,class_id,academic_year_id,starts_at,ends_at) SELECT $1,$2,$3,id,clock_timestamp(),(ends_on+1)::timestamp AT TIME ZONE timezone FROM academic_years WHERE school_id=$1 AND id=$4`, schoolID, teacher["id"], class["id"], year["id"]); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO user_class_assignments(school_id,user_id,class_id,academic_year_id,starts_at,ends_at) SELECT $1,$2,$3,id,clock_timestamp(),(ends_on+1)::timestamp AT TIME ZONE timezone FROM academic_years WHERE school_id=$1 AND id=$4`, schoolID, teacher["id"], class["id"], year["id"]); err != nil {
 		t.Fatal(err)
 	}
 	login("teacher@example.test")
@@ -480,10 +480,10 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 	}
 	expect(call("GET", "/audit-logs?actor_id=bad", nil), 400)
 	var reassignment string
-	if err := pool.QueryRow(ctx, `SELECT id::text FROM teacher_assignments WHERE school_id=$1 AND teacher_id=$2 AND is_active`, schoolID, teacher["id"]).Scan(&reassignment); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT id::text FROM user_class_assignments WHERE school_id=$1 AND user_id=$2 AND is_active`, schoolID, teacher["id"]).Scan(&reassignment); err != nil {
 		t.Fatal(err)
 	}
-	expect(call("PATCH", "/teacher-assignments/"+reassignment, map[string]any{"is_active": false}), 200)
+	expect(call("PATCH", "/class-assignments/"+reassignment, map[string]any{"is_active": false}), 200)
 	login("teacher@example.test")
 	revokedReport := expect(call("GET", "/reports/attendance?date="+day, nil), 200)
 	if len(revokedReport["data"].([]any)) != 0 || revokedReport["daily"].([]any)[0].(map[string]any)["roster_total"] != float64(0) {
@@ -595,7 +595,7 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 	login("operator@example.test")
 	oldCookie, oldCSRF := cookie, csrf
 	login("owner@example.test")
-	expect(call("PATCH", "/users/"+operator["id"].(string), map[string]any{"grants": []string{}}), 200)
+	expect(call("PATCH", "/roles/"+operatorRole["id"].(string), map[string]any{"permissions": []string{}}), 200)
 	cookie, csrf = oldCookie, oldCSRF
 	expect(call("GET", "/attendance-sessions/"+sessionID+"/participants", nil), 401)
 	login("operator@example.test")

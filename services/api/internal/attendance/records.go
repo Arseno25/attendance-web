@@ -1,6 +1,7 @@
 package attendance
 
 import (
+	"attendance.local/api/internal/auth"
 	"attendance.local/api/internal/platform/httpresponse"
 	"context"
 	"crypto/sha256"
@@ -33,7 +34,7 @@ func (s *Service) records(w http.ResponseWriter, r *http.Request) {
 		invalid(w, "Sesi tidak valid")
 		return
 	}
-	s.list(w, r, tx, `SELECT ar.id::text AS id,ar.session_id::text,ar.student_id::text,p.nis,p.full_name,ar.status,ar.check_in_at,ar.check_out_at,ar.reason,ar.version,ar.created_at FROM attendance_records ar JOIN attendance_session_participants p ON p.school_id=ar.school_id AND p.session_id=ar.session_id AND p.student_id=ar.student_id WHERE ar.school_id=$1 AND ($2::text!='teacher' OR p.class_id=ANY($3::uuid[])) AND ($4='' OR ar.session_id=NULLIF($4,'')::uuid)`, s.schoolID, u.Role, u.ClassIDs, id)
+	s.list(w, r, tx, `SELECT ar.id::text AS id,ar.session_id::text,ar.student_id::text,p.nis,p.full_name,ar.status,ar.check_in_at,ar.check_out_at,ar.reason,ar.version,ar.created_at FROM attendance_records ar JOIN attendance_session_participants p ON p.school_id=ar.school_id AND p.session_id=ar.session_id AND p.student_id=ar.student_id WHERE ar.school_id=$1 AND (NOT $2::boolean OR p.class_id=ANY($3::uuid[])) AND ($4='' OR ar.session_id=NULLIF($4,'')::uuid)`, s.schoolID, u.Scope == auth.ScopeAssignedClasses, u.ClassIDs, id)
 }
 func (s *Service) manual(w http.ResponseWriter, r *http.Request) {
 	if !httpresponse.Method(w, r, "POST") {
@@ -110,7 +111,7 @@ func (s *Service) manual(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !eligible {
-		httpresponse.Error(w, 404, "NOT_FOUND", "Siswa tidak termasuk roster sesi")
+		httpresponse.Error(w, 404, "NOT_FOUND", "Siswa tidak ada dalam daftar absensi ini.")
 		return
 	}
 	var pending bool

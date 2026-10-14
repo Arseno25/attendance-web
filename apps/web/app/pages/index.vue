@@ -1,5 +1,8 @@
 <script setup lang="ts">
 const config = useRuntimeConfig()
+const { branding, load } = useSchoolBranding()
+onMounted(load)
+useHead(() => ({ title: branding.value.app_name }))
 const { data, status, error, refresh } = await useFetch<{ status: string }>(
   `${config.public.apiBase}/health/ready`,
   { server: false, timeout: 4000, retry: 0 },
@@ -18,9 +21,15 @@ const serviceLabel = computed(() => {
       <div class="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-5">
         <NuxtLink
           to="/"
-          class="text-base font-semibold tracking-tight"
+          class="flex min-w-0 items-center gap-2 text-base font-semibold tracking-tight"
         >
-          Absensi Sekolah
+          <img
+            v-if="branding.logo_url"
+            :src="`${config.public.apiBase}${branding.logo_url}`"
+            alt=""
+            class="size-8 shrink-0 rounded-lg object-contain"
+          />
+          <span class="truncate">{{ branding.app_name }}</span>
         </NuxtLink>
         <Button
           as-child
@@ -35,13 +44,13 @@ const serviceLabel = computed(() => {
         Pencatatan kehadiran yang lebih teratur.
       </h1>
       <p class="mt-5 max-w-xl text-base leading-7 text-muted-foreground">
-        Sistem sedang disiapkan. Pengelolaan siswa, pencatatan absensi, dan laporan akan tersedia
-        setelah pengaturan sekolah selesai.
+        Kelola data siswa, catat kehadiran, dan lihat laporan sekolah dalam satu tempat. Masuk
+        dengan akun yang diberikan oleh pengelola sekolah.
       </p>
       <Card class="mt-10 max-w-xl">
         <CardHeader>
           <CardTitle>Status layanan</CardTitle>
-          <CardDescription>Periksa koneksi sebelum melanjutkan pengaturan.</CardDescription>
+          <CardDescription>Periksa koneksi jika halaman belum dapat dibuka.</CardDescription>
         </CardHeader>
         <CardContent class="flex flex-wrap items-center justify-between gap-4">
           <p
@@ -61,8 +70,7 @@ const serviceLabel = computed(() => {
         </CardContent>
       </Card>
       <p class="mt-6 max-w-xl text-sm leading-6 text-muted-foreground">
-        Kamera belum diaktifkan. Gunakan pencatatan sekolah yang biasa digunakan sampai sistem siap
-        beroperasi.
+        Absensi wajah belum tersedia. Petugas tetap dapat mencatat kehadiran melalui aplikasi.
       </p>
     </main>
   </div>

@@ -4,12 +4,13 @@ import { searchSchema } from '~/lib/validation/master'
 import { userSchema } from '~/lib/validation/auth'
 import { Plus } from '@lucide/vue'
 import { statusVariant } from '~/lib/status'
-import { roleLabels, type Result, type Role, type User } from '~/types/auth'
+import { displayRole, type Result, type Role, type RoleRecord, type User } from '~/types/auth'
 
 definePageMeta({ layout: 'admin', middleware: ['auth', 'super-admin'] })
 const request = useApi()
 const auth = useAuth()
 const users = ref<User[]>([])
+const roles = ref<RoleRecord[]>([])
 const page = ref(1)
 const total = ref(0)
 const search = ref('')
@@ -21,41 +22,21 @@ const message = ref('')
 const form = reactive({
   email: '',
   full_name: '',
-  role: 'teacher' as Role,
+  role: '' as Role,
   password: '',
   is_active: true,
-  grants: [] as string[],
 })
 const { errors, validate, clear } = useFormValidation(
-  () => userSchema(!!editing.value),
+  () =>
+    userSchema(
+      !!editing.value,
+      roles.value.map((role) => role.key),
+    ),
   () => form,
 )
 const { errors: filterErrors, validate: validateFilter } = useFormValidation(
   () => searchSchema,
   () => ({ search: search.value }),
-)
-const grants = [
-  { id: 'biometrics.enroll', label: 'Registrasi biometrik' },
-  { id: 'biometrics.revoke', label: 'Cabut biometrik' },
-  { id: 'consents.manage', label: 'Kelola consent' },
-  { id: 'attendance.manual', label: 'Absensi manual' },
-  { id: 'attendance.approve', label: 'Setujui koreksi' },
-  { id: 'reports.export', label: 'Ekspor laporan' },
-]
-const availableGrants = computed(() =>
-  grants.filter(
-    (grant) =>
-      form.role === 'admin' ||
-      form.role === 'super_admin' ||
-      (form.role === 'operator' && ['biometrics.enroll', 'attendance.manual'].includes(grant.id)) ||
-      (form.role === 'teacher' && grant.id === 'reports.export'),
-  ),
-)
-watch(
-  () => form.role,
-  () => {
-    form.grants = form.grants.filter((id) => availableGrants.value.some((grant) => grant.id === id))
-  },
 )
 
 async function load() {
@@ -63,10 +44,16 @@ async function load() {
   loading.value = true
   message.value = ''
   try {
-    const result = await request<Result<User[]>>('/users', {
-      query: { page: page.value, page_size: 20, search: search.value },
-    })
+    const [result, roleResult] = await Promise.all([
+      request<Result<User[]>>('/users', {
+        query: { page: page.value, page_size: 20, search: search.value },
+      }),
+      roles.value.length
+        ? Promise.resolve({ data: roles.value })
+        : request<Result<RoleRecord[]>>('/roles'),
+    ])
     users.value = result.data
+    roles.value = roleResult.data
     total.value = result.pagination?.total ?? 0
   } catch (error) {
     message.value = apiMessage(error)
@@ -82,10 +69,9 @@ function reset() {
   Object.assign(form, {
     email: '',
     full_name: '',
-    role: 'teacher',
+    role: '',
     password: '',
     is_active: true,
-    grants: [],
   })
 }
 function edit(user: User) {
@@ -99,7 +85,6 @@ function edit(user: User) {
     role: user.role,
     password: '',
     is_active: user.is_active,
-    grants: [...user.grants],
   })
 }
 async function save() {
@@ -114,14 +99,12 @@ async function save() {
           full_name: form.full_name,
           role: form.role,
           is_active: form.is_active,
-          grants: form.grants,
         }
       : {
           email: form.email,
           full_name: form.full_name,
           role: form.role,
           password: form.password,
-          grants: form.grants,
         }
     await request(editing.value ? `/users/${editing.value}` : '/users', {
       method: editing.value ? 'PATCH' : 'POST',
@@ -192,7 +175,7 @@ async function filter() {
           <DialogDescription>
             {{
               editing
-                ? 'Periksa peran dan izin sebelum menyimpan.'
+                ? 'Jika peran berubah, pengguna perlu masuk kembali.'
                 : 'Buat akun untuk petugas sekolah.'
             }}
           </DialogDescription>
@@ -263,11 +246,11 @@ async function filter() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem
-                    v-for="(label, role) in roleLabels"
-                    :key="role"
-                    :value="role"
+                    v-for="role in roles"
+                    :key="role.key"
+                    :value="role.key"
                   >
-                    {{ label }}
+                    {{ role.name }}
                   </SelectItem>
                 </SelectContent>
               </Select>
@@ -309,46 +292,10 @@ async function filter() {
             </Field>
           </FieldGroup>
           <FieldSeparator />
-          <FieldSet :data-invalid="!!errors.grants">
-            <FieldLegend variant="label">Izin tambahan</FieldLegend>
-            <FieldDescription>
-              Izin tambahan tetap mengikuti batas akses peran yang dipilih.
-            </FieldDescription>
-            <FieldGroup class="grid gap-4 sm:grid-cols-2">
-              <Field
-                v-for="grant in availableGrants"
-                :key="grant.id"
-                orientation="horizontal"
-              >
-                <Checkbox
-                  :id="`grant-${grant.id}`"
-                  :aria-invalid="!!errors.grants"
-                  :aria-describedby="errors.grants ? 'user-grants-error' : undefined"
-                  :model-value="form.grants.includes(grant.id)"
-                  :disabled="saving"
-                  @update:model-value="
-                    (checked) =>
-                      (form.grants =
-                        checked === true
-                          ? [...form.grants, grant.id]
-                          : form.grants.filter((id) => id !== grant.id))
-                  "
-                />
-                <FieldLabel
-                  :for="`grant-${grant.id}`"
-                  class="font-normal"
-                >
-                  {{ grant.label }}
-                </FieldLabel>
-              </Field>
-            </FieldGroup>
-            <FieldError
-              v-if="errors.grants"
-              id="user-grants-error"
-            >
-              {{ errors.grants }}
-            </FieldError>
-          </FieldSet>
+          <p class="text-sm text-muted-foreground">
+            Akses pengguna mengikuti peran yang dipilih. Jika peran berubah, pengguna perlu masuk
+            kembali.
+          </p>
           <Field
             v-if="editing"
             orientation="horizontal"
@@ -459,7 +406,7 @@ async function filter() {
         >
           <template #cell-nama="{ item: user }">{{ user.full_name }}</template>
           <template #cell-email="{ item: user }">{{ user.email }}</template>
-          <template #cell-peran="{ item: user }">{{ roleLabels[user.role] }}</template>
+          <template #cell-peran="{ item: user }">{{ displayRole(user) }}</template>
           <template #cell-status="{ item: user }">
             <Badge :variant="statusVariant(user.is_active ? 'active' : 'inactive')">
               {{ user.is_active ? 'Aktif' : 'Nonaktif' }}

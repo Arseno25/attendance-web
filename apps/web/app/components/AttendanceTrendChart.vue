@@ -127,7 +127,8 @@ function dayLabel(index: number, full = false) {
       </p>
     </CardContent>
     <CardFooter class="text-sm text-muted-foreground">
-      Hari tanpa roster bukan alfa. Rincian status dan unduhan tersedia di laporan.
+      Hari tanpa sesi absensi tidak dihitung sebagai alfa. Lihat rincian dan unduh laporan di
+      Laporan kehadiran.
     </CardFooter>
   </Card>
 </template>

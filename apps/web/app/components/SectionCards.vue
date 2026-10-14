@@ -4,7 +4,7 @@ import type { AttendanceTotals } from '~/types/reports'
 const props = defineProps<{ totals: AttendanceTotals }>()
 const cards = computed(() => [
   {
-    label: 'Roster sesi',
+    label: 'Daftar siswa sesi',
     value: props.totals.roster_total,
     note: `${props.totals.students_total} siswa unik · ${props.totals.sessions_total} sesi`,
     icon: ClipboardList,
@@ -66,7 +66,7 @@ const cards = computed(() => [
       <dd class="font-medium tabular-nums">{{ totals.pending_review }}</dd>
     </div>
     <div class="flex gap-2">
-      <dt class="text-muted-foreground">Rasio hadir / roster</dt>
+      <dt class="text-muted-foreground">Rasio hadir / daftar siswa</dt>
       <dd class="font-medium tabular-nums">{{ totals.attendance_rate }}%</dd>
     </div>
   </dl>

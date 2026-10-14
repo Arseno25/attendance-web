@@ -2,7 +2,7 @@
 
 Fondasi aplikasi absensi satu sekolah. Nuxt 4 untuk web admin/kiosk, Go untuk API dan transaksi, Python FastAPI/ONNX Runtime untuk service AI internal, serta PostgreSQL sebagai resource terpisah.
 
-Status lokal: **core WP-01–05 + consent, perangkat/kiosk, P1 dan enrollment provisional**. Semua form menggunakan aturan Zod modular; panel menyediakan edit akun, tema terang/gelap/sistem, pagination bernomor dan aksi halaman di kanan atas. Model YuNet/SFace terpin menjalankan deteksi CPU dan pendaftaran template AES-GCM. `/absensi` memproses frame untuk kotak deteksi; nama hanya tampil setelah keputusan server diterima dan kehadiran terkonfirmasi. Akurasi/liveness **belum dievaluasi**, sehingga absensi wajah otomatis tetap tertutup. Lihat [perubahan UI, akun dan wajah](docs/UI-ACCOUNT-BIOMETRICS-PROGRESS.md), [status paket sebelumnya](docs/LOCAL-COMPLETION-PROGRESS.md) dan [runbook lokal](docs/LOCAL-RUNBOOK.md).
+Status lokal: **core WP-01–05, perangkat/kiosk, P1 dan enrollment provisional**. Semua form menggunakan aturan Zod modular; panel menyediakan edit akun, tema terang/gelap/sistem, pagination bernomor dan aksi halaman di kanan atas. Model YuNet/SFace terpin menjalankan deteksi CPU dan pendaftaran template AES-GCM. `/absensi` memproses frame untuk kotak deteksi; nama hanya tampil setelah keputusan server diterima dan kehadiran terkonfirmasi. Akurasi/liveness **belum dievaluasi**, sehingga absensi wajah otomatis tetap tertutup. Lihat [perubahan UI, akun dan wajah](docs/UI-ACCOUNT-BIOMETRICS-PROGRESS.md), [status paket sebelumnya](docs/LOCAL-COMPLETION-PROGRESS.md) dan [runbook lokal](docs/LOCAL-RUNBOOK.md).
 
 Panel admin memakai block resmi shadcn-vue `dashboard-01` dengan sidebar inset, menu akun, breadcrumb dan komponen shadcn untuk forms/tables. Halaman kiosk `/absensi` memakai route/layout mandiri di luar panel. Detail CLI, penyesuaian dan pembagian route ada di [desain panel](docs/PANEL-DESIGN.md).
 
@@ -55,7 +55,7 @@ unset attendance_admin_password
 
 Password masuk lewat stdin, bukan argumen CLI atau log. Bootstrap berikutnya ditolak. Buka `/login`, lalu `/admin`; menu pengguna dan audit hanya tersedia bagi super admin. Untuk deployment, binary `bootstrap` juga tersedia di image API; jalankan dengan environment/secrets yang sama dan stdin privat.
 
-Workspace ini sudah memiliki akun pengembangan, tersimpan hanya di `.tools/local-admin.json` (ignored, permission `0600`). Password tersebut tidak untuk production. `SCHOOL_ID` wajib berupa UUID dan harus menunjuk sekolah yang akan dikelola; jangan menggantinya untuk berpindah sekolah tanpa memeriksa data.
+Workspace ini sudah memiliki akun pengembangan, tersimpan hanya di `.tools/local-admin.json` (ignored, permission `0600`). Untuk membuat administrator pada instalasi development lokal yang masih kosong, jalankan `make build`, lalu `DEVELOPMENT_MODE=1 make dev-bootstrap`; perintah memeriksa `WEB_ORIGIN` dan `DATABASE_URL` loopback dan memakai password development `Password1!`. Kredensial ini hanya untuk development lokal, jangan gunakan di deployment atau akun nyata. Bootstrap normal di semua lingkungan tetap menerima password kuat melalui stdin. `SCHOOL_ID` wajib berupa UUID dan harus menunjuk sekolah yang akan dikelola; jangan menggantinya untuk berpindah sekolah tanpa memeriksa data.
 
 Web dan API production harus menggunakan HTTPS pada host dengan **site yang sama**, misalnya `app.school.example` dan `api.school.example`, agar cookie SameSite Lax dapat dikirim pada request web ke API. Domain lintas site memerlukan desain auth berbeda. Exact origin web tetap dikonfigurasi melalui `WEB_ORIGIN`.
 
@@ -104,13 +104,13 @@ Dokumen kebutuhan tetap berada di root. Lihat [rencana induk](07-IMPLEMENTATION-
 | GET `/internal/v1/health/live` | 200 bila runtime CPU ONNX tersedia |
 | GET `/internal/v1/health/ready` | 200 saat model dan kunci enrollment siap; recognition tetap false sampai evaluasi |
 | GET `/api/v1/biometrics/students` | Seleksi siswa terbatas untuk petugas enroll/revoke |
-| GET `/api/v1/students/{id}/face-status` | Status pendaftaran, consent dan evaluasi tanpa template plaintext |
-| POST `/api/v1/students/{id}/enrollments` | 3–5 JPEG; consent, kualitas dan konsistensi; template terenkripsi |
+| GET `/api/v1/students/{id}/face-status` | Status pendaftaran dan evaluasi tanpa template plaintext |
+| POST `/api/v1/students/{id}/enrollments` | 3–5 JPEG; siswa aktif, kualitas dan konsistensi; template terenkripsi |
 | POST `/api/v1/students/{id}/face-revoke` | Izin revoke + alasan; hapus template |
 | POST `/api/v1/kiosk/recognize` | Cookie device + Origin/CSRF; kotak deteksi tanpa nama kandidat |
 | POST `/internal/v1/recognize` | Token internal wajib; deteksi nyata, identitas otomatis masih tertutup |
 
-Go mengembalikan error JSON, generated request ID, exact-origin CORS dan no-store headers. Log Go hanya metadata request, bukan body, URL query atau secret. Production AI mematikan access log Uvicorn; FastAPI dev CLI hanya dipakai untuk data dummy lokal. Kamera aktif hanya melalui tindakan petugas setelah pairing/consent. Frame diproses tanpa menyimpan foto, dan automatic attendance masih tertutup.
+Go mengembalikan error JSON, generated request ID, exact-origin CORS dan no-store headers. Log Go hanya metadata request, bukan body, URL query atau secret. Production AI mematikan access log Uvicorn; FastAPI dev CLI hanya dipakai untuk data dummy lokal. Kamera aktif hanya melalui tindakan petugas setelah memilih siswa atau pairing perangkat. Frame diproses tanpa menyimpan foto, dan automatic attendance masih tertutup.
 
 ## Deployment Coolify
 
@@ -133,7 +133,7 @@ cd services/ai
 
 Installer memverifikasi ukuran dan SHA256 dari OpenCV Zoo sebelum memuat model. Directory model ignored dan license disimpan bersama model. CLI evaluator `python -m app.evaluation /private/authorized-holdout.json` merangkum trace anonim; tidak menghasilkan persetujuan otomatis.
 
-Panel: `/admin/account` untuk akun sendiri, `/admin/biometrics` untuk petugas enroll/revoke, `/admin/devices` untuk device, detail siswa untuk officer consent, `/admin/students/import` untuk CSV, detail sesi untuk pulang/live. Pairing memakai token5menit sekali pakai dan cookie device10menit. Import preview15menit, maks500baris. Kontrak endpoint baru [lifecycle.json](docs/openapi/lifecycle.json). Tetap lokal sesuai instruksi; Coolify/pilot belum dijalankan.
+Panel: `/admin/settings` untuk tema Terang/Gelap/Sistem dan identitas sekolah berizin; `/admin/account` untuk akun sendiri, `/admin/biometrics` untuk petugas enroll/revoke, `/admin/devices` untuk device, `/admin/students/import` untuk CSV, detail sesi untuk pulang/live. Pairing memakai token5menit sekali pakai dan cookie device10menit. Import preview15menit, maks500baris. Kontrak endpoint baru [lifecycle.json](docs/openapi/lifecycle.json). Tetap lokal sesuai instruksi; Coolify/pilot belum dijalankan.
 
 ## Audit dependency
 

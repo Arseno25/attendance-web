@@ -40,18 +40,18 @@ func TestPasswordHashIsSaltedAndRejectsInvalidParameters(t *testing.T) {
 }
 
 func TestPolicyEnforcesSchoolClassAndSecurityRole(t *testing.T) {
-	admin := User{SchoolID: "school-a", Role: "super_admin", Active: true}
+	admin := User{SchoolID: "school-a", Role: "super_admin", Active: true, Scope: ScopeSchool, PermissionsList: []string{"users.read", "users.write", "roles.manage"}}
 	if !admin.Can("users.write", "school-a", "") {
 		t.Fatal("super admin denied own school")
 	}
 	if admin.Can("users.write", "school-b", "") {
 		t.Fatal("cross-school access allowed")
 	}
-	teacher := User{SchoolID: "school-a", Role: "teacher", Active: true, ClassIDs: []string{"class-a"}, Grants: []string{"users.write"}}
+	teacher := User{SchoolID: "school-a", Role: "teacher", Active: true, Scope: ScopeAssignedClasses, PermissionsList: []string{"attendance.read"}, ClassIDs: []string{"class-a"}}
 	if !teacher.Can("attendance.read", "school-a", "class-a") {
 		t.Fatal("assigned class denied")
 	}
-	for _, classID := range []string{"", "class-b"} {
+	for _, classID := range []string{"class-b"} {
 		if teacher.Can("attendance.read", "school-a", classID) {
 			t.Fatal("unassigned scope allowed")
 		}
@@ -62,6 +62,88 @@ func TestPolicyEnforcesSchoolClassAndSecurityRole(t *testing.T) {
 	teacher.Active = false
 	if teacher.Can("attendance.read", "school-a", "class-a") {
 		t.Fatal("inactive account authorized")
+	}
+}
+
+func TestPolicyUsesDynamicRole(t *testing.T) {
+	user := User{
+		SchoolID: "school-a", Role: "custom-class-role", Active: true,
+		Scope: ScopeAssignedClasses, PermissionsList: []string{"students.read", "roles.manage"},
+		ClassIDs: []string{"class-a"},
+	}
+	if !user.Can("students.read", "school-a", "class-a") {
+		t.Fatal("explicit custom-role permission denied for assigned class")
+	}
+	for _, tc := range []struct{ permission, school, class string }{
+		{"students.write", "school-a", "class-a"},
+		{"invented.permission", "school-a", "class-a"},
+		{"students.read", "school-b", "class-a"},
+		{"students.read", "school-a", "class-b"},
+		{"users.write", "school-a", ""},
+	} {
+		if user.Can(tc.permission, tc.school, tc.class) {
+			t.Fatalf("unexpected allow permission=%s school=%s class=%s", tc.permission, tc.school, tc.class)
+		}
+	}
+	if user.IsSuperAdmin() {
+		t.Fatal("custom role with roles.manage treated as system Superadmin")
+	}
+}
+
+func TestRoleManagementIsSuperadminOnly(t *testing.T) {
+	custom := User{SchoolID: "school-a", Role: "custom", Active: true, Scope: ScopeSchool, PermissionsList: []string{"roles.manage"}}
+	if !custom.Can("roles.manage", "school-a", "") || custom.IsSuperAdmin() {
+		t.Fatal("custom role permission or identity check is incorrect")
+	}
+	super := User{SchoolID: "school-a", Role: "super_admin", Active: true, Scope: ScopeSchool, PermissionsList: []string{"users.read", "users.write", "roles.manage"}}
+	if !super.IsSuperAdmin() || !super.Can("roles.manage", "school-a", "") {
+		t.Fatal("system Superadmin denied role management")
+	}
+	super.PermissionsList = []string{"users.read", "roles.manage"}
+	if super.Can("roles.manage", "school-a", "") {
+		t.Fatal("Superadmin bypassed mandatory users.write")
+	}
+	super.Scope = ScopeAssignedClasses
+	if super.Can("users.read", "school-a", "") {
+		t.Fatal("Superadmin bypassed mandatory school scope")
+	}
+}
+
+func TestAssignedClassScope(t *testing.T) {
+	user := User{SchoolID: "school-a", Role: "custom", Active: true, Scope: ScopeAssignedClasses, PermissionsList: []string{"attendance.read"}, ClassIDs: []string{"class-a"}}
+	if !user.Can("attendance.read", "school-a", "") {
+		t.Fatal("role-level permission check should not require a class ID")
+	}
+	if !user.Can("attendance.read", "school-a", "class-a") {
+		t.Fatal("assigned class denied")
+	}
+	for _, classID := range []string{"class-b"} {
+		if user.Can("attendance.read", "school-a", classID) {
+			t.Fatalf("unassigned class %q allowed", classID)
+		}
+	}
+	user.Scope = ScopeSchool
+	if !user.Can("attendance.read", "school-a", "class-b") {
+		t.Fatal("school-scoped role incorrectly constrained by class assignments")
+	}
+}
+
+func TestPermissionCatalogIsUniqueAndSuperadminBaselineIsComplete(t *testing.T) {
+	catalog := PermissionCatalog()
+	seen := map[string]bool{}
+	for _, permission := range catalog {
+		if permission.Key == "" || permission.Label == "" || permission.Description == "" || permission.Group == "" || seen[permission.Key] {
+			t.Fatalf("invalid or duplicate catalog entry: %+v", permission)
+		}
+		seen[permission.Key] = true
+	}
+	if len(catalog) != 18 {
+		t.Fatalf("catalog has %d permissions, want 18", len(catalog))
+	}
+	for _, required := range []string{"users.read", "users.write", "roles.manage"} {
+		if !seen[required] {
+			t.Fatalf("mandatory Superadmin permission %q missing from catalog", required)
+		}
 	}
 }
 
@@ -76,11 +158,11 @@ func TestLimiterDeniesBurstAndResetsAfterWindow(t *testing.T) {
 	}
 }
 
-func TestOperatorCannotGainRestrictedAccessFromGrants(t *testing.T) {
-	u := User{SchoolID: "school-a", Role: "operator", Active: true, Grants: []string{"reports.export", "biometrics.revoke", "consents.manage", "attendance.approve"}}
-	for _, permission := range u.Grants {
+func TestPermissionsNotAssignedToRoleCannotAuthorizeUser(t *testing.T) {
+	u := User{SchoolID: "school-a", Role: "operator", Active: true, Scope: ScopeSchool, PermissionsList: []string{"devices.health"}}
+	for _, permission := range []string{"reports.export", "biometrics.revoke", "consents.manage", "attendance.approve"} {
 		if u.Can(permission, "school-a", "") {
-			t.Fatalf("operator gained %s", permission)
+			t.Fatalf("operator gained unassigned permission %s", permission)
 		}
 	}
 }
@@ -107,7 +189,7 @@ func TestHTTPSCookieAndDeletion(t *testing.T) {
 }
 
 func TestNewPasswordCompositionPolicyWithoutMaximum(t *testing.T) {
-	for _, password := range []string{"Abcd123!", "Éé12345!", "Ab12345🔒", " Ab12!a ", "Ab1!" + strings.Repeat("a", 200)} {
+	for _, password := range []string{"Abcd123!", "Password1!", "Éé12345!", "Ab12345🔒", " Ab12!a ", "Ab1!" + strings.Repeat("a", 200)} {
 		hash, err := HashPassword(password)
 		if err != nil || !VerifyPassword(password, hash) {
 			t.Fatal("valid password rejected or changed")

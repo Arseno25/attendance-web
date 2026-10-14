@@ -69,7 +69,7 @@ async function kioskSetup() {
   const { descriptor } = parse(source)
   const compiled = compileScript(descriptor, { id: 'kiosk-regression' })
   const file = directory + '/kiosk.ts'
-  writeFileSync(file, compiled.content.replaceAll('../lib/validation/consent-devices.ts', pathToFileURL(resolve('apps/web/app/lib/validation/consent-devices.ts')).href).replaceAll('../composables/useFormValidation.ts', pathToFileURL(resolve('apps/web/app/composables/useFormValidation.ts')).href).replaceAll('../lib/biometrics.ts', pathToFileURL(resolve('apps/web/app/lib/biometrics.ts')).href))
+  writeFileSync(file, compiled.content.replaceAll('../lib/validation/biometrics-devices.ts', pathToFileURL(resolve('apps/web/app/lib/validation/biometrics-devices.ts')).href).replaceAll('../composables/useFormValidation.ts', pathToFileURL(resolve('apps/web/app/composables/useFormValidation.ts')).href).replaceAll('../lib/biometrics.ts', pathToFileURL(resolve('apps/web/app/lib/biometrics.ts')).href))
   const module = await import(pathToFileURL(file).href + '?' + Math.random())
   return module.default.setup({}, { expose() {} })
 }

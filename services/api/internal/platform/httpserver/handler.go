@@ -77,6 +77,6 @@ func healthMethod(w http.ResponseWriter, r *http.Request) bool {
 		return true
 	}
 	w.Header().Set("Allow", "GET, HEAD")
-	httpresponse.Error(w, 405, "METHOD_NOT_ALLOWED", "Method tidak diizinkan")
+	httpresponse.Error(w, 405, "METHOD_NOT_ALLOWED", "Tindakan ini tidak tersedia.")
 	return false
 }

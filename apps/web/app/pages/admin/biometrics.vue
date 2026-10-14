@@ -50,7 +50,7 @@ await load()
   <div class="flex min-w-0 flex-col gap-6">
     <PageHeader
       title="Wajah siswa"
-      description="Kelola pendaftaran dan pencabutan template sesuai izin petugas."
+      description="Cari siswa, buka modal wajah, lalu ambil 3–5 foto kamera untuk pendaftaran."
     >
       <template #actions>
         <Button
@@ -73,9 +73,7 @@ await load()
     <Card class="min-w-0">
       <CardHeader>
         <CardTitle>Daftar siswa</CardTitle>
-        <CardDescription>
-          {{ total }} siswa · akurasi dan liveness belum dievaluasi.
-        </CardDescription>
+        <CardDescription>{{ total }} siswa · absensi otomatis belum tersedia.</CardDescription>
       </CardHeader>
       <CardContent class="min-w-0 space-y-4">
         <DataTableToolbar @submit.prevent="filter">
@@ -168,27 +166,16 @@ await load()
         />
       </CardContent>
     </Card>
-    <Dialog
+    <StudentFaceEnrollment
+      v-if="selected"
       :open="!!selected"
+      :student-id="selected.id"
+      :student-name="selected.full_name"
       @update:open="
         (value) => {
           if (!value) selected = null
         }
       "
-    >
-      <DialogContent class="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>{{ selected?.full_name }}</DialogTitle>
-          <DialogDescription>
-            NIS {{ selected?.nis }} · {{ selected?.class_name ?? 'Belum ditempatkan' }}
-          </DialogDescription>
-        </DialogHeader>
-        <StudentFaceEnrollment
-          v-if="selected"
-          :student-id="selected.id"
-          :student-name="selected.full_name"
-        />
-      </DialogContent>
-    </Dialog>
+    />
   </div>
 </template>
