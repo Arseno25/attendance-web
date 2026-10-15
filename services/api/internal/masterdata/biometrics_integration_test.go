@@ -90,6 +90,8 @@ func TestBiometricEnrollmentWithoutConsentAndDevicePrivacy(t *testing.T) {
 	galleryCount := -1
 	galleryConsent := ""
 	decision := "unknown"
+	runtimeEvidence := false
+	recognizedID := "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 	aiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer "+strings.Repeat("s", 48) {
 			t.Error("missing service authorization")
@@ -134,7 +136,7 @@ func TestBiometricEnrollmentWithoutConsentAndDevicePrivacy(t *testing.T) {
 			if galleryCount == 1 {
 				galleryConsent, _ = gallery[0].(map[string]any)["consent_id"].(string)
 			}
-			_ = json.NewEncoder(w).Encode(map[string]any{"decision": decision, "recognition_enabled": false, "event_id": request["event_id"], "gallery_revision": request["gallery_revision"], "model_sha256": strings.Repeat("a", 64), "faces": []any{map[string]any{"box": map[string]float64{"x": 0.1, "y": 0.1, "width": 0.5, "height": 0.5}, "student_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "label": "PRIVATE-CANDIDATE"}}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"decision": decision, "recognition_enabled": runtimeEvidence, "liveness_passed": runtimeEvidence, "is_confirmed": runtimeEvidence, "event_id": request["event_id"], "gallery_revision": request["gallery_revision"], "model_sha256": strings.Repeat("a", 64), "faces": []any{map[string]any{"box": map[string]float64{"x": 0.1, "y": 0.1, "width": 0.5, "height": 0.5}, "student_id": recognizedID, "label": "PRIVATE-CANDIDATE"}}})
 			return
 		}
 		http.Error(w, "not found", 404)
@@ -420,6 +422,26 @@ func TestBiometricEnrollmentWithoutConsentAndDevicePrivacy(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM attendance_records`).Scan(&count); err != nil || count != 0 {
 		t.Fatal("unknown created attendance", count, err)
 	}
+
+	// Live stable recognition writes once and labels from the roster, without an offline report.
+	runtimeEvidence, recognizedID = true, id
+	accepted := expect(deviceCall(capture, paired["csrf_token"].(string)), 200)["data"].(map[string]any)
+	if accepted["decision"] != "accepted" || accepted["attendance"].(map[string]any)["outcome"] != "recorded" {
+		t.Fatal("live match did not record attendance", accepted)
+	}
+	if strings.Contains(stringMustJSON(accepted), "PRIVATE-CANDIDATE") {
+		t.Fatal("upstream label used instead of roster")
+	}
+	expect(deviceCall(capture, paired["csrf_token"].(string)), 200)
+	capture["event_id"] = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+	repeated := expect(deviceCall(capture, paired["csrf_token"].(string)), 200)["data"].(map[string]any)
+	if repeated["attendance"].(map[string]any)["outcome"] != "already_recorded" {
+		t.Fatal("second camera event duplicated attendance", repeated)
+	}
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM attendance_records WHERE student_id=$1`, id).Scan(&count); err != nil || count != 1 {
+		t.Fatal("recognition did not persist exactly once", count, err)
+	}
+	runtimeEvidence = false
 
 	// Legacy IDs remain encryption context, never an enrollment or gallery prerequisite.
 	legacyID := "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"

@@ -1,4 +1,4 @@
-"""CPU enrollment/detection. Recognition requires evidence this project does not yet have."""
+"""Checksum-verified CPU face processing and encrypted enrollment."""
 
 import base64
 import binascii
@@ -15,7 +15,6 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from app.models import MANIFEST, verify_model
 
-BLOCK_REASON = "MODEL_LIVENESS_NOT_EVALUATED"
 EVALUATION = {
     "status": "not_evaluated",
     "required": ["camera_hold_out", "liveness_spoof", "threshold_calibration"],
@@ -373,18 +372,19 @@ def status():
             "evaluation": EVALUATION,
         }
     evaluation = EVALUATION
+    enabled = False
     try:
         from app.recognition import get_recognition_service
 
-        evaluation = get_recognition_service().evaluation or EVALUATION
+        service = get_recognition_service()
+        evaluation = service.evaluation or EVALUATION
+        enabled = callable(service.liveness_hook)
     except OSError, ValueError, cv2.error:
         pass
     return {
         "pipeline_ready": True,
-        "recognition_enabled": evaluation.get("automatic_attendance_approved") is True,
-        "block_reason": ""
-        if evaluation.get("automatic_attendance_approved") is True
-        else BLOCK_REASON,
+        "recognition_enabled": enabled,
+        "block_reason": "" if enabled else "PIPELINE_NOT_CONFIGURED",
         "model_sha256": pipeline.model_sha256,
         "detector_sha256": pipeline.detector_sha256,
         "evaluation": evaluation,

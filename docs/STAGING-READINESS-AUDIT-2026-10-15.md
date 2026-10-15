@@ -4,6 +4,12 @@
 
 **Keputusan pada baseline audit:** belum siap untuk uji pengguna di staging sebelum temuan wajib di bawah diperbaiki. Staging administrasi dengan data dummy dapat menjadi tahap pertama setelah perbaikan itu. Absensi wajah otomatis memiliki pekerjaan implementasi dan evaluasi tersendiri; jangan dinyatakan siap hanya karena kamera dan pendaftaran wajah sudah berjalan.
 
+## Pembaruan operasi kamera — permintaan lanjutan pemilik
+
+Setelah perbaikan staging, pemilik meminta webcam Fantech yang tersedia dapat dipakai untuk absensi. Kontrak sekarang memisahkan kesiapan operasi dari laporan akurasi: kecocokan stabil, PAD nyata, model/template, sesi/perangkat dan roster tetap diperiksa, sementara berkas laporan hold-out menjadi metadata evaluasi opsional. Ini menggantikan ketentuan berkas persetujuan sebagai syarat aktivasi pada catatan sebelumnya di bawah. Tidak ada laporan/angka akurasi yang dipalsukan.
+
+Pemrosesan PAD juga dikoreksi mengikuti kode upstream: input BGR float32 0–255, tanpa pembagian 255; class 1 live. Kamera Fantech Luminous C30 diuji langsung: pendaftaran ulang lima foto sesuai persetujuan pemilik, wajah hidup lolos, pengenalan diterima, dan tepat satu catatan hadir tersimpan melalui API Go pada sesi uji yang disetujui. Pemindaian ulang menghasilkan already_recorded. Sesi uji ditutup, jadwal uji dinonaktifkan, dan jadwal semula dikembalikan. Pilihan kamera bersama tersedia di pendaftaran dan absensi. Verifikasi revisi kamera: 81 pytest, 59 tes Node, 5 unittest skrip, seluruh tes Go race/integrasi, lima tes browser, lint/typecheck/build lulus. Uji satu orang ini bukan ukuran akurasi seluruh sekolah. Lihat langkah penggunaan pada [runbook](STAGING-RUNBOOK.md).
+
 ## Pembaruan setelah perbaikan — 15 Oktober 2026
 
 Bagian temuan di bawah merupakan rekaman baseline sebelum perbaikan. Status kode sekarang:

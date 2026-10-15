@@ -142,7 +142,8 @@ func (s *Service) enrollFace(w http.ResponseWriter, r *http.Request) {
 		dbError(w, err)
 		return
 	}
-	httpresponse.Data(w, 201, map[string]any{"enrolled": true, "status": "provisional", "frame_count": result.FrameCount, "recognition_enabled": false, "block_reason": aiclient.BlockReason, "template": metadata})
+	state := s.ai.Status(r.Context())
+	httpresponse.Data(w, 201, map[string]any{"enrolled": true, "status": "provisional", "frame_count": result.FrameCount, "recognition_enabled": state.RecognitionEnabled, "block_reason": state.BlockReason, "template": metadata})
 }
 
 // Duplicate checks cover the school internally; another student's identity never leaves the API.

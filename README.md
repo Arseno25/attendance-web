@@ -2,7 +2,7 @@
 
 Fondasi aplikasi absensi satu sekolah. Nuxt 4 untuk web admin/kiosk, Go untuk API dan transaksi, Python FastAPI/ONNX Runtime untuk service AI internal, serta PostgreSQL sebagai resource terpisah.
 
-Status lokal: **core WP-01–05, perangkat/kiosk, P1 dan enrollment provisional**. Semua form menggunakan aturan Zod modular; panel menyediakan edit akun, tema terang/gelap/sistem, pagination bernomor dan aksi halaman di kanan atas. Model YuNet/SFace terpin menjalankan deteksi CPU dan pendaftaran template AES-GCM. `/absensi` memproses frame untuk kotak deteksi; nama hanya tampil setelah keputusan server diterima dan kehadiran terkonfirmasi. Akurasi/liveness **belum dievaluasi**, sehingga absensi wajah otomatis tetap tertutup. Lihat [perubahan UI, akun dan wajah](docs/UI-ACCOUNT-BIOMETRICS-PROGRESS.md), [status paket sebelumnya](docs/LOCAL-COMPLETION-PROGRESS.md) dan [runbook lokal](docs/LOCAL-RUNBOOK.md).
+Status lokal: **core WP-01–05, perangkat/kiosk, P1 dan enrollment provisional**. Semua form menggunakan aturan Zod modular; panel menyediakan edit akun, tema terang/gelap/sistem, pagination bernomor dan aksi halaman di kanan atas. Model YuNet/SFace terpin menjalankan deteksi CPU dan pendaftaran template AES-GCM. `/absensi` memproses frame untuk kotak deteksi; nama hanya tampil setelah keputusan server diterima dan kehadiran terkonfirmasi. Pengenalan mencatat kehadiran setelah kecocokan stabil dan pemeriksaan wajah hidup lulus; akurasi populasi **belum dievaluasi**. Pendaftaran dan absensi memiliki pilihan kamera Fantech yang tersimpan di browser. Lihat [perubahan UI, akun dan wajah](docs/UI-ACCOUNT-BIOMETRICS-PROGRESS.md), [status paket sebelumnya](docs/LOCAL-COMPLETION-PROGRESS.md) dan [runbook lokal](docs/LOCAL-RUNBOOK.md).
 
 Panel admin memakai block resmi shadcn-vue `dashboard-01` dengan sidebar inset, menu akun, breadcrumb dan komponen shadcn untuk forms/tables. Halaman kiosk `/absensi` memakai route/layout mandiri di luar panel. Detail CLI, penyesuaian dan pembagian route ada di [desain panel](docs/PANEL-DESIGN.md).
 
@@ -116,7 +116,7 @@ Dokumen kebutuhan tetap berada di root. Lihat [rencana induk](07-IMPLEMENTATION-
 | POST `/api/v1/students/{id}/enrollments` | 3–5 JPEG; siswa aktif, kualitas dan konsistensi; template terenkripsi |
 | POST `/api/v1/students/{id}/face-revoke` | Izin revoke + alasan; hapus template |
 | POST `/api/v1/kiosk/recognize` | Cookie device + Origin/CSRF; kotak deteksi tanpa nama kandidat |
-| POST `/internal/v1/recognize` | Token internal wajib; deteksi nyata, identitas otomatis masih tertutup |
+| POST `/internal/v1/recognize` | Token internal wajib; satu wajah, kecocokan stabil dan PAD wajib sebelum pencatatan oleh Go |
 
 Go mengembalikan error JSON, generated request ID, exact-origin CORS dan no-store headers. Log Go hanya metadata request, bukan body, URL query atau secret. Production AI mematikan access log Uvicorn; FastAPI dev CLI hanya dipakai untuk data dummy lokal. Kamera aktif hanya melalui tindakan petugas setelah memilih siswa atau pairing perangkat. Frame diproses tanpa menyimpan foto, dan automatic attendance masih tertutup.
 
@@ -150,4 +150,4 @@ CI menjalankan govulncheck dan pip-audit. npm audit menghasilkan artifact dan wa
 
 ## Kesiapan staging dan evaluasi kamera
 
-Perbaikan audit, versi stack yang diverifikasi, instalasi kosong, trusted proxy, aturan dependency CI, dan aktivasi berbasis laporan ditinjau dijelaskan pada [STAGING-RUNBOOK.md](docs/STAGING-RUNBOOK.md). Absensi otomatis tetap nonaktif tanpa artefak evaluasi kamera yang sah; tes sintetis tidak membuktikan akurasi.
+Perbaikan audit, versi stack yang diverifikasi, instalasi kosong, trusted proxy, aturan dependency CI, alur kamera Fantech dan laporan evaluasi terpisah dijelaskan pada [STAGING-RUNBOOK.md](docs/STAGING-RUNBOOK.md). Absensi otomatis memerlukan bukti runtime wajah hidup dan kecocokan stabil; laporan evaluasi opsional tidak digantikan oleh tes sintetis.

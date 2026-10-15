@@ -189,9 +189,7 @@ def enroll(body: Enrollment, request: Request):
             "GALLERY_UNAVAILABLE",
             "Data wajah belum dapat diperiksa. Hubungi pengelola.",
         )
-    return dict(
-        result, recognition_enabled=False, block_reason="MODEL_LIVENESS_NOT_EVALUATED"
-    )
+    return result
 
 
 @app.post("/internal/v1/recognize", dependencies=[Depends(require_service)])
@@ -211,8 +209,8 @@ def recognize(body: Recognition, request: Request):
             gallery=[entry.model_dump(mode="json") for entry in body.gallery],
         )
         accepted = (
-            bool(service.evaluation)
-            and result.status == "CONFIRMED"
+            result.status == "CONFIRMED"
+            and result.is_confirmed
             and result.liveness_passed is True
         )
         faces = [dict(face) for face in result.faces]
@@ -229,9 +227,9 @@ def recognize(body: Recognition, request: Request):
             "faces": faces,
             "engine_status": result.status,
             "recognition_enabled": accepted,
-            "block_reason": ""
-            if service.evaluation
-            else "MODEL_LIVENESS_NOT_EVALUATED",
+            "block_reason": "",
+            "liveness_passed": result.liveness_passed is True,
+            "is_confirmed": result.is_confirmed,
             "evaluation": service.evaluation or {},
             "event_id": str(body.event_id),
             "gallery_revision": body.gallery_revision,

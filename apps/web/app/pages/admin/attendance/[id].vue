@@ -356,7 +356,7 @@ await load()
       <Card class="min-w-0">
         <CardHeader class="flex flex-row flex-wrap items-center justify-between gap-4">
           <div>
-            <CardTitle>Daftar siswa siswa</CardTitle>
+            <CardTitle>Daftar siswa</CardTitle>
             <CardDescription class="mt-1.5">
               {{ session.recorded_count }} dari {{ session.roster_count }} siswa memiliki catatan.
               Daftar siswa tetap saat siswa pindah kelas.

@@ -36,7 +36,9 @@ def test_enrollment_duplicate_check_is_cross_student_but_not_cross_school(monkey
         pipeline.enroll(frames, cipher, "another-school", "new", None, gallery=gallery)
 
 
-def test_http_recognition_uses_engine_but_hides_unevaluated_identity(monkeypatch):
+def test_http_recognition_accepts_live_stable_identity_without_offline_report(
+    monkeypatch,
+):
     from app.recognition import RecognitionService
 
     pipeline = fake_pipeline(monkeypatch)
@@ -62,7 +64,7 @@ def test_http_recognition_uses_engine_but_hides_unevaluated_identity(monkeypatch
     }
     with TestClient(main.app) as client:
         statuses = []
-        for _ in range(3):
+        for i in range(3):
             body["event_id"] = str(uuid4())
             response = client.post(
                 "/internal/v1/recognize",
@@ -72,10 +74,16 @@ def test_http_recognition_uses_engine_but_hides_unevaluated_identity(monkeypatch
             assert response.status_code == 200
             data = response.json()
             statuses.append(data["engine_status"])
-            assert data["recognition_enabled"] is False
-            assert data["decision"] == "unknown"
-            assert student not in response.text
-            assert len(data["faces"]) == 1 and list(data["faces"][0]) == ["box"]
+            assert data["liveness_passed"] is True
+            assert data["is_confirmed"] is (i == 2)
+            if i == 2:
+                assert data["decision"] == "accepted"
+                assert data["faces"][0]["student_id"] == student
+                assert data["evaluation"] == {}
+            else:
+                assert data["decision"] == "unknown"
+                assert student not in response.text
+                assert list(data["faces"][0]) == ["box"]
         assert statuses == ["PROCESSING", "PROCESSING", "CONFIRMED"]
 
 
@@ -155,7 +163,7 @@ def test_enrollment_internal_limit_accepts_full_bounded_gallery(monkeypatch):
     assert response.status_code == 200
 
 
-@pytest.mark.parametrize("live", [True, False])
+@pytest.mark.parametrize("live", [True, False, None])
 def test_approved_route_still_requires_live_multiframe_confirmation(monkeypatch, live):
     from app.recognition import RecognitionService
 
@@ -209,7 +217,9 @@ def test_approved_route_still_requires_live_multiframe_confirmation(monkeypatch,
                 assert data["decision"] != "accepted" and student not in response.text
 
 
-def test_status_follows_reviewed_service_policy(monkeypatch):
+def test_status_requires_ready_liveness_but_does_not_require_offline_report(
+    monkeypatch,
+):
     from app import pipeline as module
     from app import recognition
     from app.recognition import RecognitionService
@@ -221,11 +231,12 @@ def test_status_follows_reviewed_service_policy(monkeypatch):
         pipeline,
         cipher,
         EngineConfig(0.8, 0.1),
-        evaluation={"automatic_attendance_approved": True},
+        liveness_hook=lambda *_: True,
     )
     monkeypatch.setattr(module, "get_pipeline", lambda: pipeline)
     monkeypatch.setattr(module, "get_cipher", lambda: cipher)
     monkeypatch.setattr(recognition, "get_recognition_service", lambda: service)
     assert module.status()["recognition_enabled"] is True
-    service.evaluation = None
+    assert module.status()["evaluation"]["status"] == "not_evaluated"
+    service.liveness_hook = None
     assert module.status()["recognition_enabled"] is False

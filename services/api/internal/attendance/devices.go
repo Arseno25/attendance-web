@@ -218,7 +218,7 @@ func (s *Service) kioskSession(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, &http.Cookie{Name: s.deviceCookieName(), Value: token, Path: "/", HttpOnly: true, Secure: s.auth.SecureCookies(), SameSite: http.SameSiteLaxMode, MaxAge: 600, Expires: expires})
 	s.auth.ClearSessionCookie(w)
-	httpresponse.Data(w, 201, map[string]any{"device_name": deviceName, "session_name": sessionName, "expires_at": expires, "csrf_token": hex.EncodeToString(deviceHash("device-csrf:" + token)), "recognition_enabled": false})
+	httpresponse.Data(w, 201, map[string]any{"device_name": deviceName, "session_name": sessionName, "expires_at": expires, "csrf_token": hex.EncodeToString(deviceHash("device-csrf:" + token)), "recognition_enabled": s.ai.Status(r.Context()).RecognitionEnabled})
 }
 func (s *Service) kioskAuth(w http.ResponseWriter, r *http.Request, write bool) (pgx.Tx, map[string]any, bool) {
 	cookie, err := r.Cookie(s.deviceCookieName())
@@ -257,7 +257,6 @@ func (s *Service) kioskAuth(w http.ResponseWriter, r *http.Request, write bool) 
 		return nil, nil, false
 	}
 	data["csrf_token"] = hex.EncodeToString(deviceHash("device-csrf:" + cookie.Value))
-	data["recognition_enabled"] = false
 	return tx, data, true
 }
 func (s *Service) kioskMe(w http.ResponseWriter, r *http.Request) {
@@ -269,6 +268,7 @@ func (s *Service) kioskMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback(context.Background())
+	data["recognition_enabled"] = s.ai.Status(r.Context()).RecognitionEnabled
 	httpresponse.Data(w, 200, data)
 }
 func (s *Service) heartbeat(w http.ResponseWriter, r *http.Request) {

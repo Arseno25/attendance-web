@@ -202,7 +202,7 @@ def test_enrollment_nullable_context_preserves_legacy_binding(monkeypatch):
         )
     assert response.status_code == 200
     template = response.json()
-    assert template["recognition_enabled"] is False
+    assert template["status"] == "provisional"
     assert np.allclose(cipher.decrypt(template, school, student, None), vector())
     with pytest.raises(InvalidTag):
         cipher.decrypt(

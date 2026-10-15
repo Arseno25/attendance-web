@@ -11,7 +11,7 @@ def test_pad_preprocessing_shifts_crop_at_edges_and_keeps_bgr():
     for box in ([0, 0, 100, 100], [230, 150, 90, 90], [100, 80, 100, 100]):
         tensor = prepare_crop(frame, np.array(box, np.float32))
         assert tensor.shape == (1, 3, 80, 80) and tensor.dtype == np.float32
-        assert tensor[0, :, 0, 0] == pytest.approx([10 / 255, 20 / 255, 30 / 255])
+        assert tensor[0, :, 0, 0] == pytest.approx([10, 20, 30])
     with pytest.raises(ValueError):
         prepare_crop(frame, np.array([0, 0, 0, 100]))
 

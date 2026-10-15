@@ -21,7 +21,8 @@ def prepare_crop(frame, box):
     left = min(max(0, x + w / 2 - cw / 2), width - 1 - cw)
     top = min(max(0, y + h / 2 - ch / 2), height - 1 - ch)
     patch = frame[int(top) : int(top + ch) + 1, int(left) : int(left + cw) + 1]
-    pixels = cv2.resize(patch, (80, 80)).astype(np.float32) / 255
+    # Upstream functional.to_tensor preserves BGR values 0–255; this export starts with Conv.
+    pixels = cv2.resize(patch, (80, 80)).astype(np.float32)
     return np.ascontiguousarray(pixels.transpose(2, 0, 1)[None])
 
 

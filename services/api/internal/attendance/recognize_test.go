@@ -2,31 +2,42 @@ package attendance
 
 import (
 	"attendance.local/api/internal/platform/aiclient"
+	"encoding/json"
 	"math"
 	"strings"
 	"testing"
 )
 
-func TestRecognitionApprovalRequiresEveryEvaluatedGateAndModelBinding(t *testing.T) {
-	result := aiclient.Recognition{Decision: "accepted", RecognitionEnabled: true, ModelSHA: strings.Repeat("a", 64), Faces: []aiclient.Face{{StudentID: "synthetic"}}}
-	if recognitionApproved(result) {
-		t.Fatal("an accepted flag bypassed evaluation")
-	}
-	result.Evaluation = map[string]any{"model_sha256": result.ModelSHA, "report_sha256": strings.Repeat("b", 64), "automatic_attendance_approved": true, "holdout_verified": true, "liveness_verified": true, "stability_verified": true, "threshold_margin_verified": true}
-	if !recognitionApproved(result) {
-		t.Fatal("complete synthetic evidence contract rejected")
-	}
-	for _, field := range []string{"automatic_attendance_approved", "holdout_verified", "liveness_verified", "stability_verified", "threshold_margin_verified"} {
-		result.Evaluation[field] = false
-		if recognitionApproved(result) {
-			t.Fatal("missing gate accepted", field)
+func TestRecognitionApprovalRequiresLiveStableEvidenceAndModel(t *testing.T) {
+	payload := map[string]any{"decision": "accepted", "recognition_enabled": true, "model_sha256": strings.Repeat("a", 64), "faces": []any{map[string]any{"student_id": "synthetic"}}, "liveness_passed": true, "is_confirmed": true}
+	check := func() bool {
+		raw, _ := json.Marshal(payload)
+		var result aiclient.Recognition
+		if err := json.Unmarshal(raw, &result); err != nil {
+			t.Fatal(err)
 		}
-		result.Evaluation[field] = true
+		return recognitionApproved(result)
 	}
-	result.Evaluation["model_sha256"] = strings.Repeat("c", 64)
-	if recognitionApproved(result) {
-		t.Fatal("different evaluated model accepted")
+	if !check() {
+		t.Fatal("live stable recognition incorrectly requires an offline report")
 	}
+	for _, field := range []string{"recognition_enabled", "liveness_passed", "is_confirmed"} {
+		payload[field] = false
+		if check() {
+			t.Fatal("missing runtime evidence accepted", field)
+		}
+		payload[field] = true
+	}
+	payload["model_sha256"] = strings.Repeat("z", 64)
+	if check() {
+		t.Fatal("invalid model hash accepted")
+	}
+	payload["model_sha256"] = strings.Repeat("a", 64)
+	payload["decision"] = "unknown"
+	if check() {
+		t.Fatal("unknown identity accepted")
+	}
+
 	for _, box := range []aiclient.Box{{X: math.NaN(), Width: 0.2, Height: 0.2}, {X: 0.8, Width: 0.3, Height: 0.2}, {Width: 0, Height: 0.2}, {X: -0.1, Width: 0.2, Height: 0.2}} {
 		if validBox(box) {
 			t.Fatal("invalid box accepted")

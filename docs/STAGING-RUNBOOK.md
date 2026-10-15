@@ -59,6 +59,19 @@ Kosong berarti mengabaikan forwarded headers. Wildcard `/0` ditolak. API membaca
 
 Uji dua klien berbeda melalui proxy staging: keduanya harus memiliki kuota terpisah, dan pemalsuan header dari koneksi tidak dipercaya tidak boleh melewati kuota. Pembatasan per akun tetap aktif.
 
+## Menggunakan absensi kamera Fantech
+
+1. Di Siswa, pastikan siswa aktif dan ditempatkan di kelas/tahun ajaran yang aktif. Di Wajah siswa, pilih siswa dan ambil 3–5 foto kamera yang berbeda hingga pendaftaran tersimpan.
+2. Buat jadwal sesuai jam sekolah dan buka sesi pada tanggal yang benar. Jam sekarang harus berada di antara mulai dan tutup sesi. Sesi yang sudah ditutup tidak dibuka ulang atau diubah riwayatnya; buat sesi/jadwal yang sesuai untuk absensi berikutnya. Pastikan nama siswa ada pada daftar siswa sesi.
+3. Di Perangkat absensi, gunakan perangkat aktif dan buat kode penghubung. Buka `/absensi`, pilih sesi terbuka, lalu masukkan kode sekali pakai. Pairing mengakhiri sesi akun operator pada browser itu agar kiosk tidak memiliki akses panel.
+4. Pilih Fantech Luminous C30 pada pilihan Kamera, lalu Aktifkan kamera dan izinkan kamera pada browser. Pilihan kamera dipakai bersama oleh pendaftaran dan absensi. Hentikan kamera sebelum memilih perangkat lain. Audio tidak diminta.
+5. Hadapkan satu wajah lurus ke lensa dengan cahaya cukup dan tahan posisi beberapa frame. Nama hanya muncul setelah server menyimpan/memastikan kehadiran. Pemindaian ulang mempertahankan satu catatan dan waktu hadir pertama; terlambat mengikuti batas sesi.
+6. Periksa catatan di detail sesi dan Laporan kehadiran. Saat sesi/perangkat tidak aktif, orang tidak dikenal, gambar tidak layak atau pemeriksaan wajah hidup gagal, tidak ada kehadiran yang ditulis. Gunakan pencatatan manual bila diperlukan.
+
+Pengujian lokal 15 Oktober 2026 berhasil menggunakan Fantech nyata hingga satu catatan hadir tersimpan; pengenalan ulang tidak menambah baris. Pendaftaran ulang dan sesi uji dilakukan atas persetujuan pemilik. Sesi uji sudah ditutup dan jadwal semula dikembalikan. Ini uji fungsional satu siswa, bukan evaluasi akurasi populasi.
+
+Webcam tersedia tidak otomatis berarti ada sesi yang sedang terbuka. Daftar sesi kosong berarti petugas perlu menyiapkan sesi pada jam yang sesuai. Pengujian kamera tunggal tidak menjadi klaim akurasi seluruh siswa atau jaminan menolak semua jenis foto/video.
+
 ## Kamera, model, dan evaluasi
 
 Installer `python -m app.models --directory /models` memasang model dari manifest dengan ukuran dan SHA-256 tetap, beserta lisensinya. Volume model persisten dan dibaca read-only oleh AI. Penambahan model PAD juga terpasang melalui initializer yang sama; tidak ada PyTorch/GPU tambahan.
@@ -66,7 +79,7 @@ Installer `python -m app.models --directory /models` memasang model dari manifes
 - Pendaftaran memeriksa kualitas/konsistensi 3–5 frame dan duplikat terhadap template siswa lain dalam sekolah, termasuk di luar kelas operator. Identitas siswa pembanding tidak dikirim ke browser. Template tidak diganti jika pemeriksaan gagal.
 - Pengenalan memakai engine 1:N, margin, pemeriksaan keaslian wajah dan konfirmasi beberapa frame. Cache terpisah per sekolah/sesi/perangkat, dibatasi ukurannya, dan dibersihkan ketika isi gallery berubah. Satu orang per frame; beberapa wajah ditolak.
 - Default threshold/margin/PAD/duplikat adalah nilai **sementara**, bukan klaim akurasi. Dataset uji harus terpisah dari pendaftaran dan kalibrasi. Tool menolak byte gambar yang berulang atau tumpang tindih dan path keluar direktori dataset; pemisahan orang, kamera, waktu, dan kondisi tetap diperiksa operator.
-- Export PAD pihak ketiga mempunyai perbedaan label pada model card: source upstream memakai kelas 1 sebagai live, sedangkan card export menyebut kelas 0. Adapter mengikuti source upstream; konformitas dan hasil kamera harus dibuktikan sebelum persetujuan. Jangan menyalin angka akurasi repository sebagai akurasi sekolah. [Source upstream](https://github.com/minivision-ai/Silent-Face-Anti-Spoofing/blob/master/test.py), [provenance export](https://huggingface.co/garciafido/minifasnet-v2-anti-spoofing-onnx).
+- Export PAD pihak ketiga mempunyai perbedaan label pada model card: source upstream memakai kelas 1 sebagai live, sedangkan card export menyebut kelas 0. Adapter mengikuti source upstream: kelas 1 live dan BGR float32 0–255, tanpa pembagian 255. Konformitas dan akurasi tetap perlu diuji pada kamera nyata. Jangan menyalin angka akurasi repository sebagai akurasi sekolah. [Source upstream](https://github.com/minivision-ai/Silent-Face-Anti-Spoofing/blob/master/test.py), [provenance export](https://huggingface.co/garciafido/minifasnet-v2-anti-spoofing-onnx).
 
 Format dataset evaluator yang sudah ada, simpan secara privat:
 
@@ -94,11 +107,11 @@ cd services/ai
 
 Evaluator menghasilkan metrik identifikasi, orang tak dikenal, serangan, latency offline, CPU, dan memori. Sampling delay dilewati pada evaluasi offline; ukur juga latency **kamera-ke-UI** pada perangkat sebenarnya. Hasil kalibrasi tidak boleh dipakai sebagai hold-out. Benchmark sintetis `app.engine_tools benchmark` hanya mengukur tahap buatan, bukan akurasi atau kapasitas dua kiosk.
 
-### Aktivasi setelah bukti tersedia
+### Laporan evaluasi terpisah dari operasi
 
-Biarkan `AI_RECOGNITION_APPROVAL_PATH` dan `AI_RECOGNITION_APPROVAL_SHA256` kosong sekarang. Tanpa artefak yang sah, hasil engine tidak mengungkap identitas dan tidak mencatat kehadiran otomatis.
+`AI_RECOGNITION_APPROVAL_PATH` dan `AI_RECOGNITION_APPROVAL_SHA256` bersifat opsional untuk melampirkan laporan evaluasi yang sudah ditinjau. Ketiadaan laporan tidak lagi mematikan pengenalan. Keputusan operasional tetap wajib satu wajah, pencocokan stabil, PAD lulus, model cocok, perangkat sah dan siswa anggota sesi aktif. Status akurasi tetap belum dievaluasi sampai tersedia bukti independen.
 
-Setelah evaluasi hold-out ditinjau, laporan harus cocok dengan SHA detector/embedding/PAD, fingerprint kode engine, dan seluruh `EngineConfig` runtime. Hanya satu hasil hold-out diterima, bukan sweep kalibrasi. Gerbang memerlukan pengujian known/unknown/serangan, nol salah identifikasi/false accept/serangan lolos, kategori print dan replay, serta batas atas 95% untuk nol false accept ≤0,1%. Itu memerlukan setidaknya sekitar 2.995 probe unknown independen; jumlahnya tidak boleh dipenuhi dengan menyalin gambar. FNIR dan sebaran sampel juga harus ditinjau.
+Setelah evaluasi hold-out ditinjau, laporan harus cocok dengan SHA detector/embedding/PAD, fingerprint kode engine, dan seluruh `EngineConfig` runtime. Hanya satu hasil hold-out diterima, bukan sweep kalibrasi. Penandaan laporan sebagai ditinjau memerlukan pengujian known/unknown/serangan, nol salah identifikasi/false accept/serangan lolos, kategori print dan replay, serta batas atas 95% untuk nol false accept ≤0,1%. Itu memerlukan setidaknya sekitar 2.995 probe unknown independen; jumlahnya tidak boleh dipenuhi dengan menyalin gambar. FNIR dan sebaran sampel juga harus ditinjau.
 
 Tambahkan `review` pada salinan laporan **hanya setelah** pemeriksaan manusia dan pengukuran perangkat:
 
@@ -114,7 +127,7 @@ Tambahkan `review` pada salinan laporan **hanya setelah** pemeriksaan manusia da
 }
 ```
 
-Angka 1400 di atas hanya contoh format; ganti dengan hasil pengukuran, jangan menyalinnya sebagai bukti. Hitung `sha256sum /private/reviewed-report.json`, mount file tersebut read-only untuk AI, lalu isi dua konfigurasi approval dengan path dan hash tepatnya. Compose dapat memakai file pada volume `/models` yang dikelola operator. Restart AI setelah perubahan approval/config. Ambang PAD yang dicatat evaluator harus sama dengan konfigurasi runtime dan nilai pada review; threshold/margin hasil uji juga harus sama dengan konfigurasi engine. Laporan hilang, rusak, belum ditinjau, kurang sampel, tidak cocok model/config, atau hash berbeda membuat mode otomatis tetap nonaktif. Go tetap memeriksa identitas siswa, sesi, perangkat, idempotensi dan bukti evaluasi sebelum transaksi.
+Angka 1400 di atas hanya contoh format; ganti dengan hasil pengukuran, jangan menyalinnya sebagai bukti. Hitung `sha256sum /private/reviewed-report.json`, mount file tersebut read-only untuk AI, lalu isi dua konfigurasi approval dengan path dan hash tepatnya. Compose dapat memakai file pada volume `/models` yang dikelola operator. Restart AI setelah perubahan approval/config. Ambang PAD yang dicatat evaluator harus sama dengan konfigurasi runtime dan nilai pada review; threshold/margin hasil uji juga harus sama dengan konfigurasi engine. Laporan hilang, rusak, kurang sampel atau tidak cocok tidak ditandai sebagai sudah ditinjau. Go tetap memeriksa bukti runtime wajah hidup/konfirmasi, identitas/model siswa, sesi, perangkat, dan idempotensi sebelum transaksi.
 
 ## Dependency dan CI
 

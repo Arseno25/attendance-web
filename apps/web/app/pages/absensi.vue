@@ -138,7 +138,7 @@ async function scan(generation: number) {
     }
   } finally {
     if (generation === scanGeneration && !disposed && cameraActive.value)
-      scanTimer = setTimeout(() => void scan(generation), 1000)
+      scanTimer = setTimeout(() => void scan(generation), 250)
   }
 }
 function arm(data: Kiosk) {
@@ -285,6 +285,12 @@ onBeforeUnmount(() => {
             novalidate
             @submit.prevent="pair"
           >
+            <Alert v-if="auth.session.value && !sessions.length">
+              <AlertTitle>Belum ada sesi absensi terbuka</AlertTitle>
+              <AlertDescription>
+                Minta petugas membuka sesi pada jadwal yang sesuai sebelum memasangkan perangkat.
+              </AlertDescription>
+            </Alert>
             <FieldGroup>
               <Field :data-invalid="!!errors.pairing_token">
                 <FieldLabel for="kiosk-token">Kode penghubung</FieldLabel>
@@ -395,8 +401,8 @@ onBeforeUnmount(() => {
             </p>
           </CardContent>
         </Card>
-        <Alert>
-          <AlertTitle>Absensi wajah belum tersedia</AlertTitle>
+        <Alert v-if="!kiosk.recognition_enabled">
+          <AlertTitle>Layanan wajah belum siap</AlertTitle>
           <AlertDescription>
             Absensi wajah belum siap digunakan. Untuk sementara, minta petugas mencatat kehadiran.
           </AlertDescription>

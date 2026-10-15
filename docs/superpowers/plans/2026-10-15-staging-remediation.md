@@ -10,12 +10,16 @@
 
 **Spec:** `docs/STAGING-READINESS-AUDIT-2026-10-15.md`, findings 1–10 and face feature gaps; user authorizes repairs and current stable stack.
 
+## Permintaan lanjutan: kamera tersedia harus bisa digunakan
+
+Pemilik kemudian meminta pengenalan kamera Fantech berfungsi untuk absensi. Syarat artefak evaluasi pada rencana awal diganti dengan bukti runtime satu wajah, PAD, kecocokan stabil dan validasi server. Laporan akurasi tetap independen dan tidak direkayasa. Kamera dipilih pada komponen bersama; pencatatan tetap idempoten dan dibatasi sesi/roster/perangkat aktif.
+
 ## Constraints
 
 - One school and one API replica; no new service layers or broad pattern rewrites.
 - Do not reset application data, restore retired consent requirements, expose secrets, deploy, or push.
 - Use class scoping consistently; trusted proxy headers require configured proxy CIDRs.
-- Automatic face decisions remain fail-closed without validated PAD and independent camera evaluation.
+- Automatic face decisions remain fail-closed without actual PAD success and stable matching; independent accuracy evaluation remains separate.
 - Preserve the pre-existing local SCHOOL_ID removal; commit the final tested revision on a local feature branch.
 
 ## Review focus

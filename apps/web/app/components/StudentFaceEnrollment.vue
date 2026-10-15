@@ -70,7 +70,7 @@ async function save() {
     frames.value = []
     busy.value = false
     emit('update:open', false)
-    toast.success('Wajah berhasil didaftarkan. Absensi otomatis belum tersedia.')
+    toast.success('Wajah berhasil didaftarkan. Gunakan halaman absensi pada sesi yang terbuka.')
   } catch (cause) {
     toast.error(apiMessage(cause))
   } finally {
@@ -229,7 +229,8 @@ function openRevocation() {
           :data-invalid="!!errors.frames"
         >
           <FieldDescription>
-            Foto asli tidak disimpan. Pendaftaran ini belum mengaktifkan absensi otomatis.
+            Foto asli tidak disimpan. Setelah terdaftar, siswa dapat absen lewat perangkat yang
+            dipasangkan ke sesi kelasnya.
           </FieldDescription>
           <FieldError
             v-if="errors.frames"

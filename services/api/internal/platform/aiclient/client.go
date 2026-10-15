@@ -15,8 +15,6 @@ import (
 	"time"
 )
 
-const BlockReason = "MODEL_LIVENESS_NOT_EVALUATED"
-
 var ErrUnavailable = errors.New("AI service unavailable")
 
 type Client struct {
@@ -156,6 +154,8 @@ func (c *Client) FacePreview(ctx context.Context, image string) (FacePreview, er
 }
 
 type Recognition struct {
+	LivenessPassed     bool           `json:"liveness_passed"`
+	Confirmed          bool           `json:"is_confirmed"`
 	Decision           string         `json:"decision"`
 	Faces              []Face         `json:"faces"`
 	RecognitionEnabled bool           `json:"recognition_enabled"`

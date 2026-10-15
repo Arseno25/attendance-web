@@ -73,7 +73,9 @@ await load()
     <Card class="min-w-0">
       <CardHeader>
         <CardTitle>Daftar siswa</CardTitle>
-        <CardDescription>{{ total }} siswa · absensi otomatis belum tersedia.</CardDescription>
+        <CardDescription>
+          {{ total }} siswa · daftarkan wajah untuk absensi menggunakan kamera.
+        </CardDescription>
       </CardHeader>
       <CardContent class="min-w-0 space-y-4">
         <DataTableToolbar @submit.prevent="filter">

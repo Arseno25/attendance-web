@@ -38,12 +38,13 @@ test('capture resizes without cropping, strips data URL, clears canvas and bound
   assert.equal(canvas.width, 0)
 })
 
-async function cameraSetup(getUserMedia) {
+const cameraStorage = new Map()
+async function cameraSetup(getUserMedia, devices = []) {
   let mounted, unmounted
-  Object.assign(globalThis, { ref, onMounted: fn => { mounted = fn }, onBeforeUnmount: fn => { unmounted = fn } })
+  Object.assign(globalThis, { ref, useId: () => 'camera-select', onMounted: fn => { mounted = fn }, onBeforeUnmount: fn => { unmounted = fn } })
   globalThis.document = Object.assign(new EventTarget(), { hidden: false })
-  globalThis.window = new EventTarget()
-  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: true, mediaDevices: { getUserMedia } } })
+  globalThis.window = Object.assign(new EventTarget(), { localStorage: { getItem: key => cameraStorage.get(key) ?? null, setItem: (key, value) => cameraStorage.set(key, value) } })
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: true, mediaDevices: { getUserMedia, enumerateDevices: async () => devices } } })
   const directory = resolve('.tools/camera-regression')
   mkdirSync(directory, { recursive: true })
   try { symlinkSync(resolve('apps/web/node_modules'), directory + '/node_modules', 'dir') } catch (error) { if (error.code !== 'EEXIST') throw error }
@@ -54,7 +55,7 @@ async function cameraSetup(getUserMedia) {
   const module = await import(pathToFileURL(file).href + '?' + Math.random())
   const events = []
   const page = module.default.setup({ faces: [] }, { expose() {}, emit: (...args) => events.push(args) })
-  mounted()
+  await mounted()
   return { page, unmounted, events }
 }
 
@@ -85,3 +86,21 @@ test('camera stops when hidden/offline and ignores overlapping start requests', 
   finally { unmounted() }
 })
 process.on('exit', () => rmSync(resolve('.tools/camera-regression'), { recursive: true, force: true }))
+
+ test('camera prefers Fantech, respects explicit selection and remembers it for enrollment and kiosk', async () => {
+  const devices = [{ kind: 'videoinput', deviceId: 'internal', label: 'Internal camera' }, {kind: 'videoinput', deviceId: 'fantech', label: 'Fantech Luminous C30'}]
+  let input
+  const track = new EventTarget(); track.stop = () => {}; track.getSettings = () => ({deviceId: 'internal'})
+  const media = async constraints => {input=constraints;return {getTracks:()=>[track],getVideoTracks:()=>[track]}}
+  const {page,unmounted}=await cameraSetup(media,devices)
+  page.video.value = {srcObject:null,videoWidth:640,videoHeight:480,play:async()=>{}}
+  try {
+   assert.equal(page.selectedCamera.value,'fantech')
+   page.selectedCamera.value='internal'
+   await page.start()
+   assert.deepEqual(input.video.deviceId,{exact:'internal'})
+   assert.equal(input.audio,false)
+  } finally {unmounted()}
+  const next=await cameraSetup(media,devices)
+  try {assert.equal(next.page.selectedCamera.value,'internal')} finally {next.unmounted();cameraStorage.clear()}
+ })

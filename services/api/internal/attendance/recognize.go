@@ -25,20 +25,13 @@ type capture struct {
 }
 
 func recognitionApproved(result aiclient.Recognition) bool {
-	if !result.RecognitionEnabled || result.Decision != "accepted" || len(result.Faces) != 1 || len(result.ModelSHA) != 64 {
+	if !result.RecognitionEnabled || result.Decision != "accepted" || !result.LivenessPassed || !result.Confirmed || len(result.Faces) != 1 || len(result.ModelSHA) != 64 {
 		return false
 	}
-	for _, gate := range []string{"automatic_attendance_approved", "holdout_verified", "liveness_verified", "stability_verified", "threshold_margin_verified"} {
-		if result.Evaluation[gate] != true {
-			return false
-		}
-	}
-	model, _ := result.Evaluation["model_sha256"].(string)
-	report, _ := result.Evaluation["report_sha256"].(string)
-	_, reportErr := hex.DecodeString(report)
-	_, modelErr := hex.DecodeString(model)
-	return model == result.ModelSHA && len(report) == 64 && reportErr == nil && modelErr == nil
+	_, err := hex.DecodeString(result.ModelSHA)
+	return err == nil
 }
+
 func validBox(box aiclient.Box) bool {
 	for _, v := range []float64{box.X, box.Y, box.Width, box.Height} {
 		if math.IsNaN(v) || math.IsInf(v, 0) || v < 0 || v > 1 {
@@ -136,7 +129,7 @@ func (s *Service) recognize(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		result.RecognitionEnabled = false
-		result.BlockReason = aiclient.BlockReason
+		result.BlockReason = ""
 		if result.Decision == "accepted" {
 			result.Decision = "unknown"
 		}
@@ -208,9 +201,9 @@ func (s *Service) acceptRecognition(r *http.Request, tx pgx.Tx, device map[strin
 			status = "late"
 		}
 		outcome = "recorded"
-		record, err = one(r.Context(), tx, `INSERT INTO attendance_records(school_id,session_id,student_id,status,check_in_at,reason,actor_id) VALUES($1,$2,$3,$4,$5,'Evaluated face recognition',$6) RETURNING `+recordColumns, s.schoolID, device["session_id"], student, status, now, actor)
+		record, err = one(r.Context(), tx, `INSERT INTO attendance_records(school_id,session_id,student_id,status,check_in_at,reason,actor_id) VALUES($1,$2,$3,$4,$5,'Absensi melalui kamera',$6) RETURNING `+recordColumns, s.schoolID, device["session_id"], student, status, now, actor)
 		if err == nil {
-			_, err = tx.Exec(r.Context(), `INSERT INTO attendance_events(school_id,record_id,actor_id,event_type,new_status,reason) VALUES($1,$2,$3,'check_in',$4,'Evaluated face recognition')`, s.schoolID, record["id"], actor, status)
+			_, err = tx.Exec(r.Context(), `INSERT INTO attendance_events(school_id,record_id,actor_id,event_type,new_status,reason) VALUES($1,$2,$3,'check_in',$4,'Absensi melalui kamera')`, s.schoolID, record["id"], actor, status)
 		}
 		if err == nil {
 			err = s.audit(r, tx, actor, "attendance.recognition.recorded", "attendance_record", record["id"].(string), map[string]any{"accepted_count": 1, "model_sha256": result.ModelSHA})
