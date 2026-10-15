@@ -15,7 +15,7 @@ var errState = errors.New("session state conflict")
 // Calendar changes apply before opening; open sessions retain their roster/history.
 const sessionEligibility = `c.is_active AND y.is_active AND COALESCE(cd.is_school_day, true)`
 
-const sessionSelect = `SELECT se.id::text AS id,se.schedule_id::text AS schedule_id,se.class_id::text AS class_id,c.name AS class_name,se.name,se.date::text,se.timezone,se.starts_at,se.late_after,se.closes_at,se.status,se.opened_at,se.closed_at,se.reconciled_at,se.created_at,(SELECT count(*) FROM attendance_session_participants p WHERE p.school_id=se.school_id AND p.session_id=se.id) AS roster_count,(SELECT count(*) FROM attendance_records ar WHERE ar.school_id=se.school_id AND ar.session_id=se.id) AS recorded_count FROM attendance_sessions se JOIN classes c ON c.school_id=se.school_id AND c.id=se.class_id WHERE se.school_id=$1 AND (NOT $2::boolean OR se.class_id=ANY($3::uuid[]))`
+const sessionSelect = `SELECT se.id::text AS id,se.schedule_id::text AS schedule_id,se.class_id::text AS class_id,c.name AS class_name,se.name,se.date::text,se.timezone,se.starts_at,se.late_after,se.checkout_at,se.closes_at,se.status,se.opened_at,se.closed_at,se.reconciled_at,se.created_at,(SELECT count(*) FROM attendance_session_participants p WHERE p.school_id=se.school_id AND p.session_id=se.id) AS roster_count,(SELECT count(*) FROM attendance_records ar WHERE ar.school_id=se.school_id AND ar.session_id=se.id) AS recorded_count FROM attendance_sessions se JOIN classes c ON c.school_id=se.school_id AND c.id=se.class_id WHERE se.school_id=$1 AND (NOT $2::boolean OR se.class_id=ANY($3::uuid[]))`
 
 func (s *Service) getSession(r *http.Request, tx pgx.Tx, u auth.User, id string, lock bool) (map[string]any, error) {
 	q := sessionSelect + ` AND se.id=$4`
@@ -34,7 +34,7 @@ func (s *Service) createSession(ctx context.Context, tx pgx.Tx, scheduleID, day 
 		return "", errState
 	}
 	var id string
-	err = tx.QueryRow(ctx, `INSERT INTO attendance_sessions(school_id,schedule_id,class_id,date,name,timezone,starts_at,late_after,closes_at) SELECT school_id,id,class_id,$3::date,name,timezone,($3::date+checkin_start) AT TIME ZONE timezone,($3::date+checkin_cutoff+grace_minutes*interval '1 minute') AT TIME ZONE timezone,($3::date+close_time) AT TIME ZONE timezone FROM attendance_schedules WHERE school_id=$1 AND id=$2 ON CONFLICT(schedule_id,date) DO NOTHING RETURNING id::text`, s.schoolID, scheduleID, day).Scan(&id)
+	err = tx.QueryRow(ctx, `INSERT INTO attendance_sessions(school_id,schedule_id,class_id,date,name,timezone,starts_at,late_after,closes_at,checkout_at) SELECT school_id,id,class_id,$3::date,name,timezone,($3::date+checkin_start) AT TIME ZONE timezone,($3::date+checkin_cutoff+grace_minutes*interval '1 minute') AT TIME ZONE timezone,($3::date+close_time) AT TIME ZONE timezone,($3::date+checkout_start) AT TIME ZONE timezone FROM attendance_schedules WHERE school_id=$1 AND id=$2 ON CONFLICT(schedule_id,date) DO NOTHING RETURNING id::text`, s.schoolID, scheduleID, day).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = errState
 	}

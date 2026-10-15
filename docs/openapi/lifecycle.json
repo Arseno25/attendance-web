@@ -293,7 +293,7 @@
     "/api/v1/kiosk/session": {
       "post": {
         "summary": "Pair kiosk to an open session",
-        "description": "Operator devices.health user login + Origin/CSRF; consumes token once, ten-minute HttpOnly device cookie. Re-pairing device invalidates previous cookie. User session revoked atomically and user cookie cleared; device cookie remains. No identity in response.",
+        "description": "Operator devices.health user login + Origin/CSRF; consumes token once, ten-minute HttpOnly device cookie. Re-pairing device invalidates previous cookie. User session revoked atomically and user cookie cleared; device cookie remains. No identity in response. Response includes class_name, timezone, server_time and snapshotted starts_at/late_after/checkout_at/closes_at for scheduled automatic departure.",
         "security": [
           {
             "UserCookie": []
@@ -363,7 +363,7 @@
     "/api/v1/kiosk/me": {
       "get": {
         "summary": "Read active kiosk session",
-        "description": "Device cookie; rechecks school/device/attendance session active and unexpired. Returns device/session labels, expires_at, device csrf_token; recognition_enabled=false.",
+        "description": "Device cookie; rechecks school/device/attendance session active and unexpired. Returns device/session/class labels, timezone, starts_at, late_after, checkout_at, closes_at, server_time, expires_at, device csrf_token and current recognition readiness.",
         "security": [
           {
             "DeviceCookie": []
@@ -440,8 +440,8 @@
     },
     "/api/v1/kiosk/recognitions": {
       "post": {
-        "summary": "Reject unevaluated recognition",
-        "description": "Device/session/Origin/CSRF checked; RECOGNITION_DISABLED; no attendance writes or frame persistence.",
+        "summary": "Recognize and record scheduled arrival/departure",
+        "description": "Alias of /api/v1/kiosk/recognize; see biometrics.json. Fresh stable identity and liveness required. Departure follows the session checkout_at snapshot; no frame persistence.",
         "security": [
           {
             "DeviceCookie": []

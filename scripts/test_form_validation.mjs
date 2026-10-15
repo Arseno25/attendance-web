@@ -74,6 +74,9 @@ test('academic and student forms require dates, references, names and valid stat
 test('schedules reject duplicate or missing weekdays, invalid times, noninteger or empty grace, and closed tolerance windows', () => {
   valid(newScheduleSchema, { ...schedule, class_id: id })
   valid(scheduleSchema, { ...schedule, grace_minutes: '5' })
+  valid(scheduleSchema, { ...schedule, checkout_start: '07:45' })
+  valid(scheduleSchema, { ...schedule, checkout_start: '' })
+  for (const checkout_start of ['07:30', '08:00', 'invalid']) invalid(scheduleSchema, { ...schedule, checkout_start }, 'checkout_start')
   for (const weekdays of [[], [1, 1], [0], [8]]) invalid(scheduleSchema, { ...schedule, weekdays }, 'weekdays')
   for (const grace_minutes of ['', -1, 121, 0.5, 'nope']) invalid(scheduleSchema, { ...schedule, grace_minutes }, 'grace_minutes')
   invalid(scheduleSchema, { ...schedule, checkin_start: '07:30' }, 'checkin_cutoff')

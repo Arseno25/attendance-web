@@ -33,7 +33,7 @@ def distribution(values):
 def benchmark(directory, *, identities=1000, iterations=30):
     if not 1 <= identities <= 3000 or not 1 <= iterations <= 1000:
         raise ValueError("Invalid benchmark bounds")
-    config = EngineConfig(threshold=0.8, margin=0.1, min_interval=0, cooldown=0)
+    config = EngineConfig(threshold=0.8, margin=0.1, min_interval=0)
     pipeline = Pipeline(directory)
     matcher = FaceMatcher(pipeline.model_sha256, config)
     rng = np.random.default_rng(17)
@@ -166,7 +166,7 @@ def evaluate(
     if not prepared:
         raise ValueError("No evaluation probes")
     # Offline supplied frames bypass sampling delay; temporal confirmation remains enabled.
-    config = replace(config, min_interval=0, cooldown=0)
+    config = replace(config, min_interval=0)
     settings = [(config.threshold, config.margin)]
     if calibration:
         settings = [

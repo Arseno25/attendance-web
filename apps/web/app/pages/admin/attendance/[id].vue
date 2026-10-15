@@ -323,7 +323,7 @@ await load()
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <dl class="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+          <dl class="grid gap-5 sm:grid-cols-2 xl:grid-cols-5">
             <div>
               <dt class="text-sm text-muted-foreground">Status</dt>
               <dd class="mt-1">
@@ -345,6 +345,12 @@ await load()
             <div>
               <dt class="text-sm text-muted-foreground">Batas tepat waktu</dt>
               <dd class="mt-1 text-sm font-medium">{{ dateTime(session.late_after) }}</dd>
+            </div>
+            <div>
+              <dt class="text-sm text-muted-foreground">Mulai absen pulang</dt>
+              <dd class="mt-1 text-sm font-medium">
+                {{ session.checkout_at ? dateTime(session.checkout_at) : 'Belum diatur' }}
+              </dd>
             </div>
             <div>
               <dt class="text-sm text-muted-foreground">Tutup terjadwal</dt>
@@ -490,6 +496,12 @@ await load()
               <Badge :variant="statusVariant(item.status)">
                 {{ attendanceLabels[item.status] }}
               </Badge>
+              <div
+                v-if="item.check_out_at"
+                class="mt-1"
+              >
+                <Badge variant="info">Sudah pulang</Badge>
+              </div>
               <div
                 v-if="item.correction_pending"
                 class="mt-1"

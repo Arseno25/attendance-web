@@ -43,11 +43,12 @@ def test_http_recognition_accepts_live_stable_identity_without_offline_report(
 
     pipeline = fake_pipeline(monkeypatch)
     cipher = TemplateCipher(b"k" * 32, "test-key")
+    live = True
     service = RecognitionService(
         pipeline,
         cipher,
-        EngineConfig(threshold=0.8, margin=0.1, min_interval=0, cooldown=0),
-        liveness_hook=lambda *_: True,
+        EngineConfig(threshold=0.8, margin=0.1, min_interval=0),
+        liveness_hook=lambda *_: live,
     )
     monkeypatch.setattr(main, "get_recognition_service", lambda: service)
     monkeypatch.setenv("AI_SERVICE_TOKEN", "a" * 48)
@@ -64,7 +65,7 @@ def test_http_recognition_accepts_live_stable_identity_without_offline_report(
     }
     with TestClient(main.app) as client:
         statuses = []
-        for i in range(3):
+        for i in range(5):
             body["event_id"] = str(uuid4())
             response = client.post(
                 "/internal/v1/recognize",
@@ -75,16 +76,33 @@ def test_http_recognition_accepts_live_stable_identity_without_offline_report(
             data = response.json()
             statuses.append(data["engine_status"])
             assert data["liveness_passed"] is True
-            assert data["is_confirmed"] is (i == 2)
-            if i == 2:
+            assert data["is_confirmed"] is (i >= 2)
+            if i >= 2:
                 assert data["decision"] == "accepted"
                 assert data["faces"][0]["student_id"] == student
+                assert data["faces"][0]["similarity"] == pytest.approx(1)
                 assert data["evaluation"] == {}
             else:
                 assert data["decision"] == "unknown"
                 assert student not in response.text
-                assert list(data["faces"][0]) == ["box"]
-        assert statuses == ["PROCESSING", "PROCESSING", "CONFIRMED"]
+                assert list(data["faces"][0]) == ["box", "similarity"]
+        assert statuses == [
+            "PROCESSING",
+            "PROCESSING",
+            "CONFIRMED",
+            "CONFIRMED",
+            "CONFIRMED",
+        ]
+        live = False
+        recheck = client.post(
+            "/internal/v1/recognize",
+            json=body,
+            headers={"Authorization": "Bearer " + "a" * 48},
+        ).json()
+        assert recheck["decision"] == "verification_required"
+        assert recheck["faces"][0]["student_id"] == student
+        assert recheck["liveness_passed"] is False
+        assert recheck["recognition_enabled"] is False
 
 
 def test_service_resets_on_gallery_change_and_separates_devices(monkeypatch):
@@ -94,7 +112,7 @@ def test_service_resets_on_gallery_change_and_separates_devices(monkeypatch):
     service = RecognitionService(
         fake_pipeline(monkeypatch),
         cipher,
-        EngineConfig(threshold=0.8, margin=0.1, min_interval=0, cooldown=0),
+        EngineConfig(threshold=0.8, margin=0.1, min_interval=0),
         liveness_hook=lambda *_: True,
     )
     gallery = [template(cipher, "school", "student")]
@@ -182,7 +200,7 @@ def test_approved_route_still_requires_live_multiframe_confirmation(monkeypatch,
     service = RecognitionService(
         fake_pipeline(monkeypatch),
         cipher,
-        EngineConfig(0.8, 0.1, min_interval=0, cooldown=0),
+        EngineConfig(0.8, 0.1, min_interval=0),
         liveness_hook=lambda *_: live,
         evaluation=evaluation,
     )
@@ -200,7 +218,7 @@ def test_approved_route_still_requires_live_multiframe_confirmation(monkeypatch,
         "gallery": [template(cipher, school, student)],
     }
     with TestClient(main.app) as client:
-        for i in range(3):
+        for i in range(5):
             response = client.post(
                 "/internal/v1/recognize",
                 json=body,
@@ -208,10 +226,11 @@ def test_approved_route_still_requires_live_multiframe_confirmation(monkeypatch,
             )
             assert response.status_code == 200
             data = response.json()
-            if i == 2 and live:
+            if i >= 2 and live:
                 assert data["decision"] == "accepted"
                 assert data["recognition_enabled"] is True
                 assert data["faces"][0]["student_id"] == student
+                assert data["faces"][0]["similarity"] == pytest.approx(1)
                 assert data["evaluation"]["report_sha256"] == "b" * 64
             else:
                 assert data["decision"] != "accepted" and student not in response.text

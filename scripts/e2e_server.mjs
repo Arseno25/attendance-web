@@ -48,10 +48,11 @@ try {
     assert.equal(error.code, 1)
     assert.match(error.stdout + error.stderr, /no school configured/)
   }
-  for (const file of await readdir(resolve(root, 'services/api/migrations'))) {
+  const migrations = await readdir(resolve(root, 'services/api/migrations'))
+  for (const file of migrations) {
     if (file.endsWith('.sql')) await symlink(resolve(root, 'services/api/migrations', file), resolve(migrationProbe, file))
   }
-  await writeFile(resolve(migrationProbe, '00012_expected_failure.sql'), '-- +goose Up\nSELECT nonexistent_migration_probe();\n-- +goose Down\nSELECT 1;\n')
+  await writeFile(resolve(migrationProbe, `${String(Math.max(...migrations.filter(file => file.endsWith('.sql')).map(file => Number(file.split('_')[0]))) + 1).padStart(5, '0')}_expected_failure.sql`), '-- +goose Up\nSELECT nonexistent_migration_probe();\n-- +goose Down\nSELECT 1;\n')
   await assert.rejects(run(resolve(root, '.tools/goose'), ['-dir', migrationProbe, 'up'], { env: { ...env, GOOSE_DRIVER: 'postgres', GOOSE_DBSTRING: url.href } }), error => /nonexistent_migration_probe/.test(error.stderr + error.stdout))
   assert.equal(await bootstrap(), 0, 'first bootstrap must succeed')
   assert.equal(await bootstrap(), 1, 'repeat bootstrap must fail')

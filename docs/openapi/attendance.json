@@ -2740,6 +2740,10 @@
           },
           "is_active": {
             "type": "boolean"
+          },
+          "checkout_start": {
+            "type": "string",
+            "description": "Local HH:mm start of automatic checkout; after cutoff plus grace and before close_time. Empty input disables checkout. Missing input preserves legacy check-in-only behavior; PATCH omission preserves current value. Existing sessions keep their snapshots."
           }
         },
         "required": [
@@ -2948,6 +2952,10 @@
           },
           "is_active": {
             "type": "boolean"
+          },
+          "checkout_start": {
+            "type": "string",
+            "description": "Local HH:mm start of automatic checkout; after cutoff plus grace and before close_time. Empty input disables checkout. Missing input preserves legacy check-in-only behavior; PATCH omission preserves current value. Existing sessions keep their snapshots."
           }
         },
         "required": [],
@@ -3040,6 +3048,13 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "checkout_start": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Local HH:mm start of automatic checkout; after cutoff plus grace and before close_time. Empty input disables checkout. Missing input preserves legacy check-in-only behavior; PATCH omission preserves current value. Existing sessions keep their snapshots."
           }
         },
         "required": [
@@ -3137,6 +3152,14 @@
           },
           "recorded_count": {
             "type": "integer"
+          },
+          "checkout_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Snapshotted start of checkout. Before this time recognize records arrival; at/after it requires an existing check-in and records departure."
           }
         },
         "required": [

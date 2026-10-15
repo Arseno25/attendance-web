@@ -189,7 +189,7 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 	assignment := expect(call("POST", "/class-assignments", map[string]any{"user_id": teacher["id"], "class_id": class["id"]}), 201)["data"].(map[string]any)
 	operatorRole := expect(call("POST", "/roles", map[string]any{"name": "Attendance operator", "scope": "school", "permissions": []string{"attendance.manual"}}), 201)["data"].(map[string]any)
 	operator := expect(call("POST", "/users", map[string]any{"email": "operator@example.test", "full_name": "Operator", "role": operatorRole["key"], "password": password}), 201)["data"].(map[string]any)
-	scheduleBody := map[string]any{"class_id": class["id"], "name": "Daily", "weekdays": []int{1, 2, 3, 4, 5, 6, 7}, "checkin_start": "00:00", "checkin_cutoff": "00:01", "grace_minutes": 0, "close_time": "23:59"}
+	scheduleBody := map[string]any{"class_id": class["id"], "name": "Daily", "checkout_start": "23:30", "weekdays": []int{1, 2, 3, 4, 5, 6, 7}, "checkin_start": "00:00", "checkin_cutoff": "00:01", "grace_minutes": 0, "close_time": "23:59"}
 	schedule := expect(call("POST", "/attendance-schedules", scheduleBody), 201)["data"].(map[string]any)
 	scheduleID := schedule["id"].(string)
 	expect(call("POST", "/attendance-schedules", scheduleBody), 409)
@@ -205,6 +205,19 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 	expect(call("PUT", "/school/calendar/"+day, map[string]any{"is_school_day": true, "reason": "School day"}), 200)
 	se := expect(call("POST", "/attendance-sessions", map[string]any{"schedule_id": scheduleID, "date": day}), 201)["data"].(map[string]any)
 	sessionID := se["id"].(string)
+	if se["checkout_at"] == nil {
+		t.Fatal("session missing departure snapshot", se)
+	}
+	expect(call("PATCH", "/attendance-schedules/"+scheduleID, map[string]any{"checkout_start": "23:00"}), 200)
+	frozenCheckout := expect(call("GET", "/attendance-sessions/"+sessionID, nil), 200)["data"].(map[string]any)
+	if frozenCheckout["checkout_at"] != se["checkout_at"] {
+		t.Fatal("schedule edit changed existing session", frozenCheckout)
+	}
+	// The remaining lifecycle fixtures move the session window independently.
+	if _, err := pool.Exec(ctx, `UPDATE attendance_sessions SET checkout_at=NULL WHERE id=$1`, sessionID); err != nil {
+		t.Fatal(err)
+	}
+
 	expect(call("POST", "/attendance-sessions", map[string]any{"schedule_id": scheduleID, "date": day}), 409)
 	expect(call("PUT", "/school/calendar/"+day, map[string]any{"is_school_day": false, "reason": "Holiday after scheduling"}), 200)
 	expect(call("POST", "/attendance-sessions/"+sessionID+"/open", map[string]any{"reason": "Must not open on holiday"}), 409)
@@ -535,6 +548,7 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 	// First-insert contention uses a new participant, not an existing record.
 	student4 := expect(call("POST", "/students", map[string]any{"nis": "004", "full_name": "Student four", "class_id": class["id"]}), 201)["data"].(map[string]any)
 	// A separate fixture session is open for this concurrency check.
+	delete(scheduleBody, "checkout_start")
 	scheduleBody["class_id"] = class2["id"]
 	scheduleBody["name"] = "Worker class B"
 	schedB := expect(call("POST", "/attendance-schedules", scheduleBody), 201)["data"].(map[string]any)

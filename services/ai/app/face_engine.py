@@ -19,6 +19,7 @@ Status = Literal[
     "LOW_QUALITY",
     "PROCESSING",
     "CONFIRMED",
+    "VERIFYING",
     "UNKNOWN",
     "ERROR",
 ]
@@ -33,7 +34,6 @@ class EngineConfig:
     consistent_matches: int = 3
     min_face_size: int = 100
     min_interval: float = 0.2
-    cooldown: float = 2.0
     session_timeout: float = 3.0
     max_frame_age: float = 2.0
     max_sessions: int = 128
@@ -45,7 +45,6 @@ class EngineConfig:
             self.detection_threshold,
             self.margin,
             self.min_interval,
-            self.cooldown,
             self.session_timeout,
             self.max_frame_age,
         )
@@ -76,7 +75,6 @@ class EngineConfig:
         if (
             self.min_face_size < 80
             or self.min_interval < 0
-            or self.cooldown < 0
             or self.session_timeout <= 0
             or self.max_frame_age <= 0
         ):
@@ -251,17 +249,19 @@ class RecognitionSession:
         self.last_timestamp = -math.inf
         self.last_feature_at = -math.inf
         self.last_seen = -math.inf
-        self.confirmed_at = -math.inf
         self.previous_embedding: np.ndarray | None = None
         self.box: np.ndarray | None = None
         self.identity: str | None = None
+        self.verified_identity: str | None = None
 
     def reset(self):
         # Retain timestamp high-water mark to reject replay after disappearance.
         self.matches.clear()
         self.state = "RESET"
-        self.previous_embedding = self.box = self.identity = None
-        self.confirmed_at = self.last_feature_at = -math.inf
+        self.previous_embedding = self.box = self.identity = self.verified_identity = (
+            None
+        )
+        self.last_feature_at = -math.inf
 
     def observe(self, match: Match, embedding: np.ndarray, timestamp: float) -> bool:
         if (
@@ -281,8 +281,6 @@ class RecognitionSession:
         self.matches.append(match.student_id)
         confirmed = len(self.matches) >= self.config.consistent_matches
         self.state = "CONFIRMED" if confirmed else "RECOGNIZING"
-        if confirmed:
-            self.confirmed_at = timestamp
         return confirmed
 
 
@@ -432,10 +430,7 @@ class FaceRecognitionEngine:
                 if session.box is not None and _overlap(box, session.box) < 0.3:
                     session.reset()
                 session.box = box.copy()
-                if (
-                    timestamp - session.last_feature_at < self.config.min_interval
-                    or timestamp - session.confirmed_at < self.config.cooldown
-                ):
+                if timestamp - session.last_feature_at < self.config.min_interval:
                     return RecognitionResult(
                         "PROCESSING",
                         face_detected=True,
@@ -444,9 +439,6 @@ class FaceRecognitionEngine:
                         faces=boxes,
                         timings_ms=timings,
                     )
-                if session.confirmed_at > -math.inf:
-                    session.reset()
-                    session.box = box.copy()
                 at = time.perf_counter()
                 embedding = self.recognizer.extract_embedding(frame, faces[0])
                 timings["embedding"] = (time.perf_counter() - at) * 1000
@@ -466,6 +458,22 @@ class FaceRecognitionEngine:
                     session.reset()
                     return RecognitionResult("ERROR", reason="PAD_FAILED")
                 if live is False:
+                    if (
+                        match.student_id is not None
+                        and session.verified_identity == match.student_id
+                    ):
+                        return RecognitionResult(
+                            "VERIFYING",
+                            student_id=match.student_id,
+                            similarity=match.similarity,
+                            face_detected=True,
+                            face_count=1,
+                            faces=boxes,
+                            is_confirmed=True,
+                            liveness_passed=False,
+                            reason="PAD_REJECTED",
+                            timings_ms=timings,
+                        )
                     session.reset()
                     return RecognitionResult(
                         "UNKNOWN",
@@ -476,6 +484,8 @@ class FaceRecognitionEngine:
                         faces=boxes,
                         timings_ms=timings,
                     )
+                if confirmed and live is True:
+                    session.verified_identity = match.student_id
                 timings["total"] = (time.perf_counter() - started) * 1000
                 result_status = (
                     "CONFIRMED"

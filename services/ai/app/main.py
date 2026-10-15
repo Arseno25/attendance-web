@@ -214,11 +214,20 @@ def recognize(body: Recognition, request: Request):
             and result.liveness_passed is True
         )
         faces = [dict(face) for face in result.faces]
-        if accepted:
+        if len(faces) == 1 and result.similarity is not None:
+            faces[0]["similarity"] = result.similarity
+        continuing = (
+            result.status == "VERIFYING"
+            and result.is_confirmed
+            and result.liveness_passed is False
+        )
+        if accepted or continuing:
             faces[0]["student_id"] = result.student_id
         return {
             "decision": "accepted"
             if accepted
+            else "verification_required"
+            if continuing
             else "no_face"
             if result.status == "NO_FACE"
             else "inconclusive"
@@ -226,6 +235,7 @@ def recognize(body: Recognition, request: Request):
             else "unknown",
             "faces": faces,
             "engine_status": result.status,
+            "reason": result.reason,
             "recognition_enabled": accepted,
             "block_reason": "",
             "liveness_passed": result.liveness_passed is True,

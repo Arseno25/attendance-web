@@ -80,9 +80,10 @@ type Box struct {
 	Height float64 `json:"height"`
 }
 type Face struct {
-	Box       Box    `json:"box"`
-	StudentID string `json:"student_id,omitempty"`
-	Label     string `json:"label,omitempty"`
+	Box        Box      `json:"box"`
+	StudentID  string   `json:"student_id,omitempty"`
+	Label      string   `json:"label,omitempty"`
+	Similarity *float64 `json:"similarity,omitempty"`
 }
 type PreviewFace struct {
 	Box Box `json:"box"`
@@ -154,6 +155,8 @@ func (c *Client) FacePreview(ctx context.Context, image string) (FacePreview, er
 }
 
 type Recognition struct {
+	EngineStatus       string         `json:"engine_status"`
+	Reason             string         `json:"reason"`
 	LivenessPassed     bool           `json:"liveness_passed"`
 	Confirmed          bool           `json:"is_confirmed"`
 	Decision           string         `json:"decision"`

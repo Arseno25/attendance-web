@@ -199,8 +199,12 @@ defineExpose({ start, stop, capture })
         <div
           v-for="(face, index) in faces"
           :key="index"
-          class="absolute rounded border-2"
-          :class="face.tone === 'success' || face.accepted ? 'border-success' : 'border-warning'"
+          class="absolute rounded border-2 transition-[left,top,width,height] duration-150 motion-reduce:transition-none"
+          :class="
+            face.tone === 'success' || face.accepted
+              ? 'border-success-foreground'
+              : 'border-warning-foreground'
+          "
           :style="{
             left: `${face.box.x * 100}%`,
             top: `${face.box.y * 100}%`,
@@ -213,6 +217,18 @@ defineExpose({ start, stop, capture })
             class="absolute left-0 top-0 max-w-full truncate rounded-sm"
           >
             {{ face.label }}
+            <span
+              v-if="face.similarity !== undefined"
+              class="ml-1 tabular-nums"
+            >
+              ·
+              {{
+                face.similarity.toLocaleString('id-ID', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })
+              }}
+            </span>
           </Badge>
         </div>
       </template>

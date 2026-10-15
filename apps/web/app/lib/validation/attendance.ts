@@ -27,6 +27,7 @@ const scheduleFields = z.object({
   checkin_start: time,
   checkin_cutoff: time,
   close_time: time,
+  checkout_start: z.union([time, z.literal('')]).optional(),
   grace_minutes: z
     .union([z.number(), z.string().min(1, 'Toleransi wajib diisi.')])
     .pipe(
@@ -40,6 +41,18 @@ const scheduleFields = z.object({
 })
 const minutes = (value: string) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5))
 function scheduleOrder(value: z.infer<typeof scheduleFields>, ctx: z.RefinementCtx) {
+  if (
+    value.checkout_start &&
+    (minutes(value.checkout_start) <= minutes(value.checkin_cutoff) + value.grace_minutes ||
+      value.checkout_start >= value.close_time)
+  )
+    ctx.addIssue({
+      code: 'custom',
+      path: ['checkout_start'],
+      message:
+        'Jam pulang harus setelah batas tepat waktu dan toleransi, serta sebelum tutup absensi.',
+    })
+
   if (value.checkin_start >= value.checkin_cutoff)
     ctx.addIssue({
       code: 'custom',

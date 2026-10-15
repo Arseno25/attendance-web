@@ -33,7 +33,8 @@ const form = reactive({
   checkin_start: '07:00',
   checkin_cutoff: '07:30',
   grace_minutes: 0,
-  close_time: '12:00',
+  checkout_start: '12:00',
+  close_time: '13:00',
   is_active: true,
 })
 const { errors, validate, clear } = useFormValidation(
@@ -78,7 +79,8 @@ async function show(item?: Schedule) {
       checkin_start: '07:00',
       checkin_cutoff: '07:30',
       grace_minutes: 0,
-      close_time: '12:00',
+      checkout_start: '12:00',
+      close_time: '13:00',
       is_active: true,
     },
     item ?? {},
@@ -86,6 +88,7 @@ async function show(item?: Schedule) {
   form.weekdays = [...form.weekdays]
   form.checkin_start = form.checkin_start.slice(0, 5)
   form.checkin_cutoff = form.checkin_cutoff.slice(0, 5)
+  form.checkout_start = item?.checkout_start?.slice(0, 5) ?? (item ? '' : '12:00')
   form.close_time = form.close_time.slice(0, 5)
   try {
     if (!item) classes.value = await options<SchoolClass>('/classes', { active: 'true' })
@@ -106,6 +109,7 @@ async function save() {
       checkin_cutoff: form.checkin_cutoff,
       grace_minutes: Number(form.grace_minutes),
       close_time: form.close_time,
+      checkout_start: form.checkout_start,
       is_active: form.is_active,
       ...(!editing.value ? { class_id: form.class_id } : {}),
     }
@@ -255,10 +259,11 @@ await loadCalendar()
                 {{ item.weekdays.map((day) => dayLabels[day - 1]).join(', ') }}
               </template>
               <template #cell-jam-toleransi="{ item }">
-                {{ item.checkin_start.slice(0, 5) }} – {{ item.close_time.slice(0, 5) }}
+                Masuk {{ item.checkin_start.slice(0, 5) }} · Pulang
+                {{ item.checkout_start?.slice(0, 5) ?? 'Belum diatur' }}
                 <div class="text-xs text-muted-foreground">
                   Batas {{ item.checkin_cutoff.slice(0, 5) }} + {{ item.grace_minutes }} menit ·
-                  {{ item.timezone }}
+                  Tutup {{ item.close_time.slice(0, 5) }} · {{ item.timezone }}
                 </div>
               </template>
               <template #cell-status="{ item }">
@@ -534,6 +539,29 @@ await loadCalendar()
                   id="schedule-cutoff-error"
                 >
                   {{ errors.checkin_cutoff }}
+                </FieldError>
+              </Field>
+              <Field :data-invalid="!!errors.checkout_start">
+                <FieldLabel for="schedule-checkout">Mulai absen pulang</FieldLabel>
+                <Input
+                  id="schedule-checkout"
+                  v-model="form.checkout_start"
+                  type="time"
+                  :disabled="saving"
+                  :aria-invalid="!!errors.checkout_start"
+                  :aria-describedby="
+                    errors.checkout_start ? 'schedule-checkout-error' : 'schedule-checkout-hint'
+                  "
+                />
+                <FieldDescription id="schedule-checkout-hint">
+                  Kamera otomatis mencatat pulang mulai jam ini. Kosongkan bila hanya mencatat
+                  masuk.
+                </FieldDescription>
+                <FieldError
+                  v-if="errors.checkout_start"
+                  id="schedule-checkout-error"
+                >
+                  {{ errors.checkout_start }}
                 </FieldError>
               </Field>
               <Field :data-invalid="!!errors.close_time">

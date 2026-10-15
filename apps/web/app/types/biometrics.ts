@@ -8,6 +8,7 @@ export interface FaceOverlay {
   box: FaceBox
   label: string
   accepted: boolean
+  similarity?: number
   tone?: 'success' | 'warning'
 }
 export interface FaceStatus {
@@ -30,9 +31,30 @@ export interface FaceStatus {
   }
 }
 export interface Recognition {
-  decision: 'no_face' | 'unknown' | 'inconclusive' | 'accepted'
+  identity_continuous?: boolean
+  decision: 'no_face' | 'unknown' | 'inconclusive' | 'accepted' | 'verification_required'
   recognition_enabled: boolean
   block_reason: string | null
-  faces: { box: FaceBox; label?: string; student_id?: string }[]
-  attendance?: { outcome: 'recorded' | 'already_recorded' }
+  engine_status?: string
+  reason?: string | null
+  server_time?: string
+  faces: { box: FaceBox; label?: string; student_id?: string; similarity?: number }[]
+  attendance?: {
+    outcome:
+      | 'recorded'
+      | 'already_recorded'
+      | 'checked_out'
+      | 'already_checked_out'
+      | 'check_in_required'
+      | 'status_locked'
+      | 'correction_pending'
+    mode: 'check_in' | 'check_out'
+    record: {
+      id: string
+      student_id: string
+      status: string
+      check_in_at: string | null
+      check_out_at: string | null
+    } | null
+  }
 }

@@ -177,14 +177,16 @@ func (s *Service) kioskSession(w http.ResponseWriter, r *http.Request) {
 		invalid(w, "Token pairing dan sesi wajib valid")
 		return
 	}
-	var device, deviceName, sessionName string
+	var device, deviceName, sessionName, timezone, className string
+	var serverTime, starts, late, closes time.Time
+	var checkout *time.Time
 	err := tx.QueryRow(r.Context(), `DELETE FROM device_pairing_tokens p USING camera_devices d WHERE p.school_id=$1 AND p.token_hash=$2 AND p.expires_at>clock_timestamp() AND d.school_id=p.school_id AND d.id=p.device_id AND d.revoked_at IS NULL RETURNING p.device_id::text,d.name`, s.schoolID, deviceHash(in.Token)).Scan(&device, &deviceName)
 	if err != nil {
 		httpresponse.Error(w, 401, "INVALID_PAIRING_TOKEN", "Kode penghubung tidak valid, sudah berakhir, atau telah digunakan.")
 		return
 	}
 	var open bool
-	err = tx.QueryRow(r.Context(), `SELECT status='open' AND starts_at<=clock_timestamp() AND closes_at>clock_timestamp(),name FROM attendance_sessions WHERE school_id=$1 AND id=$2`, s.schoolID, in.Session).Scan(&open, &sessionName)
+	err = tx.QueryRow(r.Context(), `SELECT a.status='open' AND a.starts_at<=clock_timestamp() AND a.closes_at>clock_timestamp(),a.name,a.timezone,c.name,clock_timestamp(),a.starts_at,a.late_after,a.closes_at,a.checkout_at FROM attendance_sessions a JOIN classes c ON c.school_id=a.school_id AND c.id=a.class_id WHERE a.school_id=$1 AND a.id=$2`, s.schoolID, in.Session).Scan(&open, &sessionName, &timezone, &className, &serverTime, &starts, &late, &closes, &checkout)
 	if err != nil {
 		dbError(w, err)
 		return
@@ -218,7 +220,7 @@ func (s *Service) kioskSession(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, &http.Cookie{Name: s.deviceCookieName(), Value: token, Path: "/", HttpOnly: true, Secure: s.auth.SecureCookies(), SameSite: http.SameSiteLaxMode, MaxAge: 600, Expires: expires})
 	s.auth.ClearSessionCookie(w)
-	httpresponse.Data(w, 201, map[string]any{"device_name": deviceName, "session_name": sessionName, "expires_at": expires, "csrf_token": hex.EncodeToString(deviceHash("device-csrf:" + token)), "recognition_enabled": s.ai.Status(r.Context()).RecognitionEnabled})
+	httpresponse.Data(w, 201, map[string]any{"device_name": deviceName, "session_name": sessionName, "timezone": timezone, "class_name": className, "server_time": serverTime, "starts_at": starts, "late_after": late, "closes_at": closes, "checkout_at": checkout, "expires_at": expires, "csrf_token": hex.EncodeToString(deviceHash("device-csrf:" + token)), "recognition_enabled": s.ai.Status(r.Context()).RecognitionEnabled})
 }
 func (s *Service) kioskAuth(w http.ResponseWriter, r *http.Request, write bool) (pgx.Tx, map[string]any, bool) {
 	cookie, err := r.Cookie(s.deviceCookieName())
@@ -249,7 +251,7 @@ func (s *Service) kioskAuth(w http.ResponseWriter, r *http.Request, write bool) 
 	err = tx.QueryRow(r.Context(), `SELECT is_active FROM schools WHERE id=$1 `+lock, s.schoolID).Scan(&active)
 	var data map[string]any
 	if err == nil && active {
-		data, err = one(r.Context(), tx, `SELECT d.id::text AS device_id,d.name AS device_name,a.id::text AS session_id,a.name AS session_name,ds.expires_at FROM device_sessions ds JOIN camera_devices d ON d.school_id=ds.school_id AND d.id=ds.device_id JOIN attendance_sessions a ON a.school_id=ds.school_id AND a.id=ds.session_id WHERE ds.school_id=$1 AND ds.token_hash=$2 AND ds.expires_at>clock_timestamp() AND d.revoked_at IS NULL AND a.status='open' AND a.starts_at<=clock_timestamp() AND a.closes_at>clock_timestamp()`, s.schoolID, deviceHash(cookie.Value))
+		data, err = one(r.Context(), tx, `SELECT d.id::text AS device_id,d.name AS device_name,a.id::text AS session_id,a.name AS session_name,a.timezone,c.name AS class_name,clock_timestamp() AS server_time,a.starts_at,a.late_after,a.closes_at,a.checkout_at,ds.expires_at FROM device_sessions ds JOIN camera_devices d ON d.school_id=ds.school_id AND d.id=ds.device_id JOIN attendance_sessions a ON a.school_id=ds.school_id AND a.id=ds.session_id JOIN classes c ON c.school_id=a.school_id AND c.id=a.class_id WHERE ds.school_id=$1 AND ds.token_hash=$2 AND ds.expires_at>clock_timestamp() AND d.revoked_at IS NULL AND a.status='open' AND a.starts_at<=clock_timestamp() AND a.closes_at>clock_timestamp()`, s.schoolID, deviceHash(cookie.Value))
 	}
 	if err != nil || !active {
 		_ = tx.Rollback(context.Background())

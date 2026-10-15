@@ -9,6 +9,7 @@ export interface Schedule {
   checkin_start: string
   checkin_cutoff: string
   grace_minutes: number
+  checkout_start: string | null
   close_time: string
   is_active: boolean
 }
@@ -21,6 +22,7 @@ export interface AttendanceSession {
   timezone: string
   starts_at: string
   late_after: string
+  checkout_at: string | null
   closes_at: string
   status: string
   reconciled_at: string | null

@@ -169,7 +169,7 @@
     "/api/v1/students/{id}/enrollments": {
       "post": {
         "summary": "Enroll provisional face template",
-        "description": "Live biometrics.enroll and active student required in local and production. 3–5 distinct quality-checked JPEGs; JSON <=2 MiB. Only encrypted templates stored. Guardian consent is not part of enrollment. Automatic attendance remains disabled until evaluation.",
+        "description": "Live biometrics.enroll and active student required in local and production. 3\u20135 distinct quality-checked JPEGs; JSON <=2 MiB. Only encrypted templates stored. Guardian consent is not part of enrollment. Automatic attendance remains disabled until evaluation.",
         "security": [
           {
             "UserCookie": []
@@ -312,7 +312,7 @@
     "/api/v1/kiosk/recognize": {
       "post": {
         "summary": "Detect faces from a paired device",
-        "description": "Device cookie + Origin/CSRF, current school/session/roster. JSON <=512 KiB. Current unevaluated pipeline returns real boxes and no candidate identities. Compatible alias /api/v1/kiosk/recognitions.",
+        "description": "Device cookie + Origin/CSRF, live school/device/operator/session/roster/template checks. JSON <=512 KiB. Stable fresh recognition and liveness record check-in before checkout_at; at/after it record checkout only for already present/late students. No frames are persisted. Mutations are idempotent; repeated frames do not generate new ledger rows. Compatible alias /api/v1/kiosk/recognitions.",
         "security": [
           {
             "DeviceCookie": []
@@ -388,7 +388,7 @@
     "/api/v1/students/{id}/face-preview": {
       "post": {
         "summary": "Check enrollment camera frame quality",
-        "description": "Live biometrics.enroll and active student, rechecked after inference. Strict JSON <=512 KiB; raw base64 JPEG <=384 KiB and dimensions 160–1280. Ephemeral frames; only geometry and quality returned. No guardian consent required.",
+        "description": "Live biometrics.enroll and active student, rechecked after inference. Strict JSON <=512 KiB; raw base64 JPEG <=384 KiB and dimensions 160\u20131280. Ephemeral frames; only geometry and quality returned. No guardian consent required.",
         "security": [
           {
             "UserCookie": []
@@ -647,7 +647,7 @@
             "items": {
               "type": "string",
               "maxLength": 524288,
-              "description": "Raw base64 JPEG; decoded <=384 KiB; header dimensions 160–1280 per axis, no data URL."
+              "description": "Raw base64 JPEG; decoded <=384 KiB; header dimensions 160\u20131280 per axis, no data URL."
             },
             "minItems": 3,
             "maxItems": 5
@@ -678,7 +678,7 @@
           "image": {
             "type": "string",
             "maxLength": 524288,
-            "description": "Raw base64 JPEG; decoded <=384 KiB; header dimensions 160–1280 per axis, no data URL."
+            "description": "Raw base64 JPEG; decoded <=384 KiB; header dimensions 160\u20131280 per axis, no data URL."
           },
           "event_id": {
             "type": "string",
@@ -716,7 +716,8 @@
               "no_face",
               "unknown",
               "inconclusive",
-              "accepted"
+              "accepted",
+              "verification_required"
             ]
           },
           "faces": {
@@ -762,6 +763,12 @@
                 "student_id": {
                   "type": "string",
                   "format": "uuid"
+                },
+                "similarity": {
+                  "type": "number",
+                  "minimum": -1,
+                  "maximum": 1,
+                  "description": "Fresh cosine similarity. Not a probability or accuracy percentage. Omitted when no valid embedding is available."
                 }
               },
               "required": [
@@ -785,16 +792,47 @@
               "outcome": {
                 "enum": [
                   "recorded",
-                  "already_recorded"
+                  "already_recorded",
+                  "checked_out",
+                  "already_checked_out",
+                  "check_in_required",
+                  "status_locked",
+                  "correction_pending"
                 ]
               },
               "record": {
-                "type": "object"
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "mode": {
+                "enum": [
+                  "check_in",
+                  "check_out"
+                ]
               }
             }
+          },
+          "engine_status": {
+            "type": "string"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "server_time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "identity_continuous": {
+            "type": "boolean",
+            "description": "True only for a fresh same-identity match on a previously live-verified track during a PAD recheck. Names may remain visible, but recognition_enabled=false and no attendance mutation is permitted."
           }
         },
-        "description": "Current pipeline never emits accepted identity. Labels/IDs require evaluated evidence and committed attendance; unknown/inconclusive responses omit identities."
+        "description": "Names come from the live eligible session roster only after fresh stable recognition and liveness evidence. Attendance outcomes distinguish saved arrival/departure from blocked changes; protected manual statuses and pending corrections remain unchanged. Arrival/departure timestamps are server-authoritative and preserved on repeated frames. Unknown responses omit identities. A verification_required response can retain a previously verified live track name after a fresh same-identity match, with identity_continuous=true, no attendance payload and recognition_enabled=false. Unknown or changed faces never inherit a cached identity."
       },
       "FacePreview": {
         "type": "object",

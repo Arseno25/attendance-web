@@ -91,6 +91,9 @@ func TestBiometricEnrollmentWithoutConsentAndDevicePrivacy(t *testing.T) {
 	galleryConsent := ""
 	decision := "unknown"
 	runtimeEvidence := false
+	similarity := 0.89
+	rechecking := false
+	engineStatus := ""
 	recognizedID := "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 	aiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer "+strings.Repeat("s", 48) {
@@ -136,7 +139,7 @@ func TestBiometricEnrollmentWithoutConsentAndDevicePrivacy(t *testing.T) {
 			if galleryCount == 1 {
 				galleryConsent, _ = gallery[0].(map[string]any)["consent_id"].(string)
 			}
-			_ = json.NewEncoder(w).Encode(map[string]any{"decision": decision, "recognition_enabled": runtimeEvidence, "liveness_passed": runtimeEvidence, "is_confirmed": runtimeEvidence, "event_id": request["event_id"], "gallery_revision": request["gallery_revision"], "model_sha256": strings.Repeat("a", 64), "faces": []any{map[string]any{"box": map[string]float64{"x": 0.1, "y": 0.1, "width": 0.5, "height": 0.5}, "student_id": recognizedID, "label": "PRIVATE-CANDIDATE"}}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"decision": decision, "recognition_enabled": runtimeEvidence && !rechecking, "liveness_passed": runtimeEvidence && !rechecking, "engine_status": engineStatus, "is_confirmed": runtimeEvidence, "event_id": request["event_id"], "gallery_revision": request["gallery_revision"], "model_sha256": strings.Repeat("a", 64), "faces": []any{map[string]any{"box": map[string]float64{"x": 0.1, "y": 0.1, "width": 0.5, "height": 0.5}, "student_id": recognizedID, "label": "PRIVATE-CANDIDATE", "similarity": similarity}}})
 			return
 		}
 		http.Error(w, "not found", 404)
@@ -425,6 +428,28 @@ func TestBiometricEnrollmentWithoutConsentAndDevicePrivacy(t *testing.T) {
 
 	// Live stable recognition writes once and labels from the roster, without an offline report.
 	runtimeEvidence, recognizedID = true, id
+	if _, err := pool.Exec(ctx, `UPDATE attendance_sessions SET late_after=starts_at+interval '1 minute',checkout_at=clock_timestamp()-interval '1 second' WHERE id=$1`, sessionID); err != nil {
+		t.Fatal(err)
+	}
+	missingArrival := expect(deviceCall(capture, paired["csrf_token"].(string)), 200)["data"].(map[string]any)["attendance"].(map[string]any)
+	if missingArrival["outcome"] != "check_in_required" || missingArrival["record"] != nil {
+		t.Fatal("departure fabricated arrival", missingArrival)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE attendance_sessions SET checkout_at=NULL,late_after=clock_timestamp()+interval '10 minutes' WHERE id=$1`, sessionID); err != nil {
+		t.Fatal(err)
+	}
+	decision, rechecking, engineStatus = "verification_required", true, "VERIFYING"
+	tracking := expect(deviceCall(capture, paired["csrf_token"].(string)), 200)["data"].(map[string]any)
+	if tracking["identity_continuous"] != true || tracking["recognition_enabled"] != false || tracking["attendance"] != nil || strings.Contains(stringMustJSON(tracking), "PRIVATE-CANDIDATE") {
+		t.Fatal("tracking recheck recorded attendance or leaked candidate", tracking)
+	}
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM attendance_records`).Scan(&count); err != nil || count != 0 {
+		t.Fatal("PAD recheck wrote attendance", count, err)
+	}
+	decision, rechecking, engineStatus = "accepted", false, "CONFIRMED"
+	similarity = 1.01
+	expect(deviceCall(capture, paired["csrf_token"].(string)), 503)
+	similarity = 0.89
 	accepted := expect(deviceCall(capture, paired["csrf_token"].(string)), 200)["data"].(map[string]any)
 	if accepted["decision"] != "accepted" || accepted["attendance"].(map[string]any)["outcome"] != "recorded" {
 		t.Fatal("live match did not record attendance", accepted)
@@ -441,6 +466,57 @@ func TestBiometricEnrollmentWithoutConsentAndDevicePrivacy(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM attendance_records WHERE student_id=$1`, id).Scan(&count); err != nil || count != 1 {
 		t.Fatal("recognition did not persist exactly once", count, err)
 	}
+	firstRecord := accepted["attendance"].(map[string]any)["record"].(map[string]any)
+	if repeated["attendance"].(map[string]any)["record"].(map[string]any)["check_in_at"] != firstRecord["check_in_at"] {
+		t.Fatal("repeat changed arrival time")
+	}
+	if _, err := pool.Exec(ctx, `UPDATE attendance_records SET status='sick',check_in_at=NULL WHERE student_id=$1`, id); err != nil {
+		t.Fatal(err)
+	}
+	capture["event_id"] = "aeaeaeae-aeae-4eae-8eae-aeaeaeaeaeae"
+	locked := expect(deviceCall(capture, paired["csrf_token"].(string)), 200)["data"].(map[string]any)["attendance"].(map[string]any)
+	if locked["outcome"] != "status_locked" || locked["record"].(map[string]any)["status"] != "sick" {
+		t.Fatal("manual status overwritten", locked)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE attendance_records SET status='present',check_in_at=$2 WHERE student_id=$1`, id, firstRecord["check_in_at"]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO attendance_corrections(school_id,session_id,student_id,requested_by,previous_version,previous_status,new_status,reason) SELECT school_id,session_id,student_id,actor_id,version,status,'sick','Synthetic correction' FROM attendance_records WHERE student_id=$1`, id); err != nil {
+		t.Fatal(err)
+	}
+	capture["event_id"] = "afafafaf-afaf-4faf-8faf-afafafafafaf"
+	pending := expect(deviceCall(capture, paired["csrf_token"].(string)), 200)["data"].(map[string]any)["attendance"].(map[string]any)
+	if pending["outcome"] != "correction_pending" {
+		t.Fatal("pending correction ignored", pending)
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM attendance_corrections WHERE student_id=$1`, id); err != nil {
+		t.Fatal(err)
+	}
+	// Departure follows the snapshotted session time, not browser input or another scan.
+	if _, err := pool.Exec(ctx, `UPDATE attendance_sessions SET late_after=starts_at+interval '1 minute',checkout_at=clock_timestamp()-interval '1 second' WHERE id=$1`, sessionID); err != nil {
+		t.Fatal(err)
+	}
+	capture["event_id"] = "abababab-abab-4bab-8bab-abababababab"
+	departure := expect(deviceCall(capture, paired["csrf_token"].(string)), 200)["data"].(map[string]any)["attendance"].(map[string]any)
+	if departure["outcome"] != "checked_out" {
+		t.Fatal("scheduled departure missing", departure)
+	}
+	departedRecord := departure["record"].(map[string]any)
+	if departedRecord["check_out_at"] == nil || departedRecord["check_in_at"] != firstRecord["check_in_at"] {
+		t.Fatal("departure damaged timestamps", departure)
+	}
+	capture["event_id"] = "acacacac-acac-4cac-8cac-acacacacacac"
+	duplicateDeparture := expect(deviceCall(capture, paired["csrf_token"].(string)), 200)["data"].(map[string]any)["attendance"].(map[string]any)
+	if duplicateDeparture["outcome"] != "already_checked_out" || duplicateDeparture["record"].(map[string]any)["check_out_at"] != departedRecord["check_out_at"] {
+		t.Fatal("departure repeat changed timestamp", duplicateDeparture)
+	}
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM request_ledger WHERE operation='attendance.recognition'`).Scan(&count); err != nil || count != 2 {
+		t.Fatal("repeated frames generated ledger writes", count, err)
+	}
+	capture["event_id"] = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+	capture["image"] = frames[1]
+	expect(deviceCall(capture, paired["csrf_token"].(string)), 409)
+	capture["image"] = frames[0]
 	runtimeEvidence = false
 
 	// Legacy IDs remain encryption context, never an enrollment or gallery prerequisite.

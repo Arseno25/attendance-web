@@ -104,3 +104,31 @@ process.on('exit', () => rmSync(resolve('.tools/camera-regression'), { recursive
   const next=await cameraSetup(media,devices)
   try {assert.equal(next.page.selectedCamera.value,'internal')} finally {next.unmounted();cameraStorage.clear()}
  })
+
+test('live similarity remains a bounded cosine score and scheduled departure is identified', () => {
+  const matched = faceOverlays({ ...result, faces: [{ ...result.faces[0], similarity: 0.89 }], attendance: { outcome: 'checked_out' } })[0]
+  assert.equal(matched.label, 'Siswa A'); assert.equal(matched.similarity, 0.89)
+  for (const similarity of [NaN, Infinity, 1.01, -1.01, '0.9']) {
+    assert.equal(faceOverlays({ ...result, faces: [{ ...result.faces[0], similarity }] })[0].similarity, undefined)
+  }
+})
+
+test('attendance feedback separates arrival, departure and protected or missing records', async () => {
+  const { attendanceFeedback } = await import('../apps/web/app/lib/biometrics.ts')
+  const record = { status: 'late', check_in_at: '2026-10-15T00:40:00Z', check_out_at: null }
+  assert.equal(attendanceFeedback({ outcome: 'recorded', record }).status, 'Terlambat')
+  assert.equal(attendanceFeedback({ outcome: 'already_recorded', record }).message, 'Kehadiran sudah tercatat.')
+  assert.equal(attendanceFeedback({ outcome: 'checked_out', record: { ...record, check_out_at: '2026-10-15T08:00:00Z' } }).status, 'Sudah pulang')
+  for (const outcome of ['check_in_required', 'correction_pending', 'status_locked']) {
+    assert.equal(attendanceFeedback({ outcome, record: null }).saved, false)
+  }
+})
+
+
+test('a fresh verified track may keep its name during PAD recheck without showing attendance success', () => {
+ const pending={...result,decision:'verification_required',recognition_enabled:false,identity_continuous:true,attendance:undefined}
+ const face=faceOverlays(pending)[0]
+ assert.equal(face.label,'Siswa A');assert.equal(face.accepted,false);assert.equal(face.tone,'warning')
+ assert.equal(faceOverlays({...pending,identity_continuous:false})[0].label,'Belum dikenali')
+ assert.equal(faceOverlays({...pending,decision:'unknown'})[0].label,'Belum dikenali')
+})

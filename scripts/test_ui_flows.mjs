@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url'
 
 const requireWeb = createRequire(resolve('apps/web/package.json'))
 const { parse, compileScript, compileTemplate } = requireWeb('@vue/compiler-sfc')
-const { ref, nextTick, watch } = requireWeb('vue')
+const { ref, nextTick, watch, computed } = requireWeb('vue')
 const flush = async () => { await nextTick(); await new Promise(r => setImmediate(r)); await nextTick() }
 
 test('all authored Vue templates compile after formatting', () => {
@@ -56,7 +56,7 @@ test('dialog focus returns to a row trigger and respects removed targets or canc
 let mounted, unmounted
 function context(request) {
   mounted = undefined; unmounted = undefined
-  Object.assign(globalThis, { ref, watch, nextTick, onMounted: f => { mounted = f }, onBeforeUnmount: f => { unmounted = f }, useApi: () => request, useMasterData: () => ({ options: async path => (await request(path)).data }), useRuntimeConfig: () => ({ public: { apiBase: 'http://localhost:8080/api/v1' } }), definePageMeta: () => {}, useHead: () => {}, useAuth: () => ({ session: ref({ permissions: ['devices.health'] }), load: async () => true }) })
+  Object.assign(globalThis, { requestAnimationFrame:fn=>{fn();return 0}, ref, computed, watch, nextTick, onMounted: f => { mounted = f }, onBeforeUnmount: f => { unmounted = f }, useApi: () => request, useMasterData: () => ({ options: async path => (await request(path)).data }), useRuntimeConfig: () => ({ public: { apiBase: 'http://localhost:8080/api/v1' } }), definePageMeta: () => {}, useHead: () => {}, useAuth: () => ({ session: ref({ permissions: ['devices.health'] }), load: async () => true }) })
   globalThis.document = Object.assign(new EventTarget(), { hidden: false, querySelector: () => null, querySelectorAll: () => [] })
   globalThis.window = new EventTarget()
   Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: true } })
@@ -187,4 +187,63 @@ test('late recognition cannot render names after camera stops and uses device CS
     await flush(); assert.deepEqual(page.faces.value, []); assert.equal(page.cameraActive.value, false)
   }
   finally { unmounted(); globalThis.$fetch = originalFetch }
+})
+
+test('pending frames retain the live box, then clear it on disappearance without discarding the last attendance', async () => {
+  context(async () => ({data: session}))
+  const originalFetch=globalThis.$fetch
+  let finish
+  globalThis.$fetch=()=>new Promise(resolve=>{finish=resolve})
+  const page=await kioskSetup()
+  try {
+    await mounted()
+    page.camera.value={capture:()=>'/9j/AA==',stop(){}}
+    const known={decision:'accepted',recognition_enabled:true,faces:[{box:{x:0,y:0,width:0.5,height:0.5},student_id:'student',label:'Siswa A',similarity:0.89}],attendance:{outcome:'recorded',mode:'check_in',record:{id:'record',status:'present',check_in_at:'2026-10-15T00:00:00Z',check_out_at:null}}}
+    page.showResult(known)
+    page.cameraChanged(true)
+    assert.equal(page.faces.value[0].label,'Siswa A')
+    finish({data:{decision:'no_face',recognition_enabled:false,faces:[]}})
+    await flush()
+    assert.deepEqual(page.faces.value,[])
+    assert.equal(page.lastResult.value.name,'Siswa A')
+    assert.equal(page.recent.value.length,1)
+    page.showResult(known); assert.equal(page.recent.value.length,1)
+    page.clock.value=Date.parse('2026-10-15T08:00:00Z')
+    page.kiosk.value.checkout_at='2026-10-15T08:00:00Z'
+    assert.equal(page.departure.value,true)
+    assert.equal(page.formatTime('2026-10-15T00:00:00Z'),'07.00')
+  } finally {unmounted(); globalThis.$fetch=originalFetch}
+})
+
+test('kiosk confirms committed attendance once per pupil, supports the next pupil and distinguishes departure', async () => {
+ context(async()=>({data:session}))
+ const page=await kioskSetup()
+ const match=(id,name,outcome='recorded',departed=false)=>({decision:'accepted',recognition_enabled:true,faces:[{box:{x:0,y:0,width:0.5,height:0.5},student_id:id,label:name,similarity:0.9}],attendance:{outcome,mode:departed?'check_out':'check_in',record:{id,status:'present',check_in_at:'2026-10-15T00:00:00Z',check_out_at:departed?'2026-10-15T08:00:00Z':null}}})
+ try {
+  await mounted();page.showResult(match('a','Siswa A'))
+  assert.equal(page.notice.value.name,'Siswa A');assert.equal(page.notice.value.saved,true)
+  assert.match(page.notice.value.title,/masuk/i)
+  const first=page.notice.value
+  page.showResult(match('a','Siswa A','already_recorded'))
+  assert.equal(page.notice.value,first,'continuous frames repeated the notification')
+  page.showResult(match('b','Siswa B'));assert.equal(page.notice.value.name,'Siswa B')
+  page.showResult(match('a','Siswa A','checked_out',true));assert.match(page.notice.value.title,/pulang/i)
+  assert.equal(page.recent.value.length,3)
+  page.showResult({...match('c','Siswa C'),attendance:{outcome:'check_in_required',mode:'check_out',record:null}})
+  assert.equal(page.notice.value.saved,false);assert.match(page.notice.value.title,/belum/i)
+  assert.equal(page.recent.value.length,3)
+  const originalNow=Date.now;let now=originalNow()
+  try {
+    Date.now=()=>now
+    page.showResult(match('a','Siswa A','already_checked_out',true))
+    const prior=page.notice.value
+    page.showResult({decision:'no_face',faces:[],recognition_enabled:false})
+    now+=1600;page.showResult({decision:'no_face',faces:[],recognition_enabled:false})
+    page.showResult(match('a','Siswa A','already_checked_out',true))
+    assert.notEqual(page.notice.value,prior,'returning pupil did not receive confirmation')
+  } finally {Date.now=originalNow}
+  for(let n=0;n<100;n++) page.showResult(match(`pupil-${n}`,`Siswa ${n}`))
+  assert.equal(page.recent.value.length,5);assert.equal(page.notice.value.name,'Siswa 99')
+  page.stopCamera();assert.equal(page.notice.value,null)
+ } finally {unmounted()}
 })
