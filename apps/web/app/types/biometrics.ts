@@ -23,7 +23,11 @@ export interface FaceStatus {
     frame_count: number
     status: 'provisional'
   }
-  evaluation: { status: 'not_evaluated'; required: string[] }
+  evaluation: {
+    status: 'not_evaluated' | 'reviewed'
+    required?: string[]
+    automatic_attendance_approved?: boolean
+  }
 }
 export interface Recognition {
   decision: 'no_face' | 'unknown' | 'inconclusive' | 'accepted'

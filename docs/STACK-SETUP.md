@@ -6,9 +6,9 @@ Verifikasi pada 12 Oktober 2026. Dokumentasi dicari melalui `resolve-library-id`
 
 | Komponen | Versi fondasi | Penguncian |
 |---|---|---|
-| Node | 26.7.0 | Dockerfile dan CI |
+| Node | 26.12.0 | Dockerfile dan CI |
 | Nuxt | 4.6.1 | package.json exact + package-lock.json |
-| Vue / Vue Router | 3.5.43 / 5.4.0 | package.json exact + lockfile |
+| Vue / Vue Router | 3.5.44 / 5.4.0 | package.json exact + lockfile |
 | Tailwind CSS | 4.3.3 | package.json exact + lockfile |
 | shadcn-vue / shadcn-nuxt | 2.8.2 | Generated components + exact dependencies |
 | Nuxt ESLint / ESLint | 1.17.0 / 10.12.0 | Dev dependencies exact |
@@ -17,9 +17,9 @@ Verifikasi pada 12 Oktober 2026. Dokumentasi dicari melalui `resolve-library-id`
 | pgx | 5.11.0 | go.mod + go.sum |
 | Go x/crypto (Argon2id) / x/sys | 0.58.0 / 0.49.0 | go.mod + go.sum (WP-02) |
 | Goose CLI | 3.29.0 | Makefile/Dockerfile pinned install |
-| uv | 0.13.0 | Official installer, Dockerfile and CI |
+| uv | 0.13.1 | Official installer, Dockerfile and CI |
 | Python | 3.14.8 | .python-version, Dockerfile, CI; project limits to 3.14 |
-| FastAPI / CLI | 0.143.0 / 0.0.32 | uv.lock |
+| FastAPI / CLI | 0.143.1 / 0.0.32 | uv.lock |
 | Uvicorn | 0.54.0 | uv.lock |
 | ONNX Runtime CPU | 1.31.0 | uv.lock; no pretrained model downloaded |
 | PostgreSQL | 18.6 | Separate local database image |

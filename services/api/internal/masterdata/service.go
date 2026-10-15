@@ -59,8 +59,8 @@ type scope struct {
 	classScoped bool
 }
 
-func (s *Service) begin(w http.ResponseWriter, r *http.Request, permission string, write bool) (*scope, bool) {
-	tx, user, ok := s.auth.BeginAuthorized(w, r, permission, write)
+func (s *Service) begin(w http.ResponseWriter, r *http.Request, permission string, write bool, alternatives ...string) (*scope, bool) {
+	tx, user, ok := s.auth.BeginAuthorized(w, r, permission, write, alternatives...)
 	if !ok {
 		return nil, false
 	}

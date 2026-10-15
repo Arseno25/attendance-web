@@ -121,9 +121,9 @@ func (s *Service) audit(r *http.Request, tx pgx.Tx, actor, action, target, id st
 
 // Worker and handlers supply request IDs without exposing record bodies in logs.
 func wRequestID(r *http.Request) string { return r.Header.Get("X-Internal-Request-ID") }
-func (s *Service) begin(w http.ResponseWriter, r *http.Request, perm string, write bool) (pgx.Tx, auth.User, bool) {
+func (s *Service) begin(w http.ResponseWriter, r *http.Request, perm string, write bool, alternatives ...string) (pgx.Tx, auth.User, bool) {
 	r.Header.Set("X-Internal-Request-ID", w.Header().Get("X-Request-ID"))
-	return s.auth.BeginAuthorized(w, r, perm, write)
+	return s.auth.BeginAuthorized(w, r, perm, write, alternatives...)
 }
 func (s *Service) finish(w http.ResponseWriter, r *http.Request, tx pgx.Tx, user auth.User, status int, data map[string]any, action, target string, meta map[string]any) {
 	id, _ := data["id"].(string)

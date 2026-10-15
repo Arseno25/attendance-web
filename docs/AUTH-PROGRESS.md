@@ -9,7 +9,7 @@ Base: `7108ead`; acuan: `07-IMPLEMENTATION-PLAN.md` WP-02 dan UI-01, PRD FR-01/1
 - Sesi opaque 256-bit, hanya SHA-256 token disimpan di DB. TTL absolut 8 jam, idle 30 menit; identity/peran/eligibility dibaca ulang dari DB.
 - Cookie host-only, HttpOnly, SameSite Lax; Secure dan prefix __Host pada konfigurasi HTTPS. HTTP cookie hanya untuk development localhost.
 - CSRF per sesi diturunkan dari secret session token, dikirim lewat JSON ke client yang sah dan wajib pada operasi tulis. Login memerlukan exact Origin dan JSON; logout/user writes membutuhkan Origin + CSRF.
-- Satu sekolah dikonfigurasi melalui SCHOOL_ID. Guru tanpa assignment tidak mendapat school-wide data. Users/audit hanya super admin.
+- Satu sekolah diambil dari database saat startup; bootstrap membuat ID otomatis. Guru tanpa assignment tidak mendapat school-wide data. Users/audit hanya super admin.
 - User create/update, role/grants/status, session revocation dan audit dilakukan atomik. Tidak boleh menonaktifkan/mengurangi akses sendiri atau super admin terakhir.
 - Bootstrap admin via CLI password stdin, tanpa default password; hanya berhasil bila sekolah belum memiliki pengguna.
 - Login/admin pages memakai client rendering karena cookie API host-only pada domain API terpisah tidak tersedia pada SSR web. Semua API tetap memeriksa akses server-side.
@@ -28,7 +28,7 @@ Verifikasi 2026-10-12:
 
 - `make check build compose-check` exit 0; final `make check` sesudah tambahan regression tests juga exit 0. Go race tests, lint/typecheck web, enam pytest AI dan satu test setup env lulus.
 - `make migrate db-test` menerapkan migration 2; integration PostgreSQL menggunakan schema terisolasi dan cleanup. Lifecycle login/logout/rotation, idle 30 menit, TTL absolut, sekolah/akun nonaktif, CSRF, scope sekolah, role restrictions, bootstrap sekali, duplikat email, immutable audit dan token hash terbukti. Policy kelas diuji unit; assignment kelas nyata menunggu WP-03.
-- Reviewer independen memeriksa transaksi, revocation, scope, CSRF, frontend dan schema. Dua temuan UUID direproduksi (403 pada uppercase SCHOOL_ID dan 200 pada self-email update via uppercase ID), lalu diperbaiki dengan canonical school ID dan pembandingan target DB ID. Regression keduanya kini lulus.
+- Reviewer independen memeriksa transaksi, revocation, scope, CSRF, frontend dan schema. Dua temuan UUID direproduksi (403 pada uppercase ID sekolah dan 200 pada self-email update via uppercase ID), lalu diperbaiki dengan canonical school ID dan pembandingan target DB ID. Regression keduanya kini lulus.
 - Image `localhost/attendance-web:auth` dan `localhost/attendance-api:auth` berhasil dibangun. Runtime container: login/me/users/audit/readiness 200, CSRF salah 403, logout 200 dan sesi sesudah logout 401. Container preview project berjalan pada port 3001/8080; AI foundation tetap di 8001.
 - Browser memverifikasi login berhasil/gagal, logout, redirect halaman admin sesudah logout, daftar pengguna, pencarian kosong dan audit. Screenshot lokal berada di `.tools/auth-preview.png`.
 - govulncheck: 0 vulnerability reachable/imported; 1 advisory pada module yang tidak dipanggil. npm audit: 19 upstream findings (14 high, 5 moderate, 0 critical), sama dengan WP-01. Audit belum bersih; lihat STACK-SETUP untuk gate rilis.

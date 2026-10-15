@@ -5,8 +5,9 @@ import { statusVariant } from '~/lib/status'
 import { ArrowLeft, ArrowRightLeft, Pencil } from '@lucide/vue'
 import type { Result } from '~/types/auth'
 import { statusLabels, type Student, type SchoolClass } from '~/types/master'
-definePageMeta({ layout: 'admin', middleware: ['auth', 'academics'] })
-const { request, options, canWrite, dateTime } = useMasterData()
+definePageMeta({ layout: 'admin', middleware: ['auth', 'students'] })
+const { request, options, canWrite, dateTime } = useMasterData('students.write')
+const auth = useAuth()
 const route = useRoute()
 const student = ref<Student | null>(null)
 const message = ref('')
@@ -90,6 +91,7 @@ await load()
       >
         <template #actions>
           <Button
+            v-if="auth.has('attendance.read', 'reports.export')"
             as-child
             variant="outline"
           >

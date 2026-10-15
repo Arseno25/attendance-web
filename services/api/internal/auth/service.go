@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"net/mail"
+	"net/netip"
 	"strings"
 	"time"
 
@@ -24,18 +25,20 @@ type Service struct {
 	secure, allowLocalWebPortRange          bool
 	limits                                  limiter
 	hashing                                 chan struct{}
+	trustedProxies                          []netip.Prefix
 }
 
 func New(pool *pgxpool.Pool, schoolID, origin string) (*Service, error) {
 	return NewWithLocalOrigins(pool, schoolID, origin, false)
 }
 
-func NewWithLocalOrigins(pool *pgxpool.Pool, schoolID, origin string, allowLocalWebPortRange bool) (*Service, error) {
+func NewWithLocalOrigins(pool *pgxpool.Pool, schoolID, origin string, allowLocalWebPortRange bool, trustedProxies ...netip.Prefix) (*Service, error) {
 	dummy, err := HashPassword("Comparison-only-unknown-account-1!")
 	if err != nil {
 		return nil, err
 	}
 	s := &Service{pool: pool, schoolID: strings.ToLower(schoolID), origin: origin, cookieName: "attendance_session", secure: strings.HasPrefix(origin, "https://"), allowLocalWebPortRange: allowLocalWebPortRange, dummyHash: dummy, hashing: make(chan struct{}, 2)}
+	s.trustedProxies = append([]netip.Prefix(nil), trustedProxies...)
 	if s.secure {
 		s.cookieName = "__Host-attendance_session"
 	}

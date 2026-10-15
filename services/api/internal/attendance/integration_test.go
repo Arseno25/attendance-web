@@ -206,7 +206,24 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 	se := expect(call("POST", "/attendance-sessions", map[string]any{"schedule_id": scheduleID, "date": day}), 201)["data"].(map[string]any)
 	sessionID := se["id"].(string)
 	expect(call("POST", "/attendance-sessions", map[string]any{"schedule_id": scheduleID, "date": day}), 409)
+	expect(call("PUT", "/school/calendar/"+day, map[string]any{"is_school_day": false, "reason": "Holiday after scheduling"}), 200)
+	expect(call("POST", "/attendance-sessions/"+sessionID+"/open", map[string]any{"reason": "Must not open on holiday"}), 409)
+	if err := attendance.New(pool, schoolID, a).Tick(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if blocked := expect(call("GET", "/attendance-sessions/"+sessionID, nil), 200)["data"].(map[string]any); blocked["status"] != "scheduled" {
+		t.Fatal("worker opened a scheduled session on a holiday", blocked)
+	}
+	expect(call("PUT", "/school/calendar/"+day, map[string]any{"is_school_day": true, "reason": "School day restored"}), 200)
 	expect(call("POST", "/attendance-sessions/"+sessionID+"/open", map[string]any{"reason": "Start"}), 200)
+	expect(call("PUT", "/school/calendar/"+day, map[string]any{"is_school_day": false, "reason": "Do not rewrite an open session"}), 200)
+	if err := attendance.New(pool, schoolID, a).Tick(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if opened := expect(call("GET", "/attendance-sessions/"+sessionID, nil), 200)["data"].(map[string]any); opened["status"] != "open" {
+		t.Fatal("calendar edit changed an already open session", opened)
+	}
+	expect(call("PUT", "/school/calendar/"+day, map[string]any{"is_school_day": true, "reason": "Continue school day"}), 200)
 	activeDevice := expect(call("POST", "/devices", map[string]string{"name": "Gate 2", "location": "Side"}), 201)["data"].(map[string]any)
 	pairing := expect(call("POST", "/devices/"+activeDevice["id"].(string)+"/pairing-token", nil), 201)["data"].(map[string]any)
 	pairBody := map[string]any{"pairing_token": pairing["pairing_token"], "session_id": sessionID}
@@ -371,9 +388,17 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 	}
 	expect(call("POST", "/attendance-sessions/"+sessionID+"/reconcile", map[string]any{"reason": "Pending request"}), 409)
 	// Approver is distinct from requester; teacher never receives approval grant.
-	approverRole := expect(call("POST", "/roles", map[string]any{"name": "Attendance approver", "scope": "school", "permissions": []string{"attendance.approve", "attendance.read"}}), 201)["data"].(map[string]any)
-	expect(call("POST", "/users", map[string]any{"email": "approver@example.test", "full_name": "Approver", "role": approverRole["key"], "password": password}), 201)
+	approverRole := expect(call("POST", "/roles", map[string]any{"name": "Attendance approver", "scope": "assigned_classes", "permissions": []string{"attendance.approve", "attendance.read"}}), 201)["data"].(map[string]any)
+	approver := expect(call("POST", "/users", map[string]any{"email": "approver@example.test", "full_name": "Approver", "role": approverRole["key"], "password": password}), 201)["data"].(map[string]any)
+	expect(call("POST", "/class-assignments", map[string]any{"user_id": approver["id"], "class_id": class["id"]}), 201)
 	login("approver@example.test")
+	expect(call("GET", "/classes", nil), 200)
+	expect(call("GET", "/academic-years", nil), 200)
+	expect(call("POST", "/classes", map[string]any{"name": "Not allowed"}), 403)
+	expect(call("GET", "/attendance-corrections/"+own["id"].(string), nil), 200)
+	if pending := expect(call("GET", "/attendance-corrections?status=pending", nil), 200)["data"].([]any); len(pending) == 0 {
+		t.Fatal("class approver cannot see another request")
+	}
 	expect(call("POST", "/attendance-corrections/"+own["id"].(string)+"/decision", map[string]any{"decision": "rejected", "reason": "Sick record correct"}), 200)
 	expect(call("POST", "/attendance-sessions/"+sessionID+"/reconcile", map[string]any{"reason": "Administrative review complete"}), 200)
 	expect(call("POST", "/attendance-sessions/"+sessionID+"/reconcile", map[string]any{"reason": "Retry"}), 200)
@@ -677,6 +702,18 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 		t.Fatal("duplicate checkout", outs, err)
 	}
 
+	exportRole := expect(call("POST", "/roles", map[string]any{"name": "Reports only", "scope": "assigned_classes", "permissions": []string{"reports.export"}}), 201)["data"].(map[string]any)
+	exporter := expect(call("POST", "/users", map[string]any{"email": "reports@example.test", "full_name": "Reports only", "role": exportRole["key"], "password": password}), 201)["data"].(map[string]any)
+	expect(call("POST", "/class-assignments", map[string]any{"user_id": exporter["id"], "class_id": class["id"]}), 201)
+	login("reports@example.test")
+	expect(call("GET", "/reports/attendance?date="+day, nil), 200)
+	if csv := call("GET", "/reports/attendance?format=csv&date="+day, nil); csv.Code != 200 {
+		t.Fatal("report-only role cannot export", csv.Code, csv.Body.String())
+	}
+	expect(call("GET", "/classes", nil), 200)
+	expect(call("GET", "/academic-years", nil), 200)
+	expect(call("GET", "/attendance-sessions", nil), 403)
+	login("owner@example.test")
 	wsServer := httptest.NewServer(h)
 	defer wsServer.Close()
 	wsURL := "ws" + strings.TrimPrefix(wsServer.URL, "http") + "/api/v1/ws/attendance?session_id=" + outSession

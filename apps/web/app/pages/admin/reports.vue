@@ -15,6 +15,7 @@ import type {
 definePageMeta({ layout: 'admin', middleware: ['auth', 'reports'] })
 const { request, options, dateTime, canExport, defaultFilters, download } = useReports()
 const route = useRoute()
+const auth = useAuth()
 const form = reactive(defaultFilters())
 const { errors, validate, clear } = useFormValidation(
   () => reportSchema,
@@ -500,6 +501,7 @@ await load({ ...form })
                   label: 'Lihat sesi',
                   icon: 'view',
                   to: `/admin/attendance/${item.session_id}`,
+                  hidden: !auth.has('attendance.read', 'attendance.manual'),
                 },
               ]"
             />

@@ -7,9 +7,7 @@ definePageMeta({ layout: 'admin', middleware: ['auth'] })
 const auth = useAuth()
 const route = useRoute()
 const request = useApi()
-const canView = computed(() =>
-  ['super_admin', 'admin', 'teacher'].includes(auth.session.value?.user.role ?? ''),
-)
+const canView = computed(() => auth.has('attendance.read'))
 const summary = ref<AttendanceDashboard | null>(null)
 const message = ref('')
 if (canView.value) {
@@ -23,8 +21,12 @@ if (canView.value) {
 <template>
   <div class="flex min-w-0 flex-col gap-6">
     <PageHeader
-      title="Ringkasan kehadiran"
-      description="Kehadiran hari ini dan tren tujuh hari, sesuai kelas yang dapat Anda akses."
+      :title="canView ? 'Ringkasan kehadiran' : 'Panel sekolah'"
+      :description="
+        canView
+          ? 'Kehadiran hari ini dan tren tujuh hari, sesuai kelas yang dapat Anda akses.'
+          : 'Pilih menu di sidebar sesuai tugas Anda.'
+      "
     />
     <Alert
       v-if="route.query.forbidden"
@@ -67,13 +69,14 @@ if (canView.value) {
           </NuxtLink>
         </Button>
         <Button
+          v-if="auth.has('corrections.request', 'attendance.approve', 'attendance.manual')"
           as-child
           variant="outline"
         >
           <NuxtLink to="/admin/corrections">Antrean koreksi</NuxtLink>
         </Button>
         <Button
-          v-if="auth.session.value?.permissions.includes('academics.write')"
+          v-if="auth.has('students.read')"
           as-child
           variant="outline"
         >
@@ -83,7 +86,7 @@ if (canView.value) {
           </NuxtLink>
         </Button>
         <Button
-          v-if="auth.session.value?.user.role === 'super_admin'"
+          v-if="auth.session.value?.user.role === 'super_admin' && auth.has('audit.read')"
           as-child
           variant="outline"
         >

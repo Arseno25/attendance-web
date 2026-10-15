@@ -98,12 +98,12 @@ func (s *Service) report(w http.ResponseWriter, r *http.Request) {
 	if format == "csv" {
 		perm = "reports.export"
 	}
-	tx, u, ok := s.begin(w, r, perm, false)
+	tx, u, ok := s.begin(w, r, perm, false, "reports.export")
 	if !ok {
 		return
 	}
 	defer tx.Rollback(context.Background())
-	if format != "csv" && !u.Can("attendance.read", s.schoolID, "") {
+	if format != "csv" && !u.Can("attendance.read", s.schoolID, "") && !u.Can("reports.export", s.schoolID, "") {
 		httpresponse.Error(w, 403, "FORBIDDEN", "Anda tidak memiliki izin untuk data ini")
 		return
 	}

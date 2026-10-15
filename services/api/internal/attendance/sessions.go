@@ -12,6 +12,9 @@ import (
 
 var errState = errors.New("session state conflict")
 
+// Calendar changes apply before opening; open sessions retain their roster/history.
+const sessionEligibility = `c.is_active AND y.is_active AND COALESCE(cd.is_school_day, true)`
+
 const sessionSelect = `SELECT se.id::text AS id,se.schedule_id::text AS schedule_id,se.class_id::text AS class_id,c.name AS class_name,se.name,se.date::text,se.timezone,se.starts_at,se.late_after,se.closes_at,se.status,se.opened_at,se.closed_at,se.reconciled_at,se.created_at,(SELECT count(*) FROM attendance_session_participants p WHERE p.school_id=se.school_id AND p.session_id=se.id) AS roster_count,(SELECT count(*) FROM attendance_records ar WHERE ar.school_id=se.school_id AND ar.session_id=se.id) AS recorded_count FROM attendance_sessions se JOIN classes c ON c.school_id=se.school_id AND c.id=se.class_id WHERE se.school_id=$1 AND (NOT $2::boolean OR se.class_id=ANY($3::uuid[]))`
 
 func (s *Service) getSession(r *http.Request, tx pgx.Tx, u auth.User, id string, lock bool) (map[string]any, error) {
@@ -163,13 +166,13 @@ func (s *Service) transition(w http.ResponseWriter, r *http.Request, action stri
 			return
 		}
 		var eligible bool
-		err = tx.QueryRow(r.Context(), `SELECT c.is_active AND y.is_active FROM attendance_sessions se JOIN attendance_schedules a ON a.school_id=se.school_id AND a.id=se.schedule_id JOIN classes c ON c.school_id=se.school_id AND c.id=se.class_id JOIN academic_years y ON y.school_id=c.school_id AND y.id=c.academic_year_id LEFT JOIN school_calendar_days cd ON cd.school_id=se.school_id AND cd.date=se.date WHERE se.school_id=$1 AND se.id=$2`, s.schoolID, id).Scan(&eligible)
+		err = tx.QueryRow(r.Context(), `SELECT `+sessionEligibility+` FROM attendance_sessions se JOIN attendance_schedules a ON a.school_id=se.school_id AND a.id=se.schedule_id JOIN classes c ON c.school_id=se.school_id AND c.id=se.class_id JOIN academic_years y ON y.school_id=c.school_id AND y.id=c.academic_year_id LEFT JOIN school_calendar_days cd ON cd.school_id=se.school_id AND cd.date=se.date WHERE se.school_id=$1 AND se.id=$2`, s.schoolID, id).Scan(&eligible)
 		if err != nil {
 			dbError(w, err)
 			return
 		}
 		if !eligible {
-			conflict(w, "Kelas atau tahun ajaran sudah nonaktif")
+			conflict(w, "Sesi tidak dapat dibuka pada hari libur atau kelas/tahun ajaran nonaktif")
 			return
 		}
 		err = s.openSession(r.Context(), tx, id)

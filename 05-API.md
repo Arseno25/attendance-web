@@ -1,3 +1,5 @@
+> Pembaruan implementasi 15 Oktober 2026: alur wali/persetujuan wajah telah dihentikan sesuai keputusan pemilik proyek (migrasi 11). ID persetujuan lama hanya dipertahankan sebagai konteks enkripsi template lama. Bagian blueprint berikut yang masih menyebut alur tersebut adalah rancangan awal; kontrak aktif mengikuti kode/OpenAPI dan [runbook staging](docs/STAGING-RUNBOOK.md).
+
 # 05 — HTTP & Realtime API Contract (Draft)
 
 Status implementasi: health, auth, users dan audit berikut telah tersedia pada WP-02. Endpoint domain siswa/kelas/absensi/biometrik/realtime masih spesifikasi untuk tahap selanjutnya.

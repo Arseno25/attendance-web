@@ -17,11 +17,7 @@ func (s *Service) years(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	write := r.Method == "POST"
-	perm := "academics.read"
-	if write {
-		perm = "academics.write"
-	}
-	sc, ok := s.begin(w, r, perm, write)
+	sc, ok := s.beginAcademicOptions(w, r, write)
 	if !ok {
 		return
 	}
@@ -175,11 +171,7 @@ func (s *Service) classes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	write := r.Method == "POST"
-	perm := "academics.read"
-	if write {
-		perm = "academics.write"
-	}
-	sc, ok := s.begin(w, r, perm, write)
+	sc, ok := s.beginAcademicOptions(w, r, write)
 	if !ok {
 		return
 	}
@@ -307,4 +299,12 @@ func (s *Service) class(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.finish(w, r, sc, 200, entity, "academics.classes.updated", "class", nil)
+}
+
+// Class/year metadata is required by student, attendance and report forms.
+func (s *Service) beginAcademicOptions(w http.ResponseWriter, r *http.Request, write bool) (*scope, bool) {
+	if write {
+		return s.begin(w, r, "academics.write", true)
+	}
+	return s.begin(w, r, "academics.read", false, "students.read", "students.write", "attendance.read", "attendance.manual", "attendance.approve", "corrections.request", "reports.export")
 }

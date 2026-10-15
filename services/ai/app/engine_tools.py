@@ -7,11 +7,12 @@ import json
 import re
 import resource
 import time
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 
 import numpy as np
 
+from app.approval import runtime_fingerprint
 from app.evaluation import summarize
 from app.face_engine import EngineConfig, FaceMatcher, FaceRecognitionEngine
 from app.pipeline import Pipeline, decode_image
@@ -89,11 +90,13 @@ def evaluate(
     *,
     authorized: bool,
     calibration: bool = False,
+    liveness_hook=None,
 ):
     if not authorized:
         raise ValueError("An explicitly authorized dataset is required")
     data = json.loads(dataset.read_text())
     expected_split = "calibration" if calibration else "holdout"
+    original_config = asdict(config)
     if data.get("split") != expected_split:
         raise ValueError("Use an independent dataset with the requested split")
     pipeline = Pipeline(directory)
@@ -105,7 +108,12 @@ def evaluate(
     def read_frame(relative):
         if not isinstance(relative, str):
             raise TypeError("Invalid dataset frame path")
-        raw = (dataset.parent / relative).read_bytes()
+        path = (dataset.parent / relative).resolve()
+        if not path.is_relative_to(dataset.parent.resolve()):
+            raise ValueError("Frames must remain inside the dataset directory")
+        if path.stat().st_size > 384 * 1024:
+            raise ValueError("Frame exceeds JPEG size limit")
+        raw = path.read_bytes()
         frame, _ = decode_image(base64.b64encode(raw).decode())
         return frame, hashlib.sha256(raw).digest()
 
@@ -126,12 +134,20 @@ def evaluate(
             pipeline.check_quality(frame, faces[0], min_size=config.min_face_size)
             vectors.append(pipeline.feature(frame, faces[0]))
         gallery[subject] = vectors
-    prepared = []
+    prepared, seen, attack_scenarios = [], set(), {}
     for row in data.get("probes", []):
-        if row.get("attack", False) is not False:
+        attack = row.get("attack", False)
+        if type(attack) is not bool:
+            raise ValueError("Attack must be a boolean")
+        if attack and liveness_hook is None:
             raise ValueError(
                 "Presentation attacks require a separate validated PAD evaluation"
             )
+        if attack:
+            scenario = row.get("attack_type", "unspecified")
+            if scenario not in ("print", "replay", "other", "unspecified"):
+                raise ValueError("Unknown attack scenario")
+            attack_scenarios[scenario] = attack_scenarios.get(scenario, 0) + 1
         expected = row["expected"]
         if expected is not None and (
             not isinstance(expected, str)
@@ -141,13 +157,12 @@ def evaluate(
             raise ValueError("Use anonymous enrolled IDs or null for unknown probes")
         if not 3 <= len(row["frames"]) <= 32:
             raise ValueError("Each hold-out track requires 3–32 distinct frames")
-        seen = set()
         for relative in row["frames"]:
             frame, digest = read_frame(relative)
             if digest in gallery_digests or digest in seen:
                 raise ValueError("Hold-out frame overlaps gallery or repeats")
             seen.add(digest)
-        prepared.append((expected, row["frames"]))
+        prepared.append((expected, row["frames"], attack))
     if not prepared:
         raise ValueError("No evaluation probes")
     # Offline supplied frames bypass sampling delay; temporal confirmation remains enabled.
@@ -162,7 +177,9 @@ def evaluate(
     reports = []
     for threshold, margin in settings:
         engine = FaceRecognitionEngine(
-            replace(config, threshold=threshold, margin=margin), pipeline=pipeline
+            replace(config, threshold=threshold, margin=margin),
+            pipeline=pipeline,
+            liveness_hook=liveness_hook,
         )
         engine.load_embeddings(gallery, model_sha256=pipeline.model_sha256)
         traces, stages = (
@@ -170,7 +187,7 @@ def evaluate(
             {name: [] for name in ("detection", "embedding", "matching", "total")},
         )
         wall, cpu = time.perf_counter(), time.process_time()
-        for index, (expected, paths) in enumerate(prepared):
+        for index, (expected, paths, attack) in enumerate(prepared):
             predictions = set()
             started = time.perf_counter()
             for relative in paths:
@@ -178,7 +195,9 @@ def evaluate(
                 result = engine.process_frame(frame, f"probe-{index}")
                 if result.status == "ERROR":
                     raise ValueError("Evaluation inference failed")
-                if result.is_confirmed:
+                if result.is_confirmed and (
+                    liveness_hook is None or result.liveness_passed is True
+                ):
                     predictions.add(result.student_id)
                 for name, elapsed in result.timings_ms.items():
                     stages[name].append(elapsed)
@@ -191,7 +210,7 @@ def evaluate(
                     "expected": expected,
                     "predicted": next(iter(predictions), None),
                     "latency_ms": (time.perf_counter() - started) * 1000,
-                    "attack": False,
+                    "attack": attack,
                 }
             )
         elapsed, used = time.perf_counter() - wall, time.process_time() - cpu
@@ -216,10 +235,16 @@ def evaluate(
         )
     return {
         "kind": expected_split,
+        "detector_sha256": pipeline.detector_sha256,
+        "engine_fingerprint": runtime_fingerprint(),
+        "config": original_config,
+        "attack_scenarios": attack_scenarios,
         "model_sha256": pipeline.model_sha256,
         "reports": reports,
-        "recognition_only": True,
-        "notes": "Calibration sweep is exploratory, not a deployment threshold recommendation. Validate chosen settings on separate representative hold-out identities/cameras. This dataset evaluates recognition only; no PAD/attack evidence is inferred.",
+        "recognition_only": liveness_hook is None,
+        "pad_model_sha256": getattr(liveness_hook, "model_sha256", None),
+        "liveness_threshold": getattr(liveness_hook, "threshold", None),
+        "notes": "Offline frames bypass sampling delay; timings are not camera-to-UI latency. Calibration is exploratory; validate chosen settings on separate representative hold-out identities/cameras. No automatic deployment approval is inferred.",
         "automatic_attendance_approved": False,
     }
 
@@ -234,6 +259,8 @@ def main():
     parser.add_argument("--margin", type=float)
     parser.add_argument("--identities", type=int, default=1000)
     parser.add_argument("--iterations", type=int, default=30)
+    parser.add_argument("--with-pad", action="store_true")
+    parser.add_argument("--liveness-threshold", type=float, default=0.95)
     args = parser.parse_args()
     if args.mode == "benchmark":
         report = benchmark(
@@ -244,12 +271,18 @@ def main():
             parser.error(
                 "dataset, threshold and margin are required for authorized evaluation/calibration"
             )
+        pad = None
+        if args.with_pad:
+            from app.liveness import LivenessModel
+
+            pad = LivenessModel(args.models, threshold=args.liveness_threshold)
         report = evaluate(
             args.dataset,
             args.models,
             EngineConfig(args.threshold, args.margin),
             authorized=args.authorized_dataset,
             calibration=args.mode == "calibrate",
+            liveness_hook=pad,
         )
     print(json.dumps(report, indent=2))
 

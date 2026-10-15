@@ -18,6 +18,7 @@ class SetupEnvTest(unittest.TestCase):
             env = root / ".env"
             content = env.read_text()
             values = dict(line.split("=", 1) for line in content.splitlines())
+            self.assertNotIn("SCHOOL_ID", values)
             self.assertGreaterEqual(len(values["AI_SERVICE_TOKEN"]), 32)
             self.assertEqual(len(base64.b64decode(values["AI_TEMPLATE_KEY_BASE64"], validate=True)), 32)
             self.assertNotIn(values["AI_TEMPLATE_KEY_BASE64"], result.stdout)

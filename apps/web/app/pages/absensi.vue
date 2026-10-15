@@ -197,7 +197,10 @@ async function discover() {
   try {
     await auth.load()
     if (disposed) return
-    if (auth.session.value?.permissions.includes('devices.health')) {
+    if (
+      auth.session.value?.permissions.includes('devices.health') ||
+      auth.session.value?.permissions.includes('devices.manage')
+    ) {
       const data = await options<AttendanceSession>('/kiosk/session-options')
       if (!disposed) sessions.value = data
     } else message.value = 'Operator perlu masuk untuk memasangkan perangkat.'

@@ -104,6 +104,7 @@ class RecognitionResult:
     similarity: float | None = None
     face_detected: bool = False
     face_count: int = 0
+    faces: tuple[dict, ...] = ()
     is_confirmed: bool = False
     recognition_only: bool = True
     liveness_passed: bool | None = None
@@ -294,7 +295,7 @@ def _overlap(a, b):
 
 
 class FaceRecognitionEngine:
-    """Trusted internal caller supplies consent-cleared embeddings and monotonic timestamps.
+    """Trusted internal caller supplies authorized embeddings and monotonic timestamps.
 
     One inference at a time; excess requests return ERROR/INFERENCE_BUSY. A separate
     PAD hook reports liveness evidence only; it never authorizes attendance.
@@ -323,17 +324,14 @@ class FaceRecognitionEngine:
             self._sessions.clear()
 
     def load_encrypted_templates(self, templates, cipher, *, school_id: str):
-        """Existing consent-bound AES-GCM records supplied by the trusted application.
-
-        Caller must filter valid, unrevoked consent and isolate one school per engine.
-        """
+        """School-bound AES-GCM records; legacy consent IDs remain encryption context."""
         gallery = {}
         for template in templates:
             if template["model_sha256"] != self.pipeline.model_sha256:
                 raise ValueError("Incompatible embedding model")
             subject = template["student_id"]
             vector = cipher.decrypt(
-                template, school_id, subject, template["consent_id"]
+                template, school_id, subject, template.get("consent_id")
             )
             gallery.setdefault(subject, []).append(vector)
         self.load_embeddings(gallery, model_sha256=self.pipeline.model_sha256)
@@ -405,6 +403,7 @@ class FaceRecognitionEngine:
                 session.state = "DETECTING"
                 at = time.perf_counter()
                 faces = self.detector.detect(frame)
+                boxes = tuple(self.pipeline.boxes(frame, faces))
                 timings["detection"] = (time.perf_counter() - at) * 1000
                 count = len(faces)
                 if count != 1:
@@ -413,6 +412,7 @@ class FaceRecognitionEngine:
                         "NO_FACE" if count == 0 else "MULTIPLE_FACES",
                         face_detected=count > 0,
                         face_count=count,
+                        faces=boxes,
                         timings_ms=timings,
                     )
                 try:
@@ -425,6 +425,7 @@ class FaceRecognitionEngine:
                         "LOW_QUALITY",
                         face_detected=True,
                         face_count=1,
+                        faces=boxes,
                         timings_ms=timings,
                     )
                 box = faces[0][:4]
@@ -440,6 +441,7 @@ class FaceRecognitionEngine:
                         face_detected=True,
                         face_count=1,
                         reason="INFERENCE_INTERVAL",
+                        faces=boxes,
                         timings_ms=timings,
                     )
                 if session.confirmed_at > -math.inf:
@@ -471,6 +473,7 @@ class FaceRecognitionEngine:
                         face_count=1,
                         liveness_passed=False,
                         reason="PAD_REJECTED",
+                        faces=boxes,
                         timings_ms=timings,
                     )
                 timings["total"] = (time.perf_counter() - started) * 1000
@@ -487,6 +490,7 @@ class FaceRecognitionEngine:
                     similarity=match.similarity,
                     face_detected=True,
                     face_count=1,
+                    faces=boxes,
                     is_confirmed=confirmed,
                     liveness_passed=live,
                     timings_ms=timings,

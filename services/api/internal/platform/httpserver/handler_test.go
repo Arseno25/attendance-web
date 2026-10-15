@@ -145,3 +145,18 @@ func TestCalendarPUTPreflightAllowsCredentialedWrite(t *testing.T) {
 		t.Fatal("calendar write blocked by preflight", w.Code, w.Header())
 	}
 }
+
+func TestImageDeletePreflightAllowsCredentialedWrite(t *testing.T) {
+	h := NewHandler(func(context.Context) error { return nil }, "http://localhost:3000", nil)
+	for _, path := range []string{"/api/v1/auth/profile/photo", "/api/v1/school/logo"} {
+		r := httptest.NewRequest("OPTIONS", path, nil)
+		r.Header.Set("Origin", "http://localhost:3000")
+		r.Header.Set("Access-Control-Request-Method", "DELETE")
+		r.Header.Set("Access-Control-Request-Headers", "Content-Type, X-CSRF-Token")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != 204 || !strings.Contains(w.Header().Get("Access-Control-Allow-Methods"), "DELETE") || w.Header().Get("Access-Control-Allow-Credentials") != "true" {
+			t.Fatal("image deletion is blocked by browser preflight", path, w.Code, w.Header())
+		}
+	}
+}

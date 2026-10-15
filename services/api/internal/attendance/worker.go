@@ -53,7 +53,7 @@ func (s *Service) Tick(ctx context.Context) error {
 			return err
 		}
 	}
-	sessions, err := rows(ctx, tx, `SELECT se.id::text AS id,se.status,se.starts_at,se.closes_at,statement_timestamp() AS clock,c.is_active AND y.is_active AS eligible FROM attendance_sessions se JOIN attendance_schedules a ON a.school_id=se.school_id AND a.id=se.schedule_id JOIN classes c ON c.school_id=se.school_id AND c.id=se.class_id JOIN academic_years y ON y.school_id=c.school_id AND y.id=c.academic_year_id LEFT JOIN school_calendar_days cd ON cd.school_id=se.school_id AND cd.date=se.date WHERE se.school_id=$1 AND se.status IN('scheduled','open') FOR UPDATE OF se`, s.schoolID)
+	sessions, err := rows(ctx, tx, `SELECT se.id::text AS id,se.status,se.starts_at,se.closes_at,statement_timestamp() AS clock,`+sessionEligibility+` AS eligible FROM attendance_sessions se JOIN attendance_schedules a ON a.school_id=se.school_id AND a.id=se.schedule_id JOIN classes c ON c.school_id=se.school_id AND c.id=se.class_id JOIN academic_years y ON y.school_id=c.school_id AND y.id=c.academic_year_id LEFT JOIN school_calendar_days cd ON cd.school_id=se.school_id AND cd.date=se.date WHERE se.school_id=$1 AND se.status IN('scheduled','open') FOR UPDATE OF se`, s.schoolID)
 	if err != nil {
 		return err
 	}

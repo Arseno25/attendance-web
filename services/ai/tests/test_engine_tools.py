@@ -7,12 +7,14 @@ import pytest
 
 from app.engine_tools import evaluate
 from app.face_engine import EngineConfig
+from app.pipeline import Pipeline
 
 SHA = "a" * 64
 
 
-class SyntheticPipeline:
+class SyntheticPipeline(Pipeline):
     model_sha256 = SHA
+    detector_sha256 = "c" * 64
 
     def __init__(self, _directory):
         pass
@@ -74,6 +76,49 @@ def test_evaluation_uses_observed_multiframe_decisions_without_attendance_approv
     assert result["recognition_only"] and not result["automatic_attendance_approved"]
     assert result["reports"][0]["unknown_rejection_rate"] == 1
     assert result["reports"][0]["timings"]["embedding"]["samples"] == 6
+
+
+class RejectingPAD:
+    threshold = 0.99
+
+    def __call__(self, *_):
+        return False
+
+
+def test_evaluation_runs_pad_and_counts_attack_rejections(dataset):
+    path, data = dataset
+    data["probes"][1]["attack"] = True
+    path.write_text(json.dumps(data))
+    result = evaluate(
+        path,
+        path.parent,
+        EngineConfig(0.8, 0.1),
+        authorized=True,
+        liveness_hook=RejectingPAD(),
+    )
+    assert result["liveness_threshold"] == 0.99
+    assert result["reports"][0]["attack_probes"] == 1
+    assert result["reports"][0]["attack_pass_rate"] == 0
+    assert result["reports"][0]["fnir"] == 1
+    assert not result["automatic_attendance_approved"]
+
+
+def test_evaluation_rejects_dataset_paths_outside_directory(dataset):
+    path, data = dataset
+    outside = path.parent.parent / "outside.jpg"
+    outside.write_bytes(b"known outside")
+    data["probes"][0]["frames"][0] = "../outside.jpg"
+    path.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match="directory"):
+        evaluate(path, path.parent, EngineConfig(0.8, 0.1), authorized=True)
+
+
+def test_evaluation_rejects_repeated_probe_as_independent_evidence(dataset):
+    path, data = dataset
+    data["probes"].append(data["probes"][0])
+    path.write_text(json.dumps(data))
+    with pytest.raises(ValueError):
+        evaluate(path, path.parent, EngineConfig(0.8, 0.1), authorized=True)
 
 
 @pytest.mark.parametrize(

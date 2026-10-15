@@ -1,3 +1,4 @@
 export default defineNuxtRouteMiddleware(() => {
-  if (!useAuth().session.value?.permissions.includes('devices.health')) return navigateTo('/admin')
+  if (import.meta.server) return
+  if (!useAuth().has('devices.health')) return navigateTo('/admin?forbidden=1')
 })

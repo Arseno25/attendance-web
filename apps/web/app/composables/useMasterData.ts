@@ -1,11 +1,9 @@
 import type { Result } from '~/types/auth'
 
-export function useMasterData() {
+export function useMasterData(writePermission = 'academics.write') {
   const request = useApi()
   const auth = useAuth()
-  const canWrite = computed(
-    () => auth.session.value?.permissions.includes('academics.write') ?? false,
-  )
+  const canWrite = computed(() => auth.has(writePermission))
   async function options<T>(path: string, query: Record<string, string | number> = {}) {
     const items: T[] = []
     for (let page = 1; ; page++) {

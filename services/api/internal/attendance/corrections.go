@@ -18,7 +18,7 @@ func (s *Service) corrections(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	write := r.Method == "POST"
-	tx, u, ok := s.begin(w, r, "corrections.request", write)
+	tx, u, ok := s.begin(w, r, "corrections.request", write, "attendance.approve")
 	if !ok {
 		return
 	}
@@ -29,7 +29,11 @@ func (s *Service) corrections(w http.ResponseWriter, r *http.Request) {
 			invalid(w, "Status koreksi tidak valid")
 			return
 		}
-		s.list(w, r, tx, correctionSelect+` AND ($6='' OR ac.status=$6)`, s.schoolID, u.Scope == auth.ScopeAssignedClasses, u.ClassIDs, u.Scope == auth.ScopeAssignedClasses, u.ID, status)
+		s.list(w, r, tx, correctionSelect+` AND ($6='' OR ac.status=$6)`, s.schoolID, u.Scope == auth.ScopeAssignedClasses, u.ClassIDs, u.Scope == auth.ScopeAssignedClasses && !u.Can("attendance.approve", s.schoolID, ""), u.ID, status)
+		return
+	}
+	if !u.Can("corrections.request", s.schoolID, "") && !u.Can("attendance.manual", s.schoolID, "") {
+		httpresponse.Error(w, 403, "FORBIDDEN", "Anda tidak memiliki izin untuk mengajukan koreksi")
 		return
 	}
 	var in struct {
@@ -111,7 +115,7 @@ func (s *Service) corrections(w http.ResponseWriter, r *http.Request) {
 		dbError(w, err)
 		return
 	}
-	data, err := one(r.Context(), tx, correctionSelect+` AND ac.id=$6`, s.schoolID, u.Scope == auth.ScopeAssignedClasses, u.ClassIDs, u.Scope == auth.ScopeAssignedClasses, u.ID, id)
+	data, err := one(r.Context(), tx, correctionSelect+` AND ac.id=$6`, s.schoolID, u.Scope == auth.ScopeAssignedClasses, u.ClassIDs, u.Scope == auth.ScopeAssignedClasses && !u.Can("attendance.approve", s.schoolID, ""), u.ID, id)
 	if err != nil {
 		dbError(w, err)
 		return
@@ -126,12 +130,12 @@ func (s *Service) correction(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	tx, u, ok := s.begin(w, r, "corrections.request", false)
+	tx, u, ok := s.begin(w, r, "corrections.request", false, "attendance.approve")
 	if !ok {
 		return
 	}
 	defer tx.Rollback(context.Background())
-	data, err := one(r.Context(), tx, correctionSelect+` AND ac.id=$6`, s.schoolID, u.Scope == auth.ScopeAssignedClasses, u.ClassIDs, u.Scope == auth.ScopeAssignedClasses, u.ID, id)
+	data, err := one(r.Context(), tx, correctionSelect+` AND ac.id=$6`, s.schoolID, u.Scope == auth.ScopeAssignedClasses, u.ClassIDs, u.Scope == auth.ScopeAssignedClasses && !u.Can("attendance.approve", s.schoolID, ""), u.ID, id)
 	if err != nil {
 		dbError(w, err)
 		return
@@ -163,7 +167,7 @@ func (s *Service) decision(w http.ResponseWriter, r *http.Request) {
 		invalid(w, "Keputusan dan alasan wajib valid")
 		return
 	}
-	data, err := one(r.Context(), tx, correctionSelect+` AND ac.id=$6 FOR UPDATE OF ac`, s.schoolID, u.Scope == auth.ScopeAssignedClasses, u.ClassIDs, u.Scope == auth.ScopeAssignedClasses, u.ID, id)
+	data, err := one(r.Context(), tx, correctionSelect+` AND ac.id=$6 FOR UPDATE OF ac`, s.schoolID, u.Scope == auth.ScopeAssignedClasses, u.ClassIDs, u.Scope == auth.ScopeAssignedClasses && !u.Can("attendance.approve", s.schoolID, ""), u.ID, id)
 	if err != nil {
 		dbError(w, err)
 		return
@@ -223,7 +227,7 @@ func (s *Service) decision(w http.ResponseWriter, r *http.Request) {
 		dbError(w, err)
 		return
 	}
-	data, err = one(r.Context(), tx, correctionSelect+` AND ac.id=$6`, s.schoolID, u.Scope == auth.ScopeAssignedClasses, u.ClassIDs, u.Scope == auth.ScopeAssignedClasses, u.ID, id)
+	data, err = one(r.Context(), tx, correctionSelect+` AND ac.id=$6`, s.schoolID, u.Scope == auth.ScopeAssignedClasses, u.ClassIDs, u.Scope == auth.ScopeAssignedClasses && !u.Can("attendance.approve", s.schoolID, ""), u.ID, id)
 	if err != nil {
 		dbError(w, err)
 		return

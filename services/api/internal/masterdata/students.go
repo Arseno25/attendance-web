@@ -10,10 +10,12 @@ import (
 	"time"
 )
 
+const studentScope = `(NOT $2::boolean OR (st.status='active' AND EXISTS(SELECT 1 FROM student_enrollments e WHERE e.school_id=st.school_id AND e.student_id=st.id AND e.class_id=ANY($3::uuid[]) AND e.joined_at<=statement_timestamp() AND e.left_at>statement_timestamp())))`
+
 const studentSelect = `SELECT st.id::text AS id,st.school_id::text AS school_id,st.nis,st.nisn,st.full_name,st.status,st.created_at,st.updated_at,
  latest.class_id::text AS class_id,latest.class_name,latest.academic_year_id::text AS academic_year_id,latest.year_name AS academic_year_name
  FROM students st LEFT JOIN LATERAL(SELECT e.class_id,c.name AS class_name,e.academic_year_id,y.name AS year_name FROM student_enrollments e JOIN classes c ON c.id=e.class_id AND c.school_id=e.school_id JOIN academic_years y ON y.id=e.academic_year_id AND y.school_id=e.school_id WHERE e.student_id=st.id AND e.school_id=st.school_id AND ($4='' OR e.academic_year_id=NULLIF($4,'')::uuid) AND (NOT $2::boolean OR e.class_id=ANY($3::uuid[])) AND e.joined_at<=statement_timestamp() ORDER BY e.joined_at DESC LIMIT 1) latest ON true
- WHERE st.school_id=$1 AND (NOT $2::boolean OR (st.status='active' AND EXISTS(SELECT 1 FROM student_enrollments e WHERE e.school_id=st.school_id AND e.student_id=st.id AND e.class_id=ANY($3::uuid[]) AND e.joined_at<=statement_timestamp() AND e.left_at>statement_timestamp())))`
+ WHERE st.school_id=$1 AND ` + studentScope
 const studentColumns = `id::text AS id,school_id::text AS school_id,nis,nisn,full_name,status,created_at,updated_at`
 
 func studentStatus(status string) bool {

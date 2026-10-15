@@ -62,13 +62,16 @@ type Template struct {
 	Status     string `json:"status,omitempty"`
 }
 
-func (c *Client) Enroll(ctx context.Context, school, student, consent string, frames []string) (Template, error) {
+func (c *Client) Enroll(ctx context.Context, school, student, consent string, frames []string, gallery ...Template) (Template, error) {
 	var out Template
 	var contextConsent any
 	if consent != "" {
 		contextConsent = consent
 	}
-	err := c.call(ctx, "POST", "/internal/v1/enroll", map[string]any{"school_id": school, "student_id": student, "consent_id": contextConsent, "frames": frames}, &out)
+	if gallery == nil {
+		gallery = []Template{}
+	}
+	err := c.call(ctx, "POST", "/internal/v1/enroll", map[string]any{"school_id": school, "student_id": student, "consent_id": contextConsent, "frames": frames, "gallery": gallery}, &out)
 	return out, err
 }
 

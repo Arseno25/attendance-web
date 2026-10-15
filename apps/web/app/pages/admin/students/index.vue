@@ -5,8 +5,8 @@ import { statusVariant } from '~/lib/status'
 import { Plus } from '@lucide/vue'
 import type { Result } from '~/types/auth'
 import { statusLabels, type Student, type SchoolClass } from '~/types/master'
-definePageMeta({ layout: 'admin', middleware: ['auth', 'academics'] })
-const { request, options, canWrite } = useMasterData()
+definePageMeta({ layout: 'admin', middleware: ['auth', 'students'] })
+const { request, options, canWrite } = useMasterData('students.write')
 const students = ref<Student[]>([])
 const classes = ref<SchoolClass[]>([])
 const page = ref(1)

@@ -82,6 +82,8 @@ func TestBiometricEnrollmentWithoutConsentAndDevicePrivacy(t *testing.T) {
 		t.Fatal(err)
 	}
 	aiCalls := 0
+	rejectDuplicate := false
+	var enrollmentGallery []any
 	previewCalls := 0
 	previewStatus := 200
 	previewResponse := `{"faces":[{"box":{"x":0.1,"y":0.2,"width":0.3,"height":0.4},"student_id":"PRIVATE-ID","label":"PRIVATE-CANDIDATE","embedding":[1]}],"face_count":1,"quality":"ready","message":"PRIVATE-CANDIDATE","similarity":0.99}`
@@ -98,6 +100,16 @@ func TestBiometricEnrollmentWithoutConsentAndDevicePrivacy(t *testing.T) {
 		}
 		if r.URL.Path == "/internal/v1/enroll" {
 			aiCalls++
+			var input map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+				t.Error(err)
+			}
+			enrollmentGallery, _ = input["gallery"].([]any)
+			if rejectDuplicate && len(enrollmentGallery) > 0 {
+				w.WriteHeader(422)
+				_, _ = w.Write([]byte(`{"error":{"code":"DUPLICATE_IDENTITY","message":"Wajah ini sudah terdaftar. Periksa data siswa."}}`))
+				return
+			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"ciphertext": base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{42}, 528)), "nonce": base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{43}, 12)), "key_id": "synthetic-test", "model_sha256": strings.Repeat("a", 64), "frame_count": 3, "status": "provisional"})
 			return
 		}
@@ -211,6 +223,38 @@ func TestBiometricEnrollmentWithoutConsentAndDevicePrivacy(t *testing.T) {
 	expect(call("POST", "/users", map[string]any{"email": "enroller@example.test", "full_name": "Synthetic enroller", "role": enrollerRole["key"], "password": password}), 201)
 	expect(call("POST", "/users", map[string]any{"email": "revoker@example.test", "full_name": "Synthetic revoker", "role": revokerRole["key"], "password": password}), 201)
 	expect(call("POST", "/users", map[string]any{"email": "unauthorized@example.test", "full_name": "Synthetic unauthorized", "role": "operator", "password": password}), 201)
+	{ // Biometric access must follow assigned classes.
+		role := expect(call("POST", "/roles", map[string]any{"name": "Class face operator", "scope": "assigned_classes", "permissions": []string{"biometrics.enroll", "biometrics.revoke"}}), 201)["data"].(map[string]any)
+		user := expect(call("POST", "/users", map[string]any{"email": "classface@example.test", "full_name": "Class operator", "role": role["key"], "password": password}), 201)["data"].(map[string]any)
+		foreignClass := expect(call("POST", "/classes", map[string]any{"academic_year_id": year["id"], "code": "OTHER", "name": "Other"}), 201)["data"].(map[string]any)
+		foreign := expect(call("POST", "/students", map[string]any{"nis": "OTHER-001", "full_name": "Other class student", "class_id": foreignClass["id"]}), 201)["data"].(map[string]any)
+		login("classface@example.test")
+		if data := expect(call("GET", "/biometrics/students", nil), 200)["data"].([]any); len(data) != 0 {
+			t.Fatal("unassigned face operator saw students", data)
+		}
+		for _, studentID := range []string{id, foreign["id"].(string)} {
+			expect(call("GET", "/students/"+studentID+"/face-status", nil), 404)
+			for _, action := range []string{"face-preview", "enrollments", "face-revoke", "biometrics/revoke"} {
+				expect(call("POST", "/students/"+studentID+"/"+action, nil), 404)
+			}
+		}
+		login("owner@example.test")
+		expect(call("POST", "/class-assignments", map[string]any{"user_id": user["id"], "class_id": class["id"]}), 201)
+		login("classface@example.test")
+		visible := expect(call("GET", "/biometrics/students", nil), 200)["data"].([]any)
+		if len(visible) != 1 || visible[0].(map[string]any)["id"] != id {
+			t.Fatal("face selector did not follow class assignment", visible)
+		}
+		expect(call("GET", "/students/"+id+"/face-status", nil), 200)
+		for _, action := range []string{"face-status", "face-preview", "enrollments", "face-revoke"} {
+			method := "POST"
+			if action == "face-status" {
+				method = "GET"
+			}
+			expect(call(method, "/students/"+foreign["id"].(string)+"/"+action, nil), 404)
+		}
+		login("owner@example.test")
+	}
 	login("enroller@example.test")
 	previewData := expect(call("POST", previewPath, preview), 200)["data"].(map[string]any)
 	if previewData["quality"] != "ready" || previewData["face_count"] != float64(1) || strings.Contains(stringMustJSON(previewData), "PRIVATE") || strings.Contains(stringMustJSON(previewData), "embedding") || strings.Contains(stringMustJSON(previewData), "similarity") {
@@ -304,6 +348,27 @@ func TestBiometricEnrollmentWithoutConsentAndDevicePrivacy(t *testing.T) {
 	status := expect(call("GET", "/students/"+id+"/face-status", nil), 200)["data"].(map[string]any)
 	if status["enrolled"] != true || status["pipeline_ready"] != true || status["recognition_enabled"] != false {
 		t.Fatal(status)
+	}
+	var foreignID string
+	if err := pool.QueryRow(ctx, `SELECT id::text FROM students WHERE nis='OTHER-001'`).Scan(&foreignID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO face_templates(school_id,student_id,ciphertext,nonce,key_id,model_sha256,frame_count,created_by) SELECT school_id,$2,ciphertext,nonce,key_id,model_sha256,frame_count,created_by FROM face_templates WHERE student_id=$1`, id, foreignID); err != nil {
+		t.Fatal(err)
+	}
+	rejectDuplicate = true
+	login("classface@example.test")
+	duplicate := expect(call("POST", "/students/"+id+"/enrollments", enroll), 422)
+	if len(enrollmentGallery) != 1 || enrollmentGallery[0].(map[string]any)["student_id"] != foreignID || strings.Contains(stringMustJSON(duplicate), foreignID) {
+		t.Fatal("duplicate check lost other-class gallery or exposed its identity")
+	}
+	if templates := expect(call("GET", "/students/"+id+"/face-status", nil), 200)["data"].(map[string]any); templates["enrolled"] != true {
+		t.Fatal("duplicate rejection removed existing enrollment")
+	}
+	login("owner@example.test")
+	rejectDuplicate = false
+	if _, err := pool.Exec(ctx, `DELETE FROM face_templates WHERE student_id=$1`, foreignID); err != nil {
+		t.Fatal(err)
 	}
 
 	var consentMissing bool

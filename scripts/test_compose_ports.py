@@ -29,6 +29,7 @@ class ComposeWebPortTests(unittest.TestCase):
         services = json.loads(result.stdout)["services"]
         web = services["web"]
         api = services["api"]
+        self.assertNotIn("SCHOOL_ID", api["environment"])
         self.assertEqual(api["environment"]["ALLOW_LOCAL_WEB_PORT_RANGE"], "0")
         self.assertEqual(web["environment"]["PORT"], "3000")
         self.assertEqual(web["expose"], ["3000"])
@@ -59,6 +60,7 @@ class ComposeWebPortTests(unittest.TestCase):
         services = json.loads(result.stdout)["services"]
         web = services["web"]
         api = services["api"]
+        self.assertNotIn("SCHOOL_ID", api["environment"])
         self.assertEqual(api["environment"]["ALLOW_LOCAL_WEB_PORT_RANGE"], "0")
         self.assertEqual(web["environment"]["PORT"], "3000")
         self.assertEqual(web["ports"][0]["published"], "3002")
