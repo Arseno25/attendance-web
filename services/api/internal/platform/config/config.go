@@ -12,6 +12,7 @@ import (
 
 type Config struct {
 	Address, DatabaseURL, WebOrigin, SchoolID, AIBaseURL, AIServiceToken string
+	AllowLocalWebPortRange                                               bool
 }
 
 func Load() (Config, error) {
@@ -34,6 +35,16 @@ func Load() (Config, error) {
 	}
 	if origin.Scheme == "http" && origin.Hostname() != "localhost" && !net.ParseIP(origin.Hostname()).IsLoopback() {
 		return c, errors.New("public WEB_ORIGIN requires HTTPS")
+	}
+	c.AllowLocalWebPortRange = os.Getenv("ALLOW_LOCAL_WEB_PORT_RANGE") == "1"
+	if c.AllowLocalWebPortRange && (origin.Scheme != "http" || origin.Hostname() != "localhost") {
+		return c, errors.New("local web port allowlist requires an HTTP localhost origin")
+	}
+	if c.AllowLocalWebPortRange && origin.Port() != "" {
+		webPort, err := strconv.Atoi(origin.Port())
+		if err != nil || webPort < 3001 || webPort > 3010 {
+			return c, errors.New("local web port allowlist requires a port from 3001 through 3010")
+		}
 	}
 
 	id := c.SchoolID

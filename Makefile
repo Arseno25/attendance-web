@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 -include .env
-export DATABASE_URL API_ADDRESS WEB_ORIGIN SCHOOL_ID NUXT_PUBLIC_API_BASE NUXT_PORT AI_BASE_URL AI_MODELS_DIR AI_SERVICE_TOKEN POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD
+export DATABASE_URL API_ADDRESS WEB_ORIGIN SCHOOL_ID NUXT_PUBLIC_API_BASE NUXT_PORT WEB_HOST_PORT ALLOW_LOCAL_WEB_PORT_RANGE AI_BASE_URL AI_MODELS_DIR AI_SERVICE_TOKEN POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD
 
 UV := $(CURDIR)/.tools/uv
 GOOSE := $(CURDIR)/.tools/goose
@@ -10,7 +10,7 @@ DEV_ADMIN_EMAIL ?= admin@school.test
 DEV_ADMIN_NAME ?= Admin Lokal
 DEV_SCHOOL_NAME ?= Sekolah Demo
 
-.PHONY: setup tools env check lint test build db-up db-stop migrate migration-status db-test seed dev-bootstrap dev-web dev-api dev-ai compose-check
+.PHONY: setup tools env check lint test build db-up db-stop migrate migration-status db-test seed dev-bootstrap dev-web dev-api dev-ai compose-web compose-check
 
 tools: $(UV) $(GOOSE)
 
@@ -82,7 +82,7 @@ dev-bootstrap:
 	@printf '%s\n' 'Password1!' | .tools/bootstrap --email "$(DEV_ADMIN_EMAIL)" --name "$(DEV_ADMIN_NAME)" --school-name "$(DEV_SCHOOL_NAME)"
 
 dev-web:
-	npm --prefix apps/web run dev -- --host 127.0.0.1 --port "$${NUXT_PORT:-3000}"
+	npm --prefix apps/web run dev -- --host 127.0.0.1 --port "$${NUXT_PORT:-3001}"
 
 dev-api:
 	cd services/api && go run ./cmd/api
@@ -91,6 +91,9 @@ dev-ai: export AI_TEMPLATE_KEY_BASE64 := $(AI_TEMPLATE_KEY_BASE64)
 dev-ai: export AI_TEMPLATE_KEY_ID := $(AI_TEMPLATE_KEY_ID)
 dev-ai:
 	cd services/ai && $(UV) run fastapi dev --host 127.0.0.1 --port 8001
+
+compose-web:
+	python3 scripts/compose_web.py
 
 compose-check:
 	docker compose --env-file .env -f deploy/compose.database.yml config --quiet

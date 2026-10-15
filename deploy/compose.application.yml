@@ -1,4 +1,12 @@
 services:
+  init-models:
+    build:
+      context: ../services/ai
+    user: "0:0"
+    command: ["python", "-m", "app.models", "--directory", "/models"]
+    volumes:
+      - model_data:/models
+    restart: "no"
   web:
     build:
       context: ../apps/web
@@ -6,6 +14,10 @@ services:
       HOST: 0.0.0.0
       PORT: 3000
       NUXT_PUBLIC_API_BASE: ${NUXT_PUBLIC_API_BASE:?Set public HTTPS API base}
+    ports:
+      - target: 3000
+        published: ${WEB_HOST_PORT:-3001}
+        host_ip: 127.0.0.1
     expose:
       - "3000"
     healthcheck:
@@ -15,13 +27,25 @@ services:
       start_period: 15s
     restart: unless-stopped
     mem_limit: 512m
+  migrate:
+    build:
+      context: ../services/api
+    environment:
+      GOOSE_DRIVER: postgres
+      GOOSE_DBSTRING: ${MIGRATION_DATABASE_URL:?Set least-privilege migration PostgreSQL URL}
+    command: ["goose", "-dir", "/app/migrations", "up"]
+    restart: "no"
   api:
     build:
       context: ../services/api
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     environment:
       API_ADDRESS: 0.0.0.0:8080
       DATABASE_URL: ${DATABASE_URL:?Set private PostgreSQL URL}
       WEB_ORIGIN: ${WEB_ORIGIN:?Set exact HTTPS web origin}
+      ALLOW_LOCAL_WEB_PORT_RANGE: ${ALLOW_LOCAL_WEB_PORT_RANGE:-0}
       SCHOOL_ID: ${SCHOOL_ID:?Set school UUID}
       AI_BASE_URL: ${AI_BASE_URL:-http://ai:8001}
       AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:?Set strong service-to-service token}
@@ -37,13 +61,16 @@ services:
   ai:
     build:
       context: ../services/ai
+    depends_on:
+      init-models:
+        condition: service_completed_successfully
     environment:
       AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:?Set strong service-to-service token}
       AI_MODELS_DIR: /models
       AI_TEMPLATE_KEY_BASE64: ${AI_TEMPLATE_KEY_BASE64:?Set private template encryption key}
       AI_TEMPLATE_KEY_ID: ${AI_TEMPLATE_KEY_ID:?Set template key identifier}
     volumes:
-      - ${AI_MODELS_HOST_PATH:-../.tools/models}:/models:ro
+      - model_data:/models:ro
     expose:
       - "8001"
     healthcheck:
@@ -55,3 +82,5 @@ services:
     restart: unless-stopped
     mem_limit: 2g
     cpus: 2.0
+volumes:
+  model_data: {}

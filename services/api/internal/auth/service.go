@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"attendance.local/api/internal/platform/httpresponse"
+	"attendance.local/api/internal/platform/weborigin"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,17 +21,21 @@ import (
 type Service struct {
 	pool                                    *pgxpool.Pool
 	schoolID, origin, cookieName, dummyHash string
-	secure                                  bool
+	secure, allowLocalWebPortRange          bool
 	limits                                  limiter
 	hashing                                 chan struct{}
 }
 
 func New(pool *pgxpool.Pool, schoolID, origin string) (*Service, error) {
+	return NewWithLocalOrigins(pool, schoolID, origin, false)
+}
+
+func NewWithLocalOrigins(pool *pgxpool.Pool, schoolID, origin string, allowLocalWebPortRange bool) (*Service, error) {
 	dummy, err := HashPassword("Comparison-only-unknown-account-1!")
 	if err != nil {
 		return nil, err
 	}
-	s := &Service{pool: pool, schoolID: strings.ToLower(schoolID), origin: origin, cookieName: "attendance_session", secure: strings.HasPrefix(origin, "https://"), dummyHash: dummy, hashing: make(chan struct{}, 2)}
+	s := &Service{pool: pool, schoolID: strings.ToLower(schoolID), origin: origin, cookieName: "attendance_session", secure: strings.HasPrefix(origin, "https://"), allowLocalWebPortRange: allowLocalWebPortRange, dummyHash: dummy, hashing: make(chan struct{}, 2)}
 	if s.secure {
 		s.cookieName = "__Host-attendance_session"
 	}
@@ -87,7 +92,7 @@ func (s *Service) setCookie(w http.ResponseWriter, token string, remove bool) {
 }
 
 func (s *Service) writeOrigin(w http.ResponseWriter, r *http.Request) bool {
-	if r.Header.Get("Origin") != s.origin {
+	if r.Header.Get("Origin") == "" || !weborigin.Allowed(r.Header.Get("Origin"), s.origin, s.allowLocalWebPortRange) {
 		httpresponse.Error(w, 403, "FORBIDDEN", "Origin tidak diizinkan")
 		return false
 	}

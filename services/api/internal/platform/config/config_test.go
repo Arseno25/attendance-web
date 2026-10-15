@@ -44,10 +44,27 @@ func TestPublicAndLocalConfig(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://localhost/attendance")
 	t.Setenv("SCHOOL_ID", "00000000-0000-4000-8000-000000000001")
 	t.Setenv("API_ADDRESS", "127.0.0.1:8080")
+	t.Setenv("ALLOW_LOCAL_WEB_PORT_RANGE", "0")
 	for _, origin := range []string{"http://localhost:3000", "https://attendance.example.com"} {
 		t.Setenv("WEB_ORIGIN", origin)
 		if _, err := Load(); err != nil {
 			t.Fatal(err)
+		}
+	}
+	t.Setenv("ALLOW_LOCAL_WEB_PORT_RANGE", "1")
+	for _, origin := range []string{"http://localhost:3001", "http://localhost:3010"} {
+		t.Setenv("WEB_ORIGIN", origin)
+		t.Setenv("ALLOW_LOCAL_WEB_PORT_RANGE", "1")
+		cfg, err := Load()
+		if err != nil || !cfg.AllowLocalWebPortRange {
+			t.Fatalf("fallback localhost origin %q was not enabled: %v", origin, err)
+		}
+	}
+	for _, origin := range []string{"https://attendance.example.com", "http://127.0.0.1:3002", "http://localhost:3000", "http://localhost:3011"} {
+		t.Setenv("WEB_ORIGIN", origin)
+		t.Setenv("ALLOW_LOCAL_WEB_PORT_RANGE", "1")
+		if _, err := Load(); err == nil {
+			t.Fatalf("unsafe local allowlist origin %q was accepted", origin)
 		}
 	}
 }

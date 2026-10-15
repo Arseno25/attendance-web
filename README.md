@@ -18,7 +18,7 @@ make migrate db-test
 
 `make setup` menginstal CLI uv/goose yang dipin di `.tools`, memasang dependencies dari lockfile, dan membuat `.env` lokal berisi secret acak dengan permission `0600`. File existing tidak ditimpa. Jangan mengganti password DB yang sudah terinisialisasi hanya dengan mengedit `.env`; ubah password di PostgreSQL juga.
 
-Jalankan setiap service di terminal terpisah:
+Jalankan setiap service development di terminal terpisah:
 
 ```bash
 make dev-api
@@ -26,9 +26,17 @@ make dev-ai
 make dev-web
 ```
 
-Web: `http://localhost:3000`. API: `http://127.0.0.1:8080/api/v1`. AI lokal: `http://127.0.0.1:8001/internal/v1`, terikat ke loopback. `localhost` dan `127.0.0.1` merupakan origin browser berbeda; sesuaikan `WEB_ORIGIN` jika membuka web menggunakan alamat lain.
+Web development: `http://localhost:3001`. API: `http://127.0.0.1:8080/api/v1`. AI lokal: `http://127.0.0.1:8001/internal/v1`, terikat ke loopback. `localhost` dan `127.0.0.1` merupakan origin browser berbeda; sesuaikan `WEB_ORIGIN` jika membuka web menggunakan alamat lain.
 
-Jika port 3000 dipakai aplikasi lain, ubah `NUXT_PORT` dan `WEB_ORIGIN` dalam `.env` ke port yang sama, lalu restart API/web. Pada verifikasi workspace ini web memakai port **3001** karena 3000 sudah digunakan.
+Untuk menjalankan web dalam Compose pada loopback host port mulai dari 3001, otomatis lanjut ke port berikutnya bila bentrok:
+
+```bash
+make compose-web
+```
+
+Perintah menampilkan URL port yang dipilih; web tetap menggunakan port container 3000. Launcher mengaktifkan allowlist `localhost:3001–3010` khusus API Compose lokal. Default tetap mati dan tidak melonggarkan origin deployment.
+
+Untuk development lokal, port web dan `WEB_ORIGIN` default adalah 3001. Jika port itu dipakai aplikasi lain, ubah `NUXT_PORT` dan `WEB_ORIGIN` dalam `.env` ke port yang sama, lalu restart API/web. Mode Compose memakai `make compose-web` untuk mencari port host mulai 3001.
 
 Preview container web/API/AI hasil verifikasi saat ini masih berjalan pada port 3001/8080/8001. Sebelum menjalankan mode dev pada port tersebut, hentikan preview milik project ini:
 
@@ -114,15 +122,16 @@ Go mengembalikan error JSON, generated request ID, exact-origin CORS dan no-stor
 
 ## Deployment Coolify
 
-1. Buat PostgreSQL standalone Database resource. Gunakan role aplikasi terbatas dan role migration terpisah; akun DB development bukan konfigurasi production.
-2. Deploy `deploy/compose.application.yml` dengan tiga service `web`, `api`, `ai`. Build context relatif ke file Compose. Konfigurasi root project bila menggunakan import Compose dari Git.
-3. Isi nilai dari `deploy/.env.example` melalui secret/config Coolify. Tidak ada fallback credential production. Perhatikan SSL mode yang sesuai resource DB; jangan mengasumsikan setiap koneksi privat memakai TLS tanpa memverifikasinya.
+1. Buat PostgreSQL standalone Database resource. Provision role runtime aplikasi dengan hak minimum untuk operasi aplikasi dan role migrator terpisah dengan hak DDL yang diperlukan migrasi Goose; jangan gunakan superuser sebagai kredensial runtime. Isi `DATABASE_URL` dan `MIGRATION_DATABASE_URL` secara terpisah di secret Coolify.
+2. Deploy `deploy/compose.application.yml`. Selain `web`, `api`, dan `ai`, Compose menjalankan `init-models` serta `migrate` sekali-jalan. Build context relatif ke file Compose. Coolify harus memakai root project yang mencakup `apps/`, `services/`, dan `deploy/`.
+3. Isi nilai yang diperlukan dari `deploy/.env.example` melalui secret/config Coolify. Tidak ada fallback kredensial production. Perhatikan SSL mode yang sesuai resource DB; jangan mengasumsikan setiap koneksi privat memakai TLS tanpa memverifikasinya.
 4. Hubungkan Compose ke predefined destination network yang sama dengan DB, lalu verifikasi private DNS/port. Baca [networking resmi Coolify](https://github.com/coollabsio/coolify-docs/blob/main/content/docs/core/networking-in-coolify.mdx).
-5. Publikasikan domain HTTPS hanya untuk web dan API, masing-masing port 3000/8080. AI port 8001 dan DB tidak memiliki domain/published host port.
-6. Jalankan migration **sekali sebagai release task**, sebelum trafik aplikasi. Di container API gunakan goose dengan `GOOSE_DRIVER=postgres`, `GOOSE_DBSTRING` dari secret migration role, `GOOSE_MIGRATION_DIR=/app/migrations`, lalu `goose up`.
-7. Buat administrator pertama menggunakan `bootstrap` dengan password stdin privat, lalu verifikasi login, origin, cookie Secure dan pengelolaan pengguna. Verifikasi health, runtime config dan backup/restore. Health AI di Compose menggunakan liveness; readiness model/enrollment dipisahkan dari gate recognition dan bukan persetujuan biometrik produksi.
+5. Model YuNet/SFace diunduh ke named volume `model_data` (project-scoped oleh Compose) oleh `init-models`; installer memeriksa ukuran dan SHA-256 manifest. `ai` menunggu init sukses dan memasang volume read-only. Host perlu akses keluar ke sumber model saat volume pertama kali dibuat. Volume bertahan pada redeploy dengan nama project Compose yang sama, tidak berbagi antar-project, tetapi hanya berada pada host itu dan bukan backup. Jika nama project berubah, Compose membuat volume baru dan init mengunduh model lagi; volume lama tidak otomatis dihapus. Buat backup dan uji restore sebelum pindah host. Jangan mount path model relatif checkout.
+6. Service `migrate` menjalankan image API yang sama, Goose `/app/migrations up`, memakai hanya `MIGRATION_DATABASE_URL`. API menunggu `migrate` selesai sukses (`service_completed_successfully`); kegagalan migrasi harus menghentikan startup API. Ini berjalan saat Compose membuat ulang stack, bukan hanya saat file migrasi berubah. Verifikasi perilaku retry/reconciliation pada versi Coolify target sebelum rilis.
+7. Setelah migrasi sukses dan API siap, buat administrator pertama secara manual satu kali. Dari shell operator, minta password tanpa echo dengan `read -r -s -p 'Password admin: ' ADMIN_PASSWORD`, lalu jalankan `printf '%s' "$ADMIN_PASSWORD" | docker exec -i <api-container-id> bootstrap --email admin@school.example --name 'Admin Sekolah' --school-name 'Nama Sekolah'`; sesudahnya `unset ADMIN_PASSWORD`. Ganti placeholder dengan ID container API aktif dari Coolify. Password hanya lewat stdin, tidak di command arguments, environment, Compose atau log. CLI menolak bootstrap kedua. Lanjut verifikasi login, origin, cookie Secure dan pengelolaan pengguna.
+8. Verifikasi health, konfigurasi runtime, backup/restore database dan model. Health AI di Compose memakai liveness; readiness model/enrollment terpisah dari gate recognition dan bukan persetujuan biometrik produksi.
 
-Belum ada deployment ke akun/server Coolify pada tahap ini. Domain, credential production, legal policy, model license dan pilot mengikuti gate pada rencana induk.
+Konfigurasi Compose divalidasi lokal, tetapi belum dijalankan pada server Coolify. Sebelum trafik produksi, uji live bahwa named volume dan secret bekerja, API gagal mulai jika migrasi gagal, dan init model dapat mengisi volume kosong. Backup volume tetap diperlukan. Belum ada deployment ke akun/server Coolify pada tahap ini; domain, credential production, legal policy, model license dan pilot tetap mengikuti gate pada rencana induk.
 
 ## Model dan alur lokal
 
