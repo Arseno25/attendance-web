@@ -91,19 +91,31 @@ class ComposeWebPortTests(unittest.TestCase):
         api = services["api"]
 
         self.assertEqual(model_init["build"]["context"], str(ROOT / "services/ai"))
-        self.assertEqual(model_init["command"], ["python", "-m", "app.models", "--directory", "/models"])
+        self.assertEqual(
+            model_init["command"],
+            ["python", "-m", "app.models", "--directory", "/models"],
+        )
         self.assertEqual(model_init["user"], "0:0")
         self.assertEqual(model_init["restart"], "no")
         self.assertNotIn("depends_on", model_init)
-        init_mount = next(mount for mount in model_init["volumes"] if mount["target"] == "/models")
-        runtime_mount = next(mount for mount in model_runtime["volumes"] if mount["target"] == "/models")
+        init_mount = next(
+            mount for mount in model_init["volumes"] if mount["target"] == "/models"
+        )
+        runtime_mount = next(
+            mount for mount in model_runtime["volumes"] if mount["target"] == "/models"
+        )
         self.assertEqual(init_mount["type"], "volume")
-        self.assertEqual(config["volumes"]["model_data"]["name"], "deployment-test_model_data")
+        self.assertEqual(
+            config["volumes"]["model_data"]["name"], "deployment-test_model_data"
+        )
         self.assertEqual(runtime_mount["type"], "volume")
         self.assertEqual(init_mount["source"], runtime_mount["source"])
         self.assertFalse(init_mount.get("read_only", False))
         self.assertTrue(runtime_mount["read_only"])
-        self.assertEqual(model_runtime["depends_on"]["init-models"]["condition"], "service_completed_successfully")
+        self.assertEqual(
+            model_runtime["depends_on"]["init-models"]["condition"],
+            "service_completed_successfully",
+        )
 
         self.assertEqual(migration["build"]["context"], str(ROOT / "services/api"))
         self.assertEqual(migration["restart"], "no")
@@ -113,26 +125,50 @@ class ComposeWebPortTests(unittest.TestCase):
             for line in (ROOT / "deploy/.env.example").read_text().splitlines()
             if "=" in line and not line.startswith("#")
         )
-        self.assertEqual(migration["environment"]["GOOSE_DBSTRING"], env_values["MIGRATION_DATABASE_URL"])
-        self.assertNotEqual(migration["environment"]["GOOSE_DBSTRING"], api["environment"]["DATABASE_URL"])
+        self.assertEqual(
+            migration["environment"]["GOOSE_DBSTRING"],
+            env_values["MIGRATION_DATABASE_URL"],
+        )
+        self.assertNotEqual(
+            migration["environment"]["GOOSE_DBSTRING"],
+            api["environment"]["DATABASE_URL"],
+        )
         self.assertNotIn("GOOSE_DBSTRING", api["environment"])
         self.assertNotIn("DATABASE_URL", migration["environment"])
-        self.assertEqual(migration["command"], ["goose", "-dir", "/app/migrations", "up"])
-        self.assertEqual(api["depends_on"]["migrate"]["condition"], "service_completed_successfully")
+        self.assertEqual(
+            migration["command"], ["goose", "-dir", "/app/migrations", "up"]
+        )
+        self.assertEqual(
+            api["depends_on"]["migrate"]["condition"], "service_completed_successfully"
+        )
 
         compose_source = (ROOT / "deploy/compose.application.yml").read_text()
         self.assertIn("${MIGRATION_DATABASE_URL:?", compose_source)
         config_env = {
             **os.environ,
-            **{key: value for key, value in env_values.items() if key != "MIGRATION_DATABASE_URL"},
+            **{
+                key: value
+                for key, value in env_values.items()
+                if key != "MIGRATION_DATABASE_URL"
+            },
         }
         config_env.pop("MIGRATION_DATABASE_URL", None)
         missing_migration_url = subprocess.run(
-            ["docker", "compose", "--env-file", "/dev/null", "-f", "deploy/compose.application.yml", "config", "--quiet"],
+            [
+                "docker",
+                "compose",
+                "--env-file",
+                "/dev/null",
+                "-f",
+                "deploy/compose.application.yml",
+                "config",
+                "--quiet",
+            ],
             cwd=ROOT,
             env=config_env,
             capture_output=True,
             text=True,
+            check=False,
         )
         self.assertNotEqual(missing_migration_url.returncode, 0)
         self.assertIn("MIGRATION_DATABASE_URL", missing_migration_url.stderr)
