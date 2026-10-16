@@ -4,7 +4,7 @@ from io import StringIO
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from scripts.compose_web import start_web
+from scripts.compose_web import ROOT, start_web
 
 
 class ComposeWebLauncherTests(unittest.TestCase):
@@ -32,6 +32,7 @@ class ComposeWebLauncherTests(unittest.TestCase):
         self.assertEqual([origin for _, _, origin, _ in calls], ["http://localhost:3001", "http://localhost:3002"])
         self.assertEqual([local_origins for _, _, _, local_origins in calls], ["1", "1"])
         self.assertEqual(output.call_args_list[-1].args, ("Web tersedia di http://localhost:3002",))
+        self.assertEqual(calls[1][0][2:4], ["--project-directory", str(ROOT)])
         self.assertEqual(calls[1][0][-3:], ["up", "-d", "web"])
 
     def test_does_not_retry_unrelated_compose_failures(self):

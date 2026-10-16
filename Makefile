@@ -103,4 +103,4 @@ compose-web:
 
 compose-check:
 	docker compose --env-file .env -f deploy/compose.database.yml config --quiet
-	docker compose --env-file deploy/.env.example -f deploy/compose.application.yml config --quiet
+	docker compose --project-directory . --env-file deploy/.env.example -f deploy/compose.application.yml config --quiet
