@@ -32,6 +32,8 @@
   --color-warning-foreground: var(--warning-foreground);
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
+  --color-danger: var(--danger);
+  --color-danger-foreground: var(--danger-foreground);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -59,6 +61,8 @@
   --warning-foreground: #92400e;
   --info: #eff6ff;
   --info-foreground: #1e40af;
+  --danger: #fef2f2;
+  --danger-foreground: #991b1b;
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
@@ -100,6 +104,8 @@
   --warning-foreground: #fcd34d;
   --info: #172554;
   --info-foreground: #93c5fd;
+  --danger: #450a0a;
+  --danger-foreground: #fca5a5;
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);

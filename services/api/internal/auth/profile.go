@@ -143,6 +143,9 @@ func (s *Service) profile(w http.ResponseWriter, r *http.Request) {
 		if _, err = rand.Read(buf); err == nil {
 			token = hex.EncodeToString(buf)
 			_, err = tx.Exec(r.Context(), `DELETE FROM user_sessions WHERE school_id=$1 AND user_id=$2`, s.schoolID, u.ID)
+			if err == nil {
+				_, err = tx.Exec(r.Context(), `DELETE FROM device_sessions WHERE school_id=$1 AND paired_by=$2`, s.schoolID, u.ID)
+			}
 		}
 		if err == nil {
 			_, err = tx.Exec(r.Context(), `INSERT INTO user_sessions(token_hash,school_id,user_id,expires_at) VALUES($1,$2,$3,now()+interval '8 hours')`, tokenHash(token), s.schoolID, u.ID)

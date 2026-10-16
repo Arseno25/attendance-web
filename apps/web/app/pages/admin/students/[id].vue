@@ -101,7 +101,7 @@ await load()
           </Button>
           <div
             v-if="canWrite"
-            class="flex flex-wrap gap-2"
+            class="flex min-w-0 max-w-full flex-wrap justify-end gap-2"
           >
             <Button
               variant="outline"

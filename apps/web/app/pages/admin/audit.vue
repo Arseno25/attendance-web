@@ -147,18 +147,7 @@ await load()
     <PageHeader
       title="Riwayat aktivitas"
       description="Histori perubahan akun, data akademik, siswa, dan sesi, tanpa password atau data wajah."
-    >
-      <template #actions>
-        <Button
-          variant="outline"
-          :disabled="loading"
-          @click="load"
-        >
-          <Spinner v-if="loading" />
-          Muat ulang
-        </Button>
-      </template>
-    </PageHeader>
+    />
     <Alert
       v-if="message"
       variant="destructive"

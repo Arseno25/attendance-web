@@ -13,6 +13,7 @@ func (s *Service) Run(ctx context.Context) {
 	defer ticker.Stop()
 	for {
 		job, cancel := context.WithTimeout(ctx, 15*time.Second)
+		s.syncCalendarYears(job)
 		err := s.Tick(job)
 		cancel()
 		if err != nil && ctx.Err() == nil {
@@ -53,7 +54,7 @@ func (s *Service) Tick(ctx context.Context) error {
 			return err
 		}
 	}
-	sessions, err := rows(ctx, tx, `SELECT se.id::text AS id,se.status,se.starts_at,se.closes_at,statement_timestamp() AS clock,`+sessionEligibility+` AS eligible FROM attendance_sessions se JOIN attendance_schedules a ON a.school_id=se.school_id AND a.id=se.schedule_id JOIN classes c ON c.school_id=se.school_id AND c.id=se.class_id JOIN academic_years y ON y.school_id=c.school_id AND y.id=c.academic_year_id LEFT JOIN school_calendar_days cd ON cd.school_id=se.school_id AND cd.date=se.date WHERE se.school_id=$1 AND se.status IN('scheduled','open') FOR UPDATE OF se`, s.schoolID)
+	sessions, err := rows(ctx, tx, `SELECT se.id::text AS id,se.status,se.starts_at,se.closes_at,statement_timestamp() AS clock,`+sessionEligibility("$2")+` AS eligible FROM attendance_sessions se JOIN attendance_schedules a ON a.school_id=se.school_id AND a.id=se.schedule_id JOIN classes c ON c.school_id=se.school_id AND c.id=se.class_id JOIN academic_years y ON y.school_id=c.school_id AND y.id=c.academic_year_id LEFT JOIN school_calendar_days cd ON cd.school_id=se.school_id AND cd.date=se.date WHERE se.school_id=$1 AND se.status IN('scheduled','open') FOR UPDATE OF se`, s.schoolID, s.holidays != nil)
 	if err != nil {
 		return err
 	}
@@ -87,6 +88,7 @@ func (s *Service) Tick(ctx context.Context) error {
 		`UPDATE import_batches SET payload=NULL WHERE school_id=$1 AND expires_at<=clock_timestamp() AND payload IS NOT NULL`,
 		`DELETE FROM device_sessions WHERE school_id=$1 AND expires_at<=clock_timestamp()`,
 		`DELETE FROM device_pairing_tokens WHERE school_id=$1 AND expires_at<=clock_timestamp()`,
+		`DELETE FROM kiosk_capture_challenges WHERE school_id=$1 AND expires_at<clock_timestamp()-interval '24 hours'`,
 	} {
 		if _, err = tx.Exec(ctx, query, s.schoolID); err != nil {
 			return err

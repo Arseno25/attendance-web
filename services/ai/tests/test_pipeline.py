@@ -118,6 +118,11 @@ def test_enrollment_consistency_duplicate_and_ciphertext_only(monkeypatch):
     result = pipeline.enroll(frames, cipher, "s", "st", "co")
     assert result["frame_count"] == 3 and result["status"] == "provisional"
     assert "embedding" not in result and "frames" not in result
+    from app.reference_photo import decrypt_reference_photo
+
+    portrait = decrypt_reference_photo(result["reference_photo"], cipher, "s", "st")
+    assert decode_image(portrait)[0].shape == (192, 192, 3)
+    assert portrait not in frames
     assert np.allclose(cipher.decrypt(result, "s", "st", "co"), vector())
     with pytest.raises(ImageError, match="berbeda"):
         pipeline.enroll([frames[0]] * 3, cipher, "s", "st", "co")

@@ -12,11 +12,12 @@ export function useMasterData(writePermission = 'academics.write') {
       if (items.length >= (result.pagination?.total ?? items.length)) return items
     }
   }
-  const dateTime = (value: string) =>
+  const dateTime = (value: string, options: Intl.DateTimeFormatOptions = {}) =>
     new Intl.DateTimeFormat('id-ID', {
       dateStyle: 'medium',
       timeStyle: 'short',
       timeZone: auth.session.value?.school.timezone ?? 'Asia/Jakarta',
+      ...options,
     }).format(new Date(value))
   return { request, canWrite, options, dateTime }
 }

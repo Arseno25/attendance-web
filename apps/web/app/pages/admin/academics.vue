@@ -13,6 +13,10 @@ import type { AcademicYear, Assignment, ClassAssignmentUser, SchoolClass } from 
 
 definePageMeta({ layout: 'admin', middleware: ['auth', 'academics'] })
 const { request, canWrite, options, dateTime } = useMasterData()
+const auth = useAuth()
+const canManageAssignments = computed(
+  () => canWrite.value && auth.session.value?.user.scope === 'school',
+)
 const tab = ref('years')
 const page = ref(1)
 const total = ref(0)
@@ -196,7 +200,7 @@ function openRevocation(item: Assignment) {
     >
       <template #actions>
         <Button
-          v-if="canWrite"
+          v-if="canWrite && (tab !== 'assignments' || canManageAssignments)"
           @click="show()"
         >
           <Plus />
@@ -214,7 +218,7 @@ function openRevocation(item: Assignment) {
       v-model="tab"
       class="min-w-0 gap-4"
     >
-      <TabsList class="w-full sm:w-auto">
+      <TabsList>
         <TabsTrigger
           value="years"
           :disabled="loading"
@@ -416,7 +420,7 @@ function openRevocation(item: Assignment) {
                   label: 'Tindakan',
                   headClass: 'w-24 text-right',
                   cellClass: 'text-right',
-                  hidden: !canWrite,
+                  hidden: !canManageAssignments,
                 },
               ]"
               :caption="`Daftar ${labels[kind]}`"
@@ -475,7 +479,7 @@ function openRevocation(item: Assignment) {
                     <EmptyTitle>Belum ada {{ labels[kind] }}</EmptyTitle>
                     <EmptyDescription>
                       {{
-                        canWrite
+                        canManageAssignments
                           ? 'Tambahkan data untuk memulai pengelolaan sekolah.'
                           : 'Minta admin sekolah mengatur penugasan kelas Anda.'
                       }}

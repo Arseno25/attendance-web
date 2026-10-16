@@ -8,8 +8,9 @@ const { data, status, error, refresh } = await useFetch<{ status: string }>(
   { server: false, timeout: 4000, retry: 0 },
 )
 
+const checking = computed(() => status.value === 'idle' || status.value === 'pending')
 const serviceLabel = computed(() => {
-  if (status.value === 'pending') return 'Memeriksa koneksi'
+  if (checking.value) return 'Memeriksa koneksi'
   if (error.value) return 'Layanan belum tersedia'
   return data.value?.status === 'ok' ? 'Layanan terhubung' : 'Belum diperiksa'
 })
@@ -62,7 +63,7 @@ const serviceLabel = computed(() => {
           </p>
           <Button
             variant="outline"
-            :disabled="status === 'pending'"
+            :disabled="checking"
             @click="refresh()"
           >
             Periksa kembali
@@ -70,7 +71,8 @@ const serviceLabel = computed(() => {
         </CardContent>
       </Card>
       <p class="mt-6 max-w-xl text-sm leading-6 text-muted-foreground">
-        Absensi wajah belum tersedia. Petugas tetap dapat mencatat kehadiran melalui aplikasi.
+        Absensi kamera disiapkan oleh petugas. Ikuti petunjuk di perangkat absensi dan tunggu
+        konfirmasi bahwa kehadiran sudah tercatat.
       </p>
     </main>
   </div>

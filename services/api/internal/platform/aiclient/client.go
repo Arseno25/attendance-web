@@ -50,14 +50,15 @@ func (c *Client) Status(ctx context.Context) Status {
 }
 
 type Template struct {
-	StudentID  string `json:"student_id,omitempty"`
-	ConsentID  string `json:"consent_id,omitempty"`
-	Ciphertext string `json:"ciphertext"`
-	Nonce      string `json:"nonce"`
-	KeyID      string `json:"key_id"`
-	ModelSHA   string `json:"model_sha256"`
-	FrameCount int    `json:"frame_count,omitempty"`
-	Status     string `json:"status,omitempty"`
+	StudentID      string          `json:"student_id,omitempty"`
+	ConsentID      string          `json:"consent_id,omitempty"`
+	Ciphertext     string          `json:"ciphertext"`
+	Nonce          string          `json:"nonce"`
+	KeyID          string          `json:"key_id"`
+	ModelSHA       string          `json:"model_sha256"`
+	FrameCount     int             `json:"frame_count,omitempty"`
+	Status         string          `json:"status,omitempty"`
+	ReferencePhoto *ReferencePhoto `json:"reference_photo,omitempty"`
 }
 
 func (c *Client) Enroll(ctx context.Context, school, student, consent string, frames []string, gallery ...Template) (Template, error) {

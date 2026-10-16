@@ -35,7 +35,7 @@ type User struct {
 	FullName        string    `json:"full_name"`
 	Role            string    `json:"role"`
 	RoleName        string    `json:"role_name"`
-	Scope           RoleScope `json:"-"`
+	Scope           RoleScope `json:"scope"`
 	PermissionsList []string  `json:"-"`
 	Active          bool      `json:"is_active"`
 	ClassIDs        []string  `json:"class_ids,omitempty"`

@@ -48,3 +48,12 @@ BEGIN
     END IF;
   END LOOP;
 END $$;
+
+-- Public holiday fixtures stay isolated and prevent external provider calls in browser tests.
+INSERT INTO school_holiday_sync(school_id,year,synced_at,status)
+SELECT s.id,y,clock_timestamp(),'ready' FROM schools s
+CROSS JOIN generate_series(extract(year FROM clock_timestamp() AT TIME ZONE 'Asia/Jakarta')::integer,extract(year FROM clock_timestamp() AT TIME ZONE 'Asia/Jakarta')::integer+1) y;
+INSERT INTO school_holidays(school_id,date,name,type)
+SELECT id,(date_trunc('month',clock_timestamp() AT TIME ZONE 'Asia/Jakarta')::date+24),'Libur nasional uji','national_holiday' FROM schools
+UNION ALL
+SELECT id,(date_trunc('month',clock_timestamp() AT TIME ZONE 'Asia/Jakarta')::date+25),'Cuti bersama uji','joint_leave' FROM schools;

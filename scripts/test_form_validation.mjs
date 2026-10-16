@@ -4,7 +4,7 @@ import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 import { loginSchema, profileSchema, userSchema } from '../apps/web/app/lib/validation/auth.ts'
 import { academicYearSchema, assignmentSchema, newClassSchema, newStudentSchema, placementSchema, studentFilterSchema, importSchema, importCommitSchema } from '../apps/web/app/lib/validation/master.ts'
-import { scheduleSchema, newScheduleSchema, sessionSchema, sessionFilterSchema, manualSchema, correctionSchema, decisionSchema, rosterFilterSchema } from '../apps/web/app/lib/validation/attendance.ts'
+import { calendarRangeSchema, scheduleSchema, newScheduleSchema, sessionSchema, sessionFilterSchema, manualSchema, correctionSchema, decisionSchema, rosterFilterSchema } from '../apps/web/app/lib/validation/attendance.ts'
 import { reportSchema, auditSchema } from '../apps/web/app/lib/validation/reports.ts'
 import { roleSchema } from '../apps/web/app/lib/validation/roles.ts'
 import { pairingSchema, reasonSchema, enrollmentSchema } from '../apps/web/app/lib/validation/biometrics-devices.ts'
@@ -155,4 +155,15 @@ test('form helper revalidates, clears and focuses visible fields without enterin
     form.clear(); values.value.reason = ''; await nextTick(); assert.deepEqual(form.errors.value, {})
   }
   finally { scope.stop(); globalThis.document = oldDocument }
+})
+
+
+test('school calendar ranges include leap day, preserve single dates and reject reversed or overlong ranges', () => {
+ const range={from:'2028-02-29',to:'2028-03-02',is_school_day:false,reason:'Libur semester'}
+ valid(calendarRangeSchema,range)
+ valid(calendarRangeSchema,{...range,to:range.from})
+ invalid(calendarRangeSchema,{...range,from:'2026-02-29'},'from')
+ invalid(calendarRangeSchema,{...range,to:'2028-02-28'},'to')
+ invalid(calendarRangeSchema,{...range,to:'2029-03-02'},'to')
+ invalid(calendarRangeSchema,{...range,reason:'  '},'reason')
 })

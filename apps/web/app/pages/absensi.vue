@@ -13,6 +13,9 @@ const request = useApi()
 const auth = useAuth()
 const { options } = useMasterData()
 interface Kiosk {
+  session_id?: string | null
+  session_ready?: boolean
+  connection_status?: 'ready' | 'waiting_session' | 'multiple_sessions'
   device_name: string
   session_name: string
   expires_at: string
@@ -27,6 +30,7 @@ interface Kiosk {
   server_time: string
 }
 const kiosk = ref<Kiosk | null>(null)
+const sessionReady = computed(() => !!kiosk.value && kiosk.value.session_ready !== false)
 const sessions = ref<AttendanceSession[]>([])
 const pairingToken = ref('')
 const sessionId = ref('')
@@ -52,6 +56,7 @@ const departure = computed(
 )
 const lastResult = ref<{
   name: string
+  referencePhoto?: string
   similarity?: number
   attendance: NonNullable<Recognition['attendance']>
 } | null>(null)
@@ -126,9 +131,18 @@ function showResult(result: Recognition) {
   syncClock(result.server_time)
   const identified = faces.value.find((face) => face.accepted)
   if (identified && result.attendance) {
+    const previous = lastResult.value
+    const sameRecord =
+      previous &&
+      result.attendance.record &&
+      previous.attendance.record?.id === result.attendance.record.id &&
+      previous.attendance.mode === result.attendance.mode
     lastResult.value = {
       name: identified.label,
-      similarity: identified.similarity,
+      referencePhoto: result.reference_photo,
+      similarity: sameRecord
+        ? (previous.similarity ?? identified.similarity)
+        : identified.similarity,
       attendance: result.attendance,
     }
     const saved = attendanceFeedback(result.attendance)
@@ -190,7 +204,6 @@ function showResult(result: Recognition) {
 }
 const config = useRuntimeConfig()
 let heartbeat: ReturnType<typeof setInterval> | undefined
-let expiry: ReturnType<typeof setTimeout> | undefined
 let scanTimer: ReturnType<typeof setTimeout> | undefined
 let scanAbort: AbortController | undefined
 let scanGeneration = 0
@@ -217,7 +230,6 @@ function stopCamera() {
 function stop(reason = '') {
   stopCamera()
   clearInterval(heartbeat)
-  clearTimeout(expiry)
   kiosk.value = null
   if (reason) message.value = reason
 }
@@ -225,12 +237,12 @@ function hidden() {
   if (document.hidden) stopCamera()
 }
 function offline() {
-  stop(
-    'Koneksi terputus. Gunakan prosedur absensi manual; tidak ada kehadiran otomatis yang dicatat.',
-  )
+  stopCamera()
+  message.value =
+    'Koneksi terputus. Perangkat akan mencoba terhubung kembali. Gunakan absensi manual sementara.'
 }
 async function startCamera() {
-  if (!kiosk.value || !navigator.onLine || document.hidden) return
+  if (!sessionReady.value || !navigator.onLine || document.hidden) return
   await camera.value?.start()
 }
 function cameraChanged(active: boolean) {
@@ -251,6 +263,7 @@ async function scan(generation: number) {
   if (
     generation !== scanGeneration ||
     disposed ||
+    !sessionReady.value ||
     !kiosk.value ||
     !cameraActive.value ||
     document.hidden ||
@@ -267,6 +280,18 @@ async function scan(generation: number) {
   }, 1200)
   overlayExpiry = pendingExpiry
   try {
+    const permit = await $fetch<Result<{ event_id: string }>>(
+      `${config.public.apiBase}/kiosk/capture-challenge`,
+      {
+        method: 'POST',
+        credentials: 'include',
+        retry: 0,
+        timeout: 8000,
+        signal: scanAbort.signal,
+        headers: { 'X-CSRF-Token': kiosk.value.csrf_token },
+      },
+    )
+    if (generation !== scanGeneration || disposed || !kiosk.value || !cameraActive.value) return
     const image = camera.value?.capture()
     if (!image) return
     const result = await $fetch<Result<Recognition>>(`${config.public.apiBase}/kiosk/recognize`, {
@@ -278,7 +303,7 @@ async function scan(generation: number) {
       headers: { 'X-CSRF-Token': kiosk.value.csrf_token },
       body: {
         image,
-        event_id: crypto.randomUUID(),
+        event_id: permit.data.event_id,
         track_id: trackId,
         captured_at: new Date().toISOString(),
       },
@@ -289,6 +314,19 @@ async function scan(generation: number) {
     if (generation !== scanGeneration || disposed) return
     faces.value = []
     scanMessage.value = apiMessage(cause)
+    if (
+      (cause as { data?: { error?: { code?: string } } }).data?.error?.code === 'CAPTURE_REPLAY' ||
+      (cause as { data?: { error?: { code?: string } } }).data?.error?.code === 'RECOGNITION_STALE'
+    )
+      return
+    if (
+      (cause as { data?: { error?: { code?: string } } }).data?.error?.code ===
+      'SESSION_UNAVAILABLE'
+    ) {
+      stopCamera()
+      await refreshConnection()
+      return
+    }
     if ([401, 403, 409, 410].includes((cause as { status?: number }).status ?? 0)) {
       stop(
         'Sesi perangkat tidak lagi dapat digunakan. Pasangkan ulang atau gunakan absensi manual.',
@@ -308,32 +346,44 @@ function arm(data: Kiosk) {
   lastResult.value = null
   recent.value = []
   syncClock(data.server_time)
-  const remaining = new Date(data.expires_at).getTime() - clock.value
-  if (remaining <= 0) {
-    stop('Sesi perangkat kedaluwarsa. Pasangkan ulang.')
+  if (Date.parse(data.expires_at) <= clock.value) {
+    stop('Koneksi perangkat sudah berakhir. Hubungkan kembali dengan kode baru.')
     return
   }
-  expiry = setTimeout(() => stop('Sesi perangkat kedaluwarsa. Pasangkan ulang.'), remaining)
-  heartbeat = setInterval(async () => {
-    if (!kiosk.value || disposed) return
-    const current = kiosk.value
-    try {
-      const result = await $fetch<Result<Kiosk>>(`${config.public.apiBase}/kiosk/heartbeat`, {
-        method: 'POST',
-        credentials: 'include',
-        retry: 0,
-        timeout: 8000,
-        headers: { 'X-CSRF-Token': current.csrf_token },
-      })
-      if (!disposed && kiosk.value === current) syncClock(result.data?.server_time)
-    } catch {
-      if (!disposed && kiosk.value === current)
-        stop(
-          'Perangkat/sesi tidak aktif atau koneksi bermasalah. Pasangkan ulang setelah layanan pulih.',
-        )
-    }
-  }, 15000)
+  heartbeat = setInterval(() => void refreshConnection(), 15000)
 }
+async function refreshConnection() {
+  if (!kiosk.value || disposed) return
+  const current = kiosk.value
+  try {
+    const result = await $fetch<Result<Kiosk>>(`${config.public.apiBase}/kiosk/heartbeat`, {
+      method: 'POST',
+      credentials: 'include',
+      retry: 0,
+      timeout: 8000,
+      headers: { 'X-CSRF-Token': current.csrf_token },
+    })
+    if (disposed || kiosk.value !== current) return
+    const next = result.data
+    if (next.session_id !== current.session_id || next.session_ready !== current.session_ready) {
+      stopCamera()
+      lastResult.value = null
+      recent.value = []
+    }
+    kiosk.value = next
+    syncClock(next.server_time)
+    message.value = ''
+  } catch (cause) {
+    if (disposed || kiosk.value !== current) return
+    if ([401, 403, 410].includes((cause as { status?: number }).status ?? 0)) {
+      stop('Koneksi perangkat dicabut atau sudah berakhir. Hubungkan kembali dengan kode baru.')
+    } else {
+      stopCamera()
+      message.value = 'Koneksi terganggu. Perangkat akan mencoba terhubung kembali secara otomatis.'
+    }
+  }
+}
+
 async function pair() {
   if (busy.value || !validate()) return
   busy.value = true
@@ -355,12 +405,12 @@ async function pair() {
   }
 }
 async function discover() {
-  if (disposed || discovering) return
+  if (disposed || discovering || kiosk.value) return
   discovering = true
   sessions.value = []
   try {
     await auth.load()
-    if (disposed) return
+    if (disposed || kiosk.value) return
     if (
       auth.session.value?.permissions.includes('devices.health') ||
       auth.session.value?.permissions.includes('devices.manage')
@@ -369,7 +419,8 @@ async function discover() {
       if (!disposed) sessions.value = data
     } else message.value = 'Operator perlu masuk untuk memasangkan perangkat.'
   } catch {
-    if (!disposed) message.value = 'Daftar sesi belum tersedia. Periksa koneksi dan akses operator.'
+    if (!disposed && !kiosk.value)
+      message.value = 'Daftar sesi belum tersedia. Periksa koneksi dan akses operator.'
   } finally {
     discovering = false
   }
@@ -377,15 +428,24 @@ async function discover() {
 watch(kiosk, (value) => {
   if (!value && initialized && !disposed) void discover()
 })
+async function reconnect() {
+  if (disposed) return
+  if (kiosk.value) return refreshConnection()
+  try {
+    const result = await request<Result<Kiosk>>('/kiosk/me')
+    if (!disposed && !kiosk.value && !busy.value) {
+      arm(result.data)
+      message.value = ''
+    }
+  } catch {
+    // A missing device credential still needs the initial operator pairing.
+  }
+}
 onMounted(async () => {
   document.addEventListener('visibilitychange', hidden)
   window.addEventListener('offline', offline)
-  try {
-    const result = await request<Result<Kiosk>>('/kiosk/me')
-    if (!disposed) arm(result.data)
-  } catch {
-    /* An unpaired device starts at the pairing form. */
-  }
+  window.addEventListener('online', reconnect)
+  await reconnect()
   if (disposed) return
   initialized = true
   if (!kiosk.value) await discover()
@@ -399,6 +459,7 @@ onBeforeUnmount(() => {
   stop()
   document.removeEventListener('visibilitychange', hidden)
   window.removeEventListener('offline', offline)
+  window.removeEventListener('online', reconnect)
 })
 </script>
 <template>
@@ -408,7 +469,13 @@ onBeforeUnmount(() => {
         <div>
           <p class="text-sm font-medium text-muted-foreground">Absensi sekolah</p>
           <h1 class="mt-1 text-2xl font-semibold tracking-tight">
-            {{ kiosk ? kiosk.session_name : 'Pasangkan perangkat' }}
+            {{
+              kiosk
+                ? sessionReady
+                  ? kiosk.session_name
+                  : 'Menunggu sesi absensi'
+                : 'Pasangkan perangkat'
+            }}
           </h1>
         </div>
         <div
@@ -446,7 +513,8 @@ onBeforeUnmount(() => {
           <CardTitle>Hubungkan perangkat</CardTitle>
           <CardDescription>
             Masuk sebagai operator, pilih sesi terbuka dan masukkan kode penghubung yang diterbitkan
-            admin.
+            admin. Pemasangan cukup sekali pada browser ini; sesi berikutnya untuk kelas yang sama
+            terhubung otomatis.
           </CardDescription>
           <CardAction>
             <Button
@@ -533,6 +601,34 @@ onBeforeUnmount(() => {
               <NuxtLink to="/login">Masuk sebagai operator</NuxtLink>
             </Button>
           </form>
+        </CardContent>
+      </Card>
+      <Card
+        v-else-if="!sessionReady"
+        class="mx-auto w-full max-w-lg"
+      >
+        <CardHeader>
+          <CardTitle>Perangkat sudah terhubung</CardTitle>
+          <CardDescription>{{ kiosk.device_name }} · {{ kiosk.class_name }}</CardDescription>
+        </CardHeader>
+        <CardContent class="space-y-3">
+          <Badge variant="secondary">
+            <ShieldCheck />
+            Koneksi tersimpan
+          </Badge>
+          <p
+            role="status"
+            class="text-sm text-muted-foreground"
+          >
+            {{
+              kiosk.connection_status === 'multiple_sessions'
+                ? 'Ada beberapa sesi aktif untuk kelas ini. Minta petugas menyisakan satu sesi yang sesuai.'
+                : 'Belum ada sesi aktif untuk kelas ini. Halaman akan mengikuti sesi berikutnya secara otomatis.'
+            }}
+          </p>
+          <p class="text-sm text-muted-foreground">
+            Tidak perlu memasukkan kode lagi. Kamera dapat diaktifkan saat sesi siap.
+          </p>
         </CardContent>
       </Card>
       <template v-else>
@@ -664,34 +760,37 @@ onBeforeUnmount(() => {
                 v-if="lastResult && feedback"
                 class="space-y-5"
               >
-                <div class="space-y-2">
-                  <Badge :variant="feedback.tone">{{ feedback.status }}</Badge>
-                  <p class="break-words text-3xl font-semibold tracking-tight">
-                    {{ lastResult.name }}
-                  </p>
-                  <p class="text-sm text-muted-foreground">{{ feedback.message }}</p>
+                <div class="flex items-center gap-4">
+                  <StudentFacePhoto
+                    :image="lastResult.referencePhoto"
+                    :name="lastResult.name"
+                    class="size-20 rounded-lg"
+                  />
+                  <div class="min-w-0 space-y-2">
+                    <Badge :variant="feedback.tone">{{ feedback.status }}</Badge>
+                    <p class="break-words text-3xl font-semibold tracking-tight">
+                      {{ lastResult.name }}
+                    </p>
+                    <p class="text-sm text-muted-foreground">{{ feedback.message }}</p>
+                  </div>
                 </div>
                 <div
                   v-if="lastResult.similarity !== undefined"
                   class="space-y-2"
                 >
-                  <div class="flex items-center justify-between gap-2 text-sm">
-                    <span>Skor kemiripan</span>
-                    <span class="font-medium tabular-nums">
+                  <dl class="flex items-center justify-between gap-3">
+                    <dt class="text-sm text-muted-foreground">Skor kemiripan</dt>
+                    <dd class="text-xl font-semibold tabular-nums">
                       {{
                         lastResult.similarity.toLocaleString('id-ID', {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,
                         })
                       }}
-                    </span>
-                  </div>
-                  <Progress
-                    :model-value="Math.max(0, lastResult.similarity) * 100"
-                    aria-label="Skor kemiripan wajah"
-                  />
+                    </dd>
+                  </dl>
                   <p class="text-xs text-muted-foreground">
-                    Semakin mendekati 1,00 semakin mirip. Skor ini bukan persentase akurasi.
+                    Tangkapan pertama yang terverifikasi · skala 0–1.
                   </p>
                 </div>
                 <Separator />

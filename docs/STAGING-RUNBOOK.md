@@ -63,7 +63,7 @@ Uji dua klien berbeda melalui proxy staging: keduanya harus memiliki kuota terpi
 
 1. Di Siswa, pastikan siswa aktif dan ditempatkan di kelas/tahun ajaran yang aktif. Di Wajah siswa, pilih siswa dan ambil 3–5 foto kamera yang berbeda hingga pendaftaran tersimpan.
 2. Buat jadwal sesuai jam sekolah dan buka sesi pada tanggal yang benar. Jam sekarang harus berada di antara mulai dan tutup sesi. Sesi yang sudah ditutup tidak dibuka ulang atau diubah riwayatnya; buat sesi/jadwal yang sesuai untuk absensi berikutnya. Pastikan nama siswa ada pada daftar siswa sesi.
-3. Di Perangkat absensi, gunakan perangkat aktif dan buat kode penghubung. Buka `/absensi`, pilih sesi terbuka, lalu masukkan kode sekali pakai. Pairing mengakhiri sesi akun operator pada browser itu agar kiosk tidak memiliki akses panel.
+3. Di Perangkat absensi, gunakan perangkat aktif dan buat kode penghubung. Buka `/absensi`, pilih sesi terbuka, lalu masukkan kode sekali pakai. Pairing mengakhiri sesi akun operator pada browser itu agar kiosk tidak memiliki akses panel. Pemasangan tersimpan selama 30 hari sejak penggunaan terakhir dan mengikuti sesi aktif kelas yang sama; tanpa sesi, perangkat menunggu tanpa meminta kode baru. Lihat [alur koneksi perangkat](DEVICE-CONNECTION.md). Terapkan migrasi `00016_persistent_devices.sql` sebelum API baru; koneksi lama perlu dipasangkan ulang satu kali.
 4. Pilih Fantech Luminous C30 pada pilihan Kamera, lalu Aktifkan kamera dan izinkan kamera pada browser. Pilihan kamera dipakai bersama oleh pendaftaran dan absensi. Hentikan kamera sebelum memilih perangkat lain. Audio tidak diminta.
 5. Hadapkan satu wajah lurus ke lensa dengan cahaya cukup dan tahan posisi beberapa frame. Nama hanya muncul setelah server menyimpan/memastikan kehadiran. Pemindaian ulang mempertahankan satu catatan dan waktu hadir pertama; terlambat mengikuti batas sesi.
 6. Periksa catatan di detail sesi dan Laporan kehadiran. Saat sesi/perangkat tidak aktif, orang tidak dikenal, gambar tidak layak atau pemeriksaan wajah hidup gagal, tidak ada kehadiran yang ditulis. Gunakan pencatatan manual bila diperlukan.
@@ -156,3 +156,26 @@ Playwright memerlukan `npx playwright install --with-deps chromium --only-shell`
 - Gunakan image/revisi yang sama saat tes, deployment dan rollback. Rollback aplikasi tidak otomatis membalik migrasi; utamakan migrasi kompatibel dan restore yang sudah diuji bila diperlukan.
 
 Aktivasi kamera, akurasi nyata, uji beban, TLS/proxy dan restore host Coolify masih merupakan pemeriksaan lingkungan, bukan hasil yang dapat dinyatakan dari tes sintetis lokal.
+
+
+## Perbaikan audit keamanan dan UI — 15 Oktober 2026
+
+Migrasi `00013_capture_freshness.sql` wajib diterapkan sebelum API/web baru dipakai. Runtime role perlu DML pada `kiosk_capture_challenges`; tabel ini tidak menyimpan foto, hanya izin pengambilan dan fingerprint. Worker menghapus data yang berakhir lebih dari 24 jam lalu. Perangkat lama dipasangkan ulang bila izinnya dicabut; perubahan role/email/status akun, password sensitif, dan pencabutan penugasan mencabut credential perangkat terkait. Izin operator serta cakupan kelas diperiksa pada setiap pemakaian dan setelah inferensi. Masa berlaku credential operator dengan cakupan kelas dibatasi akhir penugasan saat pemasangan; pemberian penugasan baru tidak mengaktifkan credential lama.
+
+Klien kamera meminta POST `/api/v1/kiosk/capture-challenge`, mengambil gambar baru, kemudian memakai `event_id` balasan untuk recognize. Izin terikat sesi perangkat, berlaku sepuluh detik, dan sekali pakai. `CAPTURE_REPLAY`/`RECOGNITION_STALE` berarti ambil gambar baru; jangan mengirim ulang foto lama. Perubahan galeri selama inferensi membatalkan hasil. Inferensi berlangsung di luar transaksi yang mengunci sekolah.
+
+Proteksi ini menolak replay gambar identik dan metadata lama, tetapi browser/webcam biasa tidak memberikan bukti hardware bahwa foto berasal dari siswa yang sedang hadir. Foto yang dimodifikasi, rekaman video, kamera virtual, serta spoof fisik tetap memerlukan evaluasi independen dan pengawasan petugas. Threshold model tidak diubah oleh perbaikan keamanan ini.
+
+Web menetapkan CSP bernonce, larangan framing, nosniff, same-origin referrer, Permissions-Policy kamera milik origin sendiri, dan HSTS tanpa includeSubDomains. Zod memakai jitless untuk bekerja tanpa unsafe-eval. Style inline tetap diizinkan karena chart dan primitive menggunakannya. `NUXT_PUBLIC_API_BASE` menentukan origin API/WebSocket yang diizinkan; jangan gunakan wildcard. Saat staging, verifikasi header respons HTTPS aktual, jalur login, tema, laporan, WebSocket dan kamera; proxy tidak boleh menghapus atau menggandakan CSP yang bertentangan.
+
+Untuk beberapa replica API, pembatasan login per proses belum menjadi kuota bersama: pasang pembatasan di reverse proxy/shared limiter sebelum menaikkan replica. Uji dua klien dan header IP proxy. Tetap gunakan satu API replica sampai kontrol itu tersedia. Image OS scan, grant runtime DB, TLS, backup/restore dan UAT kamera dilakukan pada target staging menggunakan data dummy; hasil lokal tidak menggantikan pemeriksaan tersebut.
+
+## Kalender libur Indonesia — 16 Oktober 2026
+
+Terapkan migrasi 14 (`school_holidays`, `school_holiday_sync`) sebelum API baru. Runtime role memerlukan DML pada kedua tabel. Sumber tetap `https://indonesian-holidays.ahrulsyamil.com/holidays/{year}`; backend mengirim tahun saja, tanpa identitas sekolah/siswa. Sediakan outbound HTTPS ke sumber. UI dan absensi membaca cache database, bukan meminta sumber pada setiap pemindaian.
+
+Worker memperbarui tahun sekolah berjalan dan tahun berikutnya setiap 24 jam; tahun gagal/kosong dicoba kembali paling cepat setelah 1 jam. Tombol **Perbarui libur nasional** memperbarui tahun bulan yang sedang dilihat. Data harus valid dan tidak kosong; respons kosong (misalnya 2027 pada saat verifikasi) tidak membuktikan tahun bebas libur. Cache lama tetap berlaku. Tahun tanpa cache menahan pembuatan/pembukaan sesi otomatis; pengaturan sekolah eksplisit tetap dapat dipakai. Periksa peringatan kalender ketika mengganti tahun ajaran.
+
+Prioritas hari: pengaturan sekolah → libur nasional/cuti bersama → weekday jadwal kelas. Dialog **Tambah libur sekolah** mendukung rentang inklusif maksimal 366 hari untuk libur semester dan hari belajar pengganti. **Gunakan kalender otomatis** menghapus override satu tanggal. Perubahan tidak membuka/menutup ulang sesi yang sudah berjalan atau menulis ulang kehadiran. Sesi terjadwal yang menjadi tidak efektif tidak dibuka; setelah batas tutup dibatalkan tanpa menghasilkan alfa.
+
+Pengelolaan kalender berlaku seluruh sekolah dan memerlukan `academics.write` dengan scope `school`. Cache diperbarui setelah pemeriksaan ulang izin petugas, dan audit tersimpan dalam transaksi yang sama. Provider lambat tidak menahan kunci sekolah. Sinkronisasi manual tidak tersedia bersamaan dengan sinkronisasi lain pada instance API yang sama; batas satu replica pada runbook tetap berlaku.

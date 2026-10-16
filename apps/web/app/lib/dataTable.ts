@@ -13,6 +13,7 @@ export interface TableAction {
     | 'edit'
     | 'face'
     | 'revoke'
+    | 'delete'
     | 'pair'
     | 'approve'
     | 'reject'

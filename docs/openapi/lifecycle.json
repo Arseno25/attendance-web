@@ -293,7 +293,7 @@
     "/api/v1/kiosk/session": {
       "post": {
         "summary": "Pair kiosk to an open session",
-        "description": "Operator devices.health user login + Origin/CSRF; consumes token once, ten-minute HttpOnly device cookie. Re-pairing device invalidates previous cookie. User session revoked atomically and user cookie cleared; device cookie remains. No identity in response. Response includes class_name, timezone, server_time and snapshotted starts_at/late_after/checkout_at/closes_at for scheduled automatic departure.",
+        "description": "Operator devices.health login + Origin/CSRF. Consumes a five-minute one-use pairing code and issues an HttpOnly device cookie, Secure on HTTPS. The device remembers the selected class and follows its unique currently open session. Cookie lifetime is 30 days of inactivity, renewed by heartbeat, capped by the original operator class assignment end. Re-pairing invalidates the previous credential; pairing atomically ends operator login. Returns device/class/session labels, session_id, session_ready=true, connection_status=ready, schedule times, server_time, expires_at and device csrf_token.",
         "security": [
           {
             "UserCookie": []
@@ -363,7 +363,7 @@
     "/api/v1/kiosk/me": {
       "get": {
         "summary": "Read active kiosk session",
-        "description": "Device cookie; rechecks school/device/attendance session active and unexpired. Returns device/session/class labels, timezone, starts_at, late_after, checkout_at, closes_at, server_time, expires_at, device csrf_token and current recognition readiness.",
+        "description": "Device cookie; rechecks school, device and original operator authority. Resolves the unique currently open session within the paired class. Returns session_ready and connection_status (ready, waiting_session, multiple_sessions). Session fields are null while waiting; device/class identity and CSRF remain available. No attendance may be captured while waiting.",
         "security": [
           {
             "DeviceCookie": []
@@ -397,7 +397,7 @@
     "/api/v1/kiosk/heartbeat": {
       "post": {
         "summary": "Refresh device heartbeat",
-        "description": "Device cookie + exact Origin + device CSRF; does not extend session expiry.",
+        "description": "Device cookie + exact Origin + device CSRF. Rechecks authority, resolves the next session in the same class and updates last_seen_at. Renews cookie and credential expiry to 30 days from now, never beyond the original class assignment end. Returns the same ready/waiting metadata as kiosk/me. A closed attendance session does not invalidate the device connection.",
         "security": [
           {
             "DeviceCookie": []
@@ -441,7 +441,7 @@
     "/api/v1/kiosk/recognitions": {
       "post": {
         "summary": "Recognize and record scheduled arrival/departure",
-        "description": "Alias of /api/v1/kiosk/recognize; see biometrics.json. Fresh stable identity and liveness required. Departure follows the session checkout_at snapshot; no frame persistence.",
+        "description": "Alias of POST /api/v1/kiosk/recognize. event_id must come from /api/v1/kiosk/capture-challenge, be unused, device-bound and unexpired. Encoded image fingerprints are retained for 24 hours; duplicate images, expired or reused permits return 409 CAPTURE_REPLAY. Take a new image and request another permit; never retry stale image data. The API revalidates operator access and gallery revision after inference. 409 RECOGNITION_STALE means recapture after gallery/session changes.",
         "security": [
           {
             "DeviceCookie": []
@@ -741,6 +741,64 @@
             "schema": {
               "type": "string",
               "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/kiosk/capture-challenge": {
+      "post": {
+        "summary": "Issue a single-use device-bound capture event valid for ten seconds",
+        "description": "Requires an active device cookie and matching X-CSRF-Token/Origin. Request before capturing each fresh image. Creating a permit replaces unused permits for that device session.",
+        "responses": {
+          "201": {
+            "description": "data.event_id (UUID) and data.expires_at (date-time)"
+          },
+          "401": {
+            "description": "Device, session, operator authority or assigned class is no longer valid"
+          },
+          "403": {
+            "description": "Origin or CSRF rejected"
+          }
+        }
+      }
+    },
+    "/api/v1/kiosk/recognize": {
+      "post": {
+        "summary": "Recognize and record scheduled arrival/departure",
+        "description": "Alias of POST /api/v1/kiosk/recognize. event_id must come from /api/v1/kiosk/capture-challenge, be unused, device-bound and unexpired. Encoded image fingerprints are retained for 24 hours; duplicate images, expired or reused permits return 409 CAPTURE_REPLAY. Take a new image and request another permit; never retry stale image data. The API revalidates operator access and gallery revision after inference. 409 RECOGNITION_STALE means recapture after gallery/session changes.",
+        "security": [
+          {
+            "DeviceCookie": []
+          }
+        ],
+        "responses": {
+          "503": {
+            "description": "Service unavailable"
+          },
+          "400": {
+            "description": "Validation or malformed JSON"
+          },
+          "401": {
+            "description": "Session/device unauthenticated"
+          },
+          "403": {
+            "description": "Origin, CSRF or role/grant denied"
+          },
+          "404": {
+            "description": "Scoped reference not found"
+          },
+          "409": {
+            "description": "State, expiry, duplicate or hash conflict"
+          }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           }
         ]

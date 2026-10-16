@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useElementSize } from '@vueuse/core'
 import { VisAxis, VisGroupedBar, VisXYContainer } from '@unovis/vue'
 import {
   ChartContainer,
@@ -19,6 +20,11 @@ const chartConfig = {
 } satisfies ChartConfig
 const chartData = computed(() => props.days.map((day, index) => ({ ...day, index })))
 type Data = AttendanceDay & { index: number }
+const chartElement = ref<HTMLElement | null>(null)
+const { width: chartWidth } = useElementSize(chartElement)
+const xTicks = computed(() =>
+  chartData.value.filter((_, i) => chartWidth.value >= 480 || i % 2 === 0).map((day) => day.index),
+)
 const x = (day: Data) => day.index
 const y = [(day: Data) => day.present, (day: Data) => day.late, (day: Data) => day.not_recorded]
 const colors = Object.values(chartConfig).map((item) => item.color)
@@ -42,12 +48,16 @@ function dayLabel(index: number, full = false) {
 
 <template>
   <Card class="min-w-0">
-    <CardHeader>
+    <CardHeader
+      class="gap-3 has-data-[slot=card-action]:grid-cols-1 sm:has-data-[slot=card-action]:grid-cols-[1fr_auto]"
+    >
       <CardTitle>Kehadiran tujuh hari</CardTitle>
       <CardDescription>
         {{ days[0]?.date }} – {{ filters.to }} · jumlah siswa per sesi.
       </CardDescription>
-      <CardAction>
+      <CardAction
+        class="col-start-1 row-start-auto justify-self-end sm:col-start-2 sm:row-span-2 sm:row-start-1"
+      >
         <Button
           as-child
           variant="outline"
@@ -65,57 +75,62 @@ function dayLabel(index: number, full = false) {
       </CardAction>
     </CardHeader>
     <CardContent class="min-w-0">
-      <ClientOnly>
-        <ChartContainer
-          :config="chartConfig"
-          class="h-[320px] w-full aspect-auto"
-        >
-          <VisXYContainer
-            :data="chartData"
-            :y-domain="[0, maximum]"
-            role="img"
-            aria-label="Grafik batang kehadiran tujuh hari"
+      <div
+        ref="chartElement"
+        class="min-w-0"
+      >
+        <ClientOnly>
+          <ChartContainer
+            :config="chartConfig"
+            class="h-[320px] w-full aspect-auto"
           >
-            <VisGroupedBar
-              :x="x"
-              :y="y"
-              :color="colors"
-              :rounded-corners="4"
-              :bar-padding="0.15"
-              :group-padding="0.15"
-            />
-            <VisAxis
-              type="x"
-              :tick-line="false"
-              :domain-line="false"
-              :grid-line="false"
-              :tick-values="chartData.map((day) => day.index)"
-              :tick-format="(index: number) => dayLabel(index)"
-              :tick-text-width="40"
-            />
-            <VisAxis
-              type="y"
-              :tick-line="false"
-              :domain-line="false"
-              :tick-values="yTicks"
-              :tick-format="(value: number) => String(value)"
-            />
-            <ChartTooltip />
-            <ChartCrosshair
-              :x="x"
-              :y="y"
-              :template="
-                componentToString(chartConfig, ChartTooltipContent, {
-                  labelFormatter: (index) => dayLabel(Number(index), true),
-                })
-              "
-              color="#0000"
-            />
-          </VisXYContainer>
-          <ChartLegendContent class="flex-wrap" />
-        </ChartContainer>
-        <template #fallback><Skeleton class="h-[320px] w-full" /></template>
-      </ClientOnly>
+            <VisXYContainer
+              :data="chartData"
+              :y-domain="[0, maximum]"
+              role="img"
+              aria-label="Grafik batang kehadiran tujuh hari"
+            >
+              <VisGroupedBar
+                :x="x"
+                :y="y"
+                :color="colors"
+                :rounded-corners="4"
+                :bar-padding="0.15"
+                :group-padding="0.15"
+              />
+              <VisAxis
+                type="x"
+                :tick-line="false"
+                :domain-line="false"
+                :grid-line="false"
+                :tick-values="xTicks"
+                :tick-format="(index: number) => dayLabel(index)"
+                :tick-text-width="40"
+              />
+              <VisAxis
+                type="y"
+                :tick-line="false"
+                :domain-line="false"
+                :tick-values="yTicks"
+                :tick-format="(value: number) => String(value)"
+              />
+              <ChartTooltip />
+              <ChartCrosshair
+                :x="x"
+                :y="y"
+                :template="
+                  componentToString(chartConfig, ChartTooltipContent, {
+                    labelFormatter: (index) => dayLabel(Number(index), true),
+                  })
+                "
+                color="#0000"
+              />
+            </VisXYContainer>
+            <ChartLegendContent class="flex-wrap" />
+          </ChartContainer>
+          <template #fallback><Skeleton class="h-[320px] w-full" /></template>
+        </ClientOnly>
+      </div>
       <p class="sr-only">
         <template
           v-for="day in days"

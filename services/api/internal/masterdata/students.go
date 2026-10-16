@@ -182,6 +182,9 @@ func (s *Service) student(w http.ResponseWriter, r *http.Request) {
 	s.finish(w, r, sc, 200, entity, "students.updated", "student", map[string]any{"previous_status": oldStatus, "new_status": status})
 }
 func (s *Service) classBounds(r *http.Request, sc *scope, classID string) (map[string]any, error) {
+	if sc.classScoped && !sc.user.Can("students.write", s.schoolID, strings.ToLower(classID)) && !sc.user.Can("academics.write", s.schoolID, strings.ToLower(classID)) {
+		return nil, pgx.ErrNoRows
+	}
 	return one(r.Context(), sc.tx, `SELECT c.id::text AS id,c.academic_year_id::text AS academic_year_id,y.starts_on::timestamp AT TIME ZONE y.timezone AS starts_at,(y.ends_on+1)::timestamp AT TIME ZONE y.timezone AS ends_at FROM classes c JOIN academic_years y ON y.id=c.academic_year_id AND y.school_id=c.school_id WHERE c.school_id=$1 AND c.id=$2 AND c.is_active AND y.is_active`, s.schoolID, classID)
 }
 func (s *Service) insertPlacement(r *http.Request, sc *scope, studentID, classID, effective, reason string) (map[string]any, error) {
@@ -234,7 +237,7 @@ func (s *Service) placement(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var active bool
-	err := sc.tx.QueryRow(r.Context(), `SELECT status='active' FROM students WHERE school_id=$1 AND id=$2 FOR UPDATE`, s.schoolID, id).Scan(&active)
+	err := sc.tx.QueryRow(r.Context(), `SELECT st.status='active' FROM students st WHERE st.school_id=$1 AND st.id=$4 AND `+studentScope+` FOR UPDATE`, s.schoolID, sc.classScoped, sc.classes, id).Scan(&active)
 	if err != nil {
 		dbError(w, err)
 		return

@@ -52,6 +52,14 @@ test('student writer sees its class and can create a student without academic wr
   await dialog.getByRole('button', { name: /Simpan|Tambah siswa/ }).click()
   await expect(dialog).toHaveCount(0)
   await expect(page.getByRole('cell', { name: /^Browser Created Student(?:\s|$)/ })).toBeVisible()
+  const created = page
+    .getByRole('row')
+    .filter({ has: page.getByRole('cell', { name: /^Browser Created Student(?:\s|$)/ }) })
+  await expect(created.getByRole('link')).toHaveCount(1)
+  await created.getByRole('link', { name: 'Detail: Browser Created Student', exact: true }).click()
+  await expect(
+    page.getByRole('heading', { name: 'Browser Created Student', exact: true }),
+  ).toBeVisible()
 })
 
 test('report-only custom role can view and download its class report', async ({ page }) => {
@@ -101,7 +109,9 @@ test('operator records attendance and checkout, preserving them after reload and
   const student = page
     .getByRole('row')
     .filter({ has: page.getByRole('cell', { name: /^Browser Attendance Student/ }) })
-  await expect(student.getByText('Belum tercatat', { exact: true })).toBeVisible()
+  await expect(
+    student.getByRole('cell').nth(1).getByText('Belum tercatat', { exact: true }),
+  ).toBeVisible()
   await student
     .getByRole('button', { name: 'Catat absensi: Browser Attendance Student', exact: true })
     .click()
@@ -130,10 +140,31 @@ test('operator records attendance and checkout, preserving them after reload and
   expect((await checkout).status()).toBe(201)
   await expect(dialog).toHaveCount(0)
   await page.reload()
-  await expect(student.getByRole('cell').filter({ hasText: 'Pulang:' })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Jam masuk', exact: true })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Jam pulang', exact: true })).toBeVisible()
+  for (const column of [2, 3])
+    await expect(student.getByRole('cell').nth(column).locator('time')).toContainText(
+      /\d{2}\.\d{2}\.\d{2}\s+WIB/,
+    )
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({ width, height: 900 })
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+      ),
+    ).toBe(true)
+  }
+  await page.screenshot({
+    path: '../../.tools/face-reference/session-times-test.png',
+    fullPage: true,
+    animations: 'disabled',
+  })
   await page.goto('/admin/reports')
   const report = page
     .getByRole('row')
     .filter({ has: page.getByRole('cell', { name: /^Browser Attendance Student/ }) })
   await expect(report.getByText(/^(Hadir|Terlambat)$/)).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Jam masuk', exact: true })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Jam pulang', exact: true })).toBeVisible()
+  await expect(report.locator('time')).toHaveCount(2)
 })

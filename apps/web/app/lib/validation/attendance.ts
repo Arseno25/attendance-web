@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from './zod.ts'
 import {
   byteLength,
   date,
@@ -72,6 +72,19 @@ export const newScheduleSchema = scheduleFields
   .superRefine(scheduleOrder)
 export const calendarDateSchema = z.object({ date })
 export const calendarSchema = calendarDateSchema.extend({ is_school_day: z.boolean(), reason })
+export const calendarRangeSchema = z
+  .object({ from: date, to: date, is_school_day: z.boolean(), reason })
+  .superRefine((value, ctx) => {
+    if (
+      value.to < value.from ||
+      Date.parse(`${value.to}T00:00:00Z`) - Date.parse(`${value.from}T00:00:00Z`) > 365 * 86400000
+    )
+      ctx.addIssue({
+        code: 'custom',
+        path: ['to'],
+        message: 'Pilih rentang berurutan maksimal 366 hari.',
+      })
+  })
 export const sessionSchema = z.object({ schedule_id: uuid, date })
 export const sessionFilterSchema = z.object({ date: optionalDate })
 export const rosterFilterSchema = z.object({

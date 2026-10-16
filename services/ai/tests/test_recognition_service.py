@@ -67,6 +67,7 @@ def test_http_recognition_accepts_live_stable_identity_without_offline_report(
         statuses = []
         for i in range(5):
             body["event_id"] = str(uuid4())
+            body["image"] = image(i + 1)
             response = client.post(
                 "/internal/v1/recognize",
                 json=body,
@@ -94,6 +95,7 @@ def test_http_recognition_accepts_live_stable_identity_without_offline_report(
             "CONFIRMED",
         ]
         live = False
+        body["image"] = image(6)
         recheck = client.post(
             "/internal/v1/recognize",
             json=body,
@@ -123,17 +125,17 @@ def test_service_resets_on_gallery_change_and_separates_devices(monkeypatch):
         "track_id": "track",
         "gallery": gallery,
     }
-    for _ in range(3):
-        result = service.process(image(1), **args)
+    for i in range(3):
+        result = service.process(image(i + 1), **args)
     assert result.status == "CONFIRMED"
     assert (
         service.process(image(1), **dict(args, device_id="two")).status == "PROCESSING"
     )
-    assert service.process(image(1), **dict(args, gallery=[])).status == "UNKNOWN"
+    assert service.process(image(4), **dict(args, gallery=[])).status == "UNKNOWN"
     bad = [dict(gallery[0], ciphertext="invalid")]
     with pytest.raises((ValueError, InvalidTag)):
-        service.process(image(1), **dict(args, gallery=bad))
-    assert service.process(image(1), **args).status == "PROCESSING"
+        service.process(image(5), **dict(args, gallery=bad))
+    assert service.process(image(6), **args).status == "PROCESSING"
 
 
 def test_engine_pad_failure_clears_candidate_and_box_is_normalized(monkeypatch):
@@ -153,8 +155,8 @@ def test_engine_pad_failure_clears_candidate_and_box_is_normalized(monkeypatch):
         "track_id": "track",
         "gallery": [template(cipher, "school", "student")],
     }
-    for _ in range(3):
-        result = service.process(image(1), **args)
+    for i in range(3):
+        result = service.process(image(i + 1), **args)
         assert result.student_id is None and result.liveness_passed is False
         assert result.status == "UNKNOWN"
         assert all(0 <= n <= 1 for n in result.faces[0]["box"].values())
@@ -219,6 +221,7 @@ def test_approved_route_still_requires_live_multiframe_confirmation(monkeypatch,
     }
     with TestClient(main.app) as client:
         for i in range(5):
+            body["image"] = image(i + 1)
             response = client.post(
                 "/internal/v1/recognize",
                 json=body,
@@ -259,3 +262,25 @@ def test_status_requires_ready_liveness_but_does_not_require_offline_report(
     assert module.status()["evaluation"]["status"] == "not_evaluated"
     service.liveness_hook = None
     assert module.status()["recognition_enabled"] is False
+
+
+def test_replayed_pixels_cannot_accumulate_identity_even_with_new_track(monkeypatch):
+    from app.recognition import RecognitionService
+
+    service = RecognitionService(
+        fake_pipeline(monkeypatch),
+        TemplateCipher(b"k" * 32, "test-key"),
+        EngineConfig(threshold=0.8, margin=0.1, min_interval=0),
+        liveness_hook=lambda *_: True,
+    )
+    args = {
+        "school_id": "school",
+        "session_id": "session",
+        "device_id": "device",
+        "track_id": "one",
+        "gallery": [],
+    }
+    service.process(image(77), **args)
+    with pytest.raises(ImageError) as error:
+        service.process(image(77), **dict(args, track_id="two"))
+    assert error.value.code == "CAPTURE_REPLAY"

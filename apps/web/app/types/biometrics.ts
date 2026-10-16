@@ -19,6 +19,7 @@ export interface FaceStatus {
   block_reason: string | null
   template: null | {
     id: string
+    reference_photo_version: string | null
     created_at: string
     model_sha256: string
     frame_count: number
@@ -31,6 +32,7 @@ export interface FaceStatus {
   }
 }
 export interface Recognition {
+  reference_photo?: string
   identity_continuous?: boolean
   decision: 'no_face' | 'unknown' | 'inconclusive' | 'accepted' | 'verification_required'
   recognition_enabled: boolean

@@ -159,27 +159,9 @@ defineExpose({ stop })
 
 <template>
   <div class="space-y-4">
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <Badge :variant="quality === 'ready' ? 'success' : 'secondary'">
-        <Check v-if="quality === 'ready'" />
-        {{
-          checking ? 'Memeriksa foto…' : quality === 'ready' ? 'Kualitas siap' : 'Pemeriksaan wajah'
-        }}
-      </Badge>
-      <Button
-        type="button"
-        variant="outline"
-        :disabled="!enabled || busy || starting"
-        @click="active ? stop() : camera?.start()"
-      >
-        <Spinner v-if="starting" />
-        <CameraOff v-else-if="active" />
-        <Camera v-else />
-        {{ active ? 'Hentikan kamera' : 'Aktifkan kamera' }}
-      </Button>
-    </div>
     <FaceCamera
       ref="camera"
+      class="mx-auto w-full max-w-md"
       :faces="faces"
       guide
       @active="changed"
@@ -193,22 +175,72 @@ defineExpose({ stop })
       <AlertDescription>{{ error }}</AlertDescription>
     </Alert>
     <p
+      v-if="active"
       role="status"
       aria-live="polite"
       class="text-sm text-muted-foreground"
     >
       {{ message }}
     </p>
-    <div class="space-y-2">
-      <div class="flex items-center justify-between text-sm">
-        <span>Foto pendaftaran</span>
-        <span class="tabular-nums">{{ frames.length }} / 5 · minimal 3</span>
+    <TooltipProvider :delay-duration="150">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <span class="text-sm tabular-nums text-muted-foreground">
+          {{ frames.length }} / 5 foto · minimal 3
+        </span>
+        <div class="ml-auto flex items-center gap-2">
+          <Tooltip v-if="frames.length">
+            <TooltipTrigger as-child>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                :disabled="busy"
+                aria-label="Ulangi foto"
+                @click="reset"
+              >
+                <RefreshCw />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Ulangi foto</TooltipContent>
+          </Tooltip>
+          <Tooltip v-if="active">
+            <TooltipTrigger as-child>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                :disabled="busy"
+                aria-label="Hentikan kamera"
+                @click="stop"
+              >
+                <CameraOff />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Hentikan kamera</TooltipContent>
+          </Tooltip>
+          <Button
+            v-if="!active"
+            type="button"
+            :disabled="!enabled || busy || starting"
+            @click="camera?.start()"
+          >
+            <Spinner v-if="starting" />
+            <Camera v-else />
+            Aktifkan kamera
+          </Button>
+          <Button
+            v-else
+            type="button"
+            :disabled="!canCapture"
+            @click="capture"
+          >
+            <Check v-if="frames.length === 5" />
+            <Camera v-else />
+            {{ frames.length === 5 ? 'Foto lengkap' : 'Ambil foto' }}
+          </Button>
+        </div>
       </div>
-      <Progress
-        :model-value="frames.length * 20"
-        aria-label="Progres foto pendaftaran"
-      />
-    </div>
+    </TooltipProvider>
     <div
       class="grid grid-cols-5 gap-2"
       aria-label="Foto sementara"
@@ -227,28 +259,10 @@ defineExpose({ stop })
         <span v-else>{{ index }}</span>
       </div>
     </div>
-    <p class="text-sm text-muted-foreground">
-      Hadap depan, lalu ubah posisi kepala sedikit untuk foto berikutnya. Pastikan hanya satu wajah
-      terlihat jelas. Semua foto harus menampilkan siswa yang sama.
+    <p class="text-xs leading-relaxed text-muted-foreground">
+      Foto pertama menjadi referensi. Hadap depan, lalu miringkan kepala sedikit pada foto
+      berikutnya. Semua foto harus menampilkan siswa yang sama. Foto lainnya hanya dipakai saat
+      pendaftaran.
     </p>
-    <div class="flex flex-wrap justify-end gap-2">
-      <Button
-        type="button"
-        variant="outline"
-        :disabled="busy || !frames.length"
-        @click="reset"
-      >
-        <RefreshCw />
-        Ulangi foto
-      </Button>
-      <Button
-        type="button"
-        :disabled="!canCapture"
-        @click="capture"
-      >
-        <Camera />
-        Ambil foto
-      </Button>
-    </div>
   </div>
 </template>

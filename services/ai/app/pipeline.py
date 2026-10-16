@@ -14,6 +14,7 @@ import numpy as np
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from app.models import MANIFEST, verify_model
+from app.reference_photo import encrypt_reference_photo
 
 EVALUATION = {
     "status": "not_evaluated",
@@ -288,6 +289,7 @@ class Pipeline:
         if not 3 <= len(frames) <= 5:
             raise ImageError("FRAME_COUNT", "Ambil 3–5 foto dari kamera.")
         vectors, seen = [], set()
+        reference = None
         for value in frames:
             frame, digest = decode_image(value)
             if digest in seen:
@@ -299,6 +301,8 @@ class Pipeline:
                     "FACE_COUNT", "Pastikan setiap foto hanya menampilkan satu wajah."
                 )
             self.check_quality(frame, faces[0])
+            if reference is None:
+                reference = (frame, faces[0])
             vector = self.feature(frame, faces[0])
             # shortcut: 0.6 is a provisional consistency filter, recalibrate with permitted camera data.
             if any(float(vector @ previous) < 0.6 for previous in vectors):
@@ -330,7 +334,14 @@ class Pipeline:
             consent_id,
             self.model_sha256,
         )
-        return dict(result, frame_count=len(vectors), status="provisional")
+        return dict(
+            result,
+            frame_count=len(vectors),
+            status="provisional",
+            reference_photo=encrypt_reference_photo(
+                *reference, cipher, school_id, student_id
+            ),
+        )
 
 
 @lru_cache(maxsize=1)

@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from './zod.ts'
 import { byteLength, requiredText } from './shared.ts'
 
 const email = z

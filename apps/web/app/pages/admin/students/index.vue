@@ -250,12 +250,7 @@ await load()
           :loading="loading"
         >
           <template #cell-nama-siswa="{ item: student }">
-            <NuxtLink
-              :to="`/admin/students/${student.id}`"
-              class="hover:underline"
-            >
-              {{ student.full_name }}
-            </NuxtLink>
+            {{ student.full_name }}
           </template>
           <template #cell-nis="{ item: student }">{{ student.nis }}</template>
           <template #cell-kelas-terakhir="{ item: student }">

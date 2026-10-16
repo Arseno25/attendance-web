@@ -14,7 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const templateMetadata = `id::text AS id,created_at,model_sha256,frame_count,status`
+const templateMetadata = `id::text AS id,created_at,model_sha256,frame_count,status,CASE WHEN reference_ciphertext IS NOT NULL THEN id::text END AS reference_photo_version`
 
 func (s *Service) biometricRead(w http.ResponseWriter, r *http.Request) (*scope, bool) {
 	tx, user, ok := s.auth.BeginAuthorized(w, r, "biometrics.enroll", false, "biometrics.revoke")
@@ -38,7 +38,7 @@ func (s *Service) biometricStudents(w http.ResponseWriter, r *http.Request) {
 		invalid(w, "Filter siswa tidak valid")
 		return
 	}
-	s.list(w, r, sc, `SELECT st.id::text AS id,st.full_name,st.nis,st.status,current_class.class_name FROM students st LEFT JOIN LATERAL(SELECT c.name AS class_name FROM student_enrollments e JOIN classes c ON c.school_id=e.school_id AND c.id=e.class_id WHERE e.school_id=st.school_id AND e.student_id=st.id AND e.joined_at<=statement_timestamp() AND e.left_at>statement_timestamp() ORDER BY e.joined_at DESC LIMIT 1) current_class ON true WHERE st.school_id=$1 AND `+studentScope+` AND (st.nis ILIKE $4 OR st.full_name ILIKE $4)`, s.schoolID, sc.classScoped, sc.classes, "%"+search+"%")
+	s.list(w, r, sc, `SELECT st.id::text AS id,st.full_name,st.nis,st.status,current_class.class_name,reference.reference_photo_version FROM students st LEFT JOIN LATERAL(SELECT CASE WHEN reference_ciphertext IS NOT NULL THEN id::text END AS reference_photo_version FROM face_templates WHERE school_id=st.school_id AND student_id=st.id) reference ON true LEFT JOIN LATERAL(SELECT c.name AS class_name FROM student_enrollments e JOIN classes c ON c.school_id=e.school_id AND c.id=e.class_id WHERE e.school_id=st.school_id AND e.student_id=st.id AND e.joined_at<=statement_timestamp() AND e.left_at>statement_timestamp() ORDER BY e.joined_at DESC LIMIT 1) current_class ON true WHERE st.school_id=$1 AND `+studentScope+` AND (st.nis ILIKE $4 OR st.full_name ILIKE $4)`, s.schoolID, sc.classScoped, sc.classes, "%"+search+"%")
 }
 
 func (s *Service) faceStatus(w http.ResponseWriter, r *http.Request) {
@@ -59,7 +59,7 @@ func (s *Service) faceStatus(w http.ResponseWriter, r *http.Request) {
 		dbError(w, err)
 		return
 	}
-	metadata, err := one(r.Context(), sc.tx, `SELECT f.id::text AS id,f.created_at,f.model_sha256,f.frame_count,f.status FROM face_templates f JOIN students st ON st.school_id=f.school_id AND st.id=f.student_id WHERE f.school_id=$1 AND f.student_id=$2 AND st.status='active'`, s.schoolID, id)
+	metadata, err := one(r.Context(), sc.tx, `SELECT f.id::text AS id,f.created_at,f.model_sha256,f.frame_count,f.status,CASE WHEN f.reference_ciphertext IS NOT NULL THEN f.id::text END AS reference_photo_version FROM face_templates f JOIN students st ON st.school_id=f.school_id AND st.id=f.student_id WHERE f.school_id=$1 AND f.student_id=$2 AND st.status='active'`, s.schoolID, id)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		dbError(w, err)
 		return
@@ -125,10 +125,20 @@ func (s *Service) enrollFace(w http.ResponseWriter, r *http.Request) {
 		httpresponse.Error(w, 503, "AI_INVALID_RESPONSE", "Pendaftaran wajah belum dapat disimpan. Coba lagi nanti.")
 		return
 	}
+	if result.ReferencePhoto == nil || result.ReferencePhoto.KeyID != result.KeyID {
+		httpresponse.Error(w, 503, "AI_INVALID_RESPONSE", "Foto pendaftaran belum dapat disimpan. Coba lagi nanti.")
+		return
+	}
+	photoCipher, photoErr := base64.StdEncoding.Strict().DecodeString(result.ReferencePhoto.Ciphertext)
+	photoNonce, photoNonceErr := base64.StdEncoding.Strict().DecodeString(result.ReferencePhoto.Nonce)
+	if photoErr != nil || photoNonceErr != nil || len(photoCipher) < 17 || len(photoCipher) > 65552 || len(photoNonce) != 12 {
+		httpresponse.Error(w, 503, "AI_INVALID_RESPONSE", "Foto pendaftaran belum dapat disimpan. Coba lagi nanti.")
+		return
+	}
 	_, err = sc.tx.Exec(r.Context(), `DELETE FROM face_templates WHERE school_id=$1 AND student_id=$2`, s.schoolID, id)
 	var metadata map[string]any
 	if err == nil {
-		metadata, err = one(r.Context(), sc.tx, `INSERT INTO face_templates(school_id,student_id,consent_id,ciphertext,nonce,key_id,model_sha256,frame_count,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING `+templateMetadata, s.schoolID, id, nil, ciphertext, nonce, result.KeyID, result.ModelSHA, result.FrameCount, sc.user.ID)
+		metadata, err = one(r.Context(), sc.tx, `INSERT INTO face_templates(school_id,student_id,consent_id,ciphertext,nonce,key_id,model_sha256,frame_count,created_by,reference_ciphertext,reference_nonce) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING `+templateMetadata, s.schoolID, id, nil, ciphertext, nonce, result.KeyID, result.ModelSHA, result.FrameCount, sc.user.ID, photoCipher, photoNonce)
 	}
 	if err != nil {
 		dbError(w, err)

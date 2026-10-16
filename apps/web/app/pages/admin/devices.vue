@@ -100,7 +100,7 @@ function openRevocation(item: Device) {
       description="Hubungkan perangkat untuk absensi dan lihat status koneksinya."
     >
       <template #actions>
-        <div class="flex gap-2">
+        <div class="flex min-w-0 max-w-full flex-wrap justify-end gap-2">
           <Button
             as-child
             variant="outline"
@@ -131,8 +131,8 @@ function openRevocation(item: Device) {
       <CardHeader>
         <CardTitle>Perangkat terdaftar</CardTitle>
         <CardDescription>
-          Kode penghubung berlaku sekali selama 5 menit. Perangkat perlu dihubungkan kembali setelah
-          10 menit.
+          Pasangkan sekali pada browser perangkat. Sesi berikutnya untuk kelas yang sama akan
+          terhubung otomatis. Kode penghubung berlaku 5 menit dan hanya untuk pemasangan awal.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -389,7 +389,8 @@ function openRevocation(item: Device) {
           <DialogTitle>Kode penghubung sekali pakai</DialogTitle>
           <DialogDescription>
             Masukkan kode ini di halaman absensi pada perangkat yang ingin dihubungkan. Kode hanya
-            dapat digunakan sekali.
+            dapat digunakan sekali. Gunakan browser yang sama setiap hari agar koneksi tetap
+            tersimpan.
           </DialogDescription>
         </DialogHeader>
         <Field>

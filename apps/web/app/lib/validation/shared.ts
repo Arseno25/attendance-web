@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from './zod.ts'
 
 export const byteLength = (value: string) => new TextEncoder().encode(value).length
 export const requiredText = (label: string, max: number) =>

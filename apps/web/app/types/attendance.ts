@@ -63,6 +63,8 @@ export interface CalendarDay {
   is_school_day: boolean | null
   reason: string
   is_override: boolean
+  source: 'school' | 'national_holiday' | 'joint_leave' | 'schedule'
+  holiday_name: string
 }
 export const attendanceLabels: Record<string, string> = {
   not_recorded: 'Belum tercatat',
@@ -83,4 +85,14 @@ export const correctionLabels: Record<string, string> = {
   pending: 'Menunggu',
   approved: 'Disetujui',
   rejected: 'Ditolak',
+}
+
+export interface SchoolCalendarMonth {
+  days: CalendarDay[]
+  sync: {
+    year: number
+    status: 'ready' | 'unavailable' | 'not_synced'
+    synced_at: string | null
+    attempted_at: string | null
+  }
 }

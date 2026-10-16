@@ -214,12 +214,12 @@ defineExpose({ start, stop, capture })
         >
           <Badge
             :variant="face.tone ?? (face.accepted ? 'success' : 'warning')"
-            class="absolute left-0 top-0 max-w-full truncate rounded-sm"
+            class="absolute left-0 top-0 max-w-full rounded-sm"
           >
-            {{ face.label }}
+            <span class="min-w-0 truncate">{{ face.label }}</span>
             <span
               v-if="face.similarity !== undefined"
-              class="ml-1 tabular-nums"
+              class="shrink-0 tabular-nums"
             >
               ·
               {{

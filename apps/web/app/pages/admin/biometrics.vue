@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { RefreshCw } from '@lucide/vue'
 import { searchSchema } from '~/lib/validation/master'
 import { statusVariant } from '~/lib/status'
 import { statusLabels, type Student } from '~/types/master'
@@ -7,7 +6,11 @@ import type { Result } from '~/types/auth'
 
 definePageMeta({ layout: 'admin', middleware: ['auth', 'biometrics'] })
 const request = useApi()
-const students = ref<Pick<Student, 'id' | 'full_name' | 'nis' | 'status' | 'class_name'>[]>([])
+const students = ref<
+  (Pick<Student, 'id' | 'full_name' | 'nis' | 'status' | 'class_name'> & {
+    reference_photo_version: string | null
+  })[]
+>([])
 const selected = ref<(typeof students.value)[number] | null>(null)
 const page = ref(1)
 const total = ref(0)
@@ -51,18 +54,7 @@ await load()
     <PageHeader
       title="Wajah siswa"
       description="Cari siswa, buka modal wajah, lalu ambil 3–5 foto kamera untuk pendaftaran."
-    >
-      <template #actions>
-        <Button
-          variant="outline"
-          :disabled="loading"
-          @click="load"
-        >
-          <RefreshCw :class="loading ? 'animate-spin' : ''" />
-          Muat ulang
-        </Button>
-      </template>
-    </PageHeader>
+    />
     <Alert
       v-if="error"
       variant="destructive"
@@ -115,6 +107,7 @@ await load()
         <DataTable
           :data="students ?? []"
           :columns="[
+            { id: 'foto', label: 'Foto', headClass: 'w-20' },
             { id: 'nis', label: 'NIS' },
             { id: 'nama', label: 'Nama', cellClass: 'font-medium' },
             { id: 'kelas', label: 'Kelas' },
@@ -130,6 +123,13 @@ await load()
           row-key="id"
           :loading="loading"
         >
+          <template #cell-foto="{ item: student }">
+            <StudentFacePhoto
+              :student-id="student.id"
+              :revision="student.reference_photo_version"
+              :name="student.full_name"
+            />
+          </template>
           <template #cell-nis="{ item: student }">{{ student.nis }}</template>
           <template #cell-nama="{ item: student }">{{ student.full_name }}</template>
           <template #cell-kelas="{ item: student }">
@@ -175,7 +175,10 @@ await load()
       :student-name="selected.full_name"
       @update:open="
         (value) => {
-          if (!value) selected = null
+          if (!value) {
+            selected = null
+            void load()
+          }
         }
       "
     />

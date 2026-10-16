@@ -13,7 +13,7 @@ test('appearance accepts only supported persisted preferences',async()=>{
  const script=compileScript(descriptor,{id:'appearance-test'}),directory=resolve('.tools/appearance-tests')
  mkdirSync(directory,{recursive:true});symlinkSync(resolve('apps/web/node_modules'),directory+'/node_modules','dir')
  writeFileSync(directory+'/package.json',JSON.stringify({type:'module'}))
- const filename=directory+'/appearance.ts';writeFileSync(filename,script.content)
+ const filename=directory+'/appearance.ts';writeFileSync(filename,script.content.replaceAll('~/lib/validation/zod',pathToFileURL(resolve('apps/web/app/lib/validation/zod.ts')).href))
  try{
   const component=(await import(pathToFileURL(filename).href)).default
   const page=component.setup({}, {expose(){}})

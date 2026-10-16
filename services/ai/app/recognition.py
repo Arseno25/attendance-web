@@ -9,7 +9,7 @@ from functools import lru_cache
 
 from app.approval import load_approval
 from app.face_engine import EngineConfig, FaceRecognitionEngine
-from app.pipeline import decode_image, get_cipher, get_pipeline
+from app.pipeline import ImageError, decode_image, get_cipher, get_pipeline
 
 
 class RecognitionService:
@@ -20,6 +20,7 @@ class RecognitionService:
         self.liveness_hook = liveness_hook
         self.evaluation = evaluation
         self._contexts = OrderedDict()
+        self._frames = OrderedDict()
         self._lock = threading.Lock()
 
     def process(self, image, *, school_id, session_id, device_id, track_id, gallery):
@@ -31,6 +32,21 @@ class RecognitionService:
             json.dumps(gallery, sort_keys=True, separators=(",", ":")).encode()
         ).digest()
         with self._lock:
+            # Preserve recent decoded fingerprints across track and gallery resets.
+            seen = self._frames.pop(key, OrderedDict())
+            digest = hashlib.sha256(frame.tobytes()).digest()
+            duplicate = digest in seen
+            seen[digest] = None
+            while len(seen) > 2048:
+                seen.popitem(last=False)
+            self._frames[key] = seen
+            while len(self._frames) > 8:
+                self._frames.popitem(last=False)
+            if duplicate:
+                self._contexts.pop(key, None)
+                raise ImageError(
+                    "CAPTURE_REPLAY", "Foto kamera sudah digunakan. Ambil gambar baru."
+                )
             cached = self._contexts.pop(key, None)
             if cached is None or cached[0] != revision:
                 engine = FaceRecognitionEngine(

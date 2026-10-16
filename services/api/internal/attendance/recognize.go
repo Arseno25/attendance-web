@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type capture struct {
@@ -63,6 +64,15 @@ func (s *Service) recognize(w http.ResponseWriter, r *http.Request) {
 		invalid(w, "Foto kamera belum dapat diproses. Ambil ulang dan coba lagi.")
 		return
 	}
+	if err := s.consumeCapture(r, tx, in); err != nil {
+		var pgerr *pgconn.PgError
+		if errors.Is(err, pgx.ErrNoRows) || (errors.As(err, &pgerr) && pgerr.Code == "23505") {
+			httpresponse.Error(w, 409, "CAPTURE_REPLAY", "Foto kamera sudah digunakan atau kedaluwarsa. Ambil gambar baru.")
+		} else {
+			dbError(w, err)
+		}
+		return
+	}
 	gallery := []aiclient.Template{}
 	records, err := tx.Query(r.Context(), `SELECT f.student_id::text,COALESCE(f.consent_id::text,''),f.ciphertext,f.nonce,f.key_id,f.model_sha256 FROM face_templates f JOIN students st ON st.school_id=f.school_id AND st.id=f.student_id JOIN attendance_session_participants p ON p.school_id=f.school_id AND p.student_id=f.student_id AND p.session_id=$2 WHERE f.school_id=$1 AND st.status='active' ORDER BY f.student_id LIMIT 3001`, s.schoolID, device["session_id"])
 	if err != nil {
@@ -98,6 +108,10 @@ func (s *Service) recognize(w http.ResponseWriter, r *http.Request) {
 		dbError(w, err)
 		return
 	}
+	if err = tx.Commit(r.Context()); err != nil {
+		dbError(w, err)
+		return
+	}
 	result, err := s.ai.Recognize(r.Context(), map[string]any{"school_id": s.schoolID, "session_id": device["session_id"], "device_id": device["device_id"], "event_id": in.EventID, "track_id": in.TrackID, "image": in.Image, "gallery_revision": revision, "gallery": gallery})
 	if err != nil {
 		var validation *aiclient.ValidationError
@@ -118,8 +132,34 @@ func (s *Service) recognize(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	tx, currentDevice, ok := s.kioskAuth(w, r, true)
+	if !ok {
+		return
+	}
+	defer tx.Rollback(context.Background())
+	var currentRevision int64
+	err = tx.QueryRow(r.Context(), `SELECT COALESCE((SELECT revision FROM gallery_state WHERE school_id=$1),0)`, s.schoolID).Scan(&currentRevision)
+	if err != nil {
+		dbError(w, err)
+		return
+	}
+	if currentRevision != revision || currentDevice["session_id"] != device["session_id"] || currentDevice["device_id"] != device["device_id"] {
+		httpresponse.Error(w, 409, "RECOGNITION_STALE", "Data absensi berubah. Ambil gambar baru.")
+		return
+	}
+	device = currentDevice
 	approved := recognitionApproved(result)
 	var attendance map[string]any
+	var photo aiclient.ReferencePhoto
+	var photoVersion string
+	var photoCipher, photoNonce []byte
+	if approved && httpresponse.ValidID(result.Faces[0].StudentID) {
+		err = tx.QueryRow(r.Context(), `SELECT id::text,reference_ciphertext,reference_nonce,key_id FROM face_templates WHERE school_id=$1 AND student_id=$2 AND reference_ciphertext IS NOT NULL`, s.schoolID, result.Faces[0].StudentID).Scan(&photoVersion, &photoCipher, &photoNonce, &photo.KeyID)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			dbError(w, err)
+			return
+		}
+	}
 	continuing := result.Decision == "verification_required" && result.EngineStatus == "VERIFYING" && !result.LivenessPassed && stableRecognition(result)
 	if approved || continuing {
 		attendance, err = s.acceptRecognition(r, tx, device, in, result, approved)
@@ -145,12 +185,43 @@ func (s *Service) recognize(w http.ResponseWriter, r *http.Request) {
 			result.Faces[i].Label = ""
 		}
 	}
+	if err = tx.Commit(r.Context()); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+		dbError(w, err)
+		return
+	}
 	if result.Faces == nil {
 		result.Faces = []aiclient.Face{}
 	}
 	response := map[string]any{"decision": result.Decision, "faces": result.Faces, "recognition_enabled": approved, "identity_continuous": continuing, "block_reason": result.BlockReason, "engine_status": result.EngineStatus, "reason": result.Reason, "server_time": device["server_time"]}
 	if attendance != nil {
 		response["attendance"] = attendance
+		// Portraits are optional response data, never part of the persisted attendance ledger.
+		if approved && len(photoCipher) > 0 {
+			photo.Ciphertext = base64.StdEncoding.EncodeToString(photoCipher)
+			photo.Nonce = base64.StdEncoding.EncodeToString(photoNonce)
+			photoContext, cancelPhoto := context.WithTimeout(r.Context(), time.Second)
+			image, photoErr := s.ai.ReferencePhoto(photoContext, s.schoolID, result.Faces[0].StudentID, photo)
+			cancelPhoto()
+			// The device or registration may have been revoked while its portrait was decrypted.
+			photoTx, liveDevice, ok := s.kioskAuth(w, r, false)
+			if !ok {
+				return
+			}
+			defer photoTx.Rollback(context.Background())
+			var current bool
+			err = photoTx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM face_templates f JOIN students st ON st.school_id=f.school_id AND st.id=f.student_id JOIN attendance_session_participants p ON p.school_id=f.school_id AND p.student_id=f.student_id AND p.session_id=$3 WHERE f.school_id=$1 AND f.id=$2 AND st.status='active')`, s.schoolID, photoVersion, liveDevice["session_id"]).Scan(&current)
+			if err != nil {
+				dbError(w, err)
+				return
+			}
+			if !current || liveDevice["device_id"] != device["device_id"] || liveDevice["session_id"] != device["session_id"] {
+				httpresponse.Error(w, 409, "RECOGNITION_STALE", "Data absensi berubah. Ambil gambar baru.")
+				return
+			}
+			if photoErr == nil {
+				response["reference_photo"] = image
+			}
+		}
 	}
 	httpresponse.Data(w, 200, response)
 }

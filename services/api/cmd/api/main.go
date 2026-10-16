@@ -15,6 +15,7 @@ import (
 	"attendance.local/api/internal/masterdata"
 	"attendance.local/api/internal/platform/aiclient"
 	"attendance.local/api/internal/platform/config"
+	"attendance.local/api/internal/platform/holidays"
 	"attendance.local/api/internal/platform/httpserver"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -60,6 +61,7 @@ func run() error {
 	masterService.SetAI(aiClient)
 	attendanceService := attendance.New(pool, schoolID, authService)
 	attendanceService.SetAI(aiClient)
+	attendanceService.SetHolidays(holidays.New(holidays.Source))
 	go attendanceService.Run(ctx)
 	server := &http.Server{
 		Addr: cfg.Address,

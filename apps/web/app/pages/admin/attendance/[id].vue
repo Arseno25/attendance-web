@@ -472,7 +472,8 @@ await load()
             :columns="[
               { id: 'siswa', label: 'Siswa', cellClass: 'font-medium' },
               { id: 'status', label: 'Status' },
-              { id: 'waktu-hadir-pulang', label: 'Waktu hadir / pulang' },
+              { id: 'jam-masuk', label: 'Jam masuk', cellClass: 'tabular-nums' },
+              { id: 'jam-pulang', label: 'Jam pulang', cellClass: 'tabular-nums' },
               { id: 'alasan', label: 'Alasan', cellClass: 'max-w-48 whitespace-normal' },
               {
                 id: 'tindakan',
@@ -509,14 +510,33 @@ await load()
                 <Badge variant="warning">Koreksi menunggu</Badge>
               </div>
             </template>
-            <template #cell-waktu-hadir-pulang="{ item }">
-              {{ item.check_in_at ? dateTime(item.check_in_at) : '—' }}
-              <div
-                v-if="item.check_out_at"
-                class="text-xs text-muted-foreground"
+            <template #cell-jam-masuk="{ item }">
+              <time
+                v-if="item.check_in_at"
+                :datetime="item.check_in_at"
               >
-                Pulang: {{ dateTime(item.check_out_at) }}
-              </div>
+                {{ dateTime(item.check_in_at, { timeStyle: 'long', timeZone: session.timezone }) }}
+              </time>
+              <span
+                v-else
+                class="text-muted-foreground"
+              >
+                Belum tercatat
+              </span>
+            </template>
+            <template #cell-jam-pulang="{ item }">
+              <time
+                v-if="item.check_out_at"
+                :datetime="item.check_out_at"
+              >
+                {{ dateTime(item.check_out_at, { timeStyle: 'long', timeZone: session.timezone }) }}
+              </time>
+              <span
+                v-else
+                class="text-muted-foreground"
+              >
+                Belum tercatat
+              </span>
             </template>
             <template #cell-alasan="{ item }">{{ item.reason ?? '—' }}</template>
             <template #cell-tindakan="{ item }">

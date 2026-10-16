@@ -27,6 +27,7 @@ export interface User {
   full_name: string
   role: Role
   role_name: string
+  scope: RoleScope
   is_active: boolean
   class_ids: string[]
   permissions?: string[]

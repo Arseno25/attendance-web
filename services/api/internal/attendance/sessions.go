@@ -13,7 +13,9 @@ import (
 var errState = errors.New("session state conflict")
 
 // Calendar changes apply before opening; open sessions retain their roster/history.
-const sessionEligibility = `c.is_active AND y.is_active AND COALESCE(cd.is_school_day, true)`
+func sessionEligibility(requireData string) string {
+	return `c.is_active AND y.is_active AND ` + calendarEligibility("se.date", requireData, "true")
+}
 
 const sessionSelect = `SELECT se.id::text AS id,se.schedule_id::text AS schedule_id,se.class_id::text AS class_id,c.name AS class_name,se.name,se.date::text,se.timezone,se.starts_at,se.late_after,se.checkout_at,se.closes_at,se.status,se.opened_at,se.closed_at,se.reconciled_at,se.created_at,(SELECT count(*) FROM attendance_session_participants p WHERE p.school_id=se.school_id AND p.session_id=se.id) AS roster_count,(SELECT count(*) FROM attendance_records ar WHERE ar.school_id=se.school_id AND ar.session_id=se.id) AS recorded_count FROM attendance_sessions se JOIN classes c ON c.school_id=se.school_id AND c.id=se.class_id WHERE se.school_id=$1 AND (NOT $2::boolean OR se.class_id=ANY($3::uuid[]))`
 
@@ -26,7 +28,7 @@ func (s *Service) getSession(r *http.Request, tx pgx.Tx, u auth.User, id string,
 }
 func (s *Service) createSession(ctx context.Context, tx pgx.Tx, scheduleID, day string) (string, error) {
 	var eligible bool
-	err := tx.QueryRow(ctx, `SELECT coalesce(cd.is_school_day,extract(isodow FROM $3::date)::integer=ANY(a.weekdays)) FROM attendance_schedules a JOIN classes c ON c.school_id=a.school_id AND c.id=a.class_id JOIN academic_years y ON y.school_id=c.school_id AND y.id=c.academic_year_id LEFT JOIN school_calendar_days cd ON cd.school_id=a.school_id AND cd.date=$3::date WHERE a.school_id=$1 AND a.id=$2 AND a.is_active AND c.is_active AND y.is_active AND $3::date BETWEEN y.starts_on AND y.ends_on`, s.schoolID, scheduleID, day).Scan(&eligible)
+	err := tx.QueryRow(ctx, `SELECT `+calendarEligibility("$3::date", "$4", "extract(isodow FROM $3::date)::integer=ANY(a.weekdays)")+` FROM attendance_schedules a JOIN classes c ON c.school_id=a.school_id AND c.id=a.class_id JOIN academic_years y ON y.school_id=c.school_id AND y.id=c.academic_year_id LEFT JOIN school_calendar_days cd ON cd.school_id=a.school_id AND cd.date=$3::date WHERE a.school_id=$1 AND a.id=$2 AND a.is_active AND c.is_active AND y.is_active AND $3::date BETWEEN y.starts_on AND y.ends_on`, s.schoolID, scheduleID, day, s.holidays != nil).Scan(&eligible)
 	if err != nil {
 		return "", err
 	}
@@ -166,7 +168,7 @@ func (s *Service) transition(w http.ResponseWriter, r *http.Request, action stri
 			return
 		}
 		var eligible bool
-		err = tx.QueryRow(r.Context(), `SELECT `+sessionEligibility+` FROM attendance_sessions se JOIN attendance_schedules a ON a.school_id=se.school_id AND a.id=se.schedule_id JOIN classes c ON c.school_id=se.school_id AND c.id=se.class_id JOIN academic_years y ON y.school_id=c.school_id AND y.id=c.academic_year_id LEFT JOIN school_calendar_days cd ON cd.school_id=se.school_id AND cd.date=se.date WHERE se.school_id=$1 AND se.id=$2`, s.schoolID, id).Scan(&eligible)
+		err = tx.QueryRow(r.Context(), `SELECT `+sessionEligibility("$3")+` FROM attendance_sessions se JOIN attendance_schedules a ON a.school_id=se.school_id AND a.id=se.schedule_id JOIN classes c ON c.school_id=se.school_id AND c.id=se.class_id JOIN academic_years y ON y.school_id=c.school_id AND y.id=c.academic_year_id LEFT JOIN school_calendar_days cd ON cd.school_id=se.school_id AND cd.date=se.date WHERE se.school_id=$1 AND se.id=$2`, s.schoolID, id, s.holidays != nil).Scan(&eligible)
 		if err != nil {
 			dbError(w, err)
 			return

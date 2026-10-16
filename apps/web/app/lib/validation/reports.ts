@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from './zod.ts'
 import { byteLength, optionalDate, optionalText, optionalUuid } from './shared.ts'
 import { attendanceFilterStatus } from './attendance.ts'
 

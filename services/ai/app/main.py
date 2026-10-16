@@ -123,6 +123,32 @@ class Enrollment(StrictBody):
     )
 
 
+class ReferencePhoto(StrictBody):
+    school_id: UUID
+    student_id: UUID
+    ciphertext: str = Field(max_length=87404, repr=False)
+    nonce: str = Field(max_length=16, repr=False)
+    key_id: str = Field(min_length=1, max_length=80)
+
+
+@app.post("/internal/v1/reference-photo", dependencies=[Depends(require_service)])
+def reference_photo(body: ReferencePhoto, request: Request):
+    from app.reference_photo import decrypt_reference_photo
+
+    try:
+        image = decrypt_reference_photo(
+            body.model_dump(), get_cipher(), str(body.school_id), str(body.student_id)
+        )
+    except InvalidTag, ValueError:
+        return error(
+            request,
+            422,
+            "INVALID_REFERENCE_PHOTO",
+            "Foto referensi tidak dapat dibuka.",
+        )
+    return {"image": image}
+
+
 class Recognition(StrictBody):
     school_id: UUID
     session_id: UUID
