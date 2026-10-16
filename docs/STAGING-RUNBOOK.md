@@ -24,7 +24,7 @@ Sumber: [Nuxt upgrade](https://nuxt.com/docs/4.x/api/commands/upgrade), [Node 26
 1. Buat PostgreSQL terpisah di environment staging. Database dan layanan AI hanya berada di jaringan privat; jangan publikasikan port AI/DB. Gunakan runtime role dan migrator yang berbeda.
 2. DBA memasang extension yang diperlukan migrasi. Migrator memiliki hak DDL pada schema aplikasi; runtime hanya mendapat `CONNECT`, `USAGE` schema, DML tabel, dan akses sequence yang diperlukan. Runtime tidak memerlukan superuser, `CREATEROLE`, atau hak DDL. Setelah migrasi, terapkan grants pada tabel/sequence serta default privileges milik migrator untuk migrasi berikutnya. Buat password melalui UI secret/psql `\password`, jangan menuliskannya di SQL yang di-commit.
 3. Isi secret/config dari `deploy/.env.example`, termasuk dua URL database, exact `WEB_ORIGIN`, URL API publik, service token, serta kunci enkripsi wajah. Kunci enkripsi harus dibackup terpisah dari database; kehilangan kunci membuat template lama tidak dapat dibaca.
-4. Hubungkan API dan migrator ke destination network database yang benar. Pada Coolify pilih base directory repo dan `deploy/compose.application.yml`, lalu periksa konfigurasi yang dirender. Domain web menuju port internal 3000 dan domain API menuju 8080. Contoh `https://attendance.example.com:3000` di konfigurasi Coolify memakai 3000 sebagai port tujuan, bukan port publik browser.
+4. Hubungkan API dan migrator ke destination network database yang benar. Pada Coolify pilih Base Directory `/` dan Docker Compose Location `/deploy/compose.application.yml`. Build context memakai root checkout karena Coolify memberikan `--project-directory` ke root tersebut; perintah lokal di bawah juga wajib memakai `--project-directory .`. Periksa konfigurasi yang dirender. Domain web menuju port internal 3000 dan domain API menuju 8080. Contoh `https://attendance.example.com:3000` di konfigurasi Coolify memakai 3000 sebagai port tujuan, bukan port publik browser.
 5. Gunakan HTTPS dengan web/API pada susunan site yang kompatibel dengan cookie SameSite. Verifikasi cookie `__Host-attendance_session` memiliki Secure, HttpOnly, Path=/ dan tanpa Domain. Uji WebSocket, kamera, origin ditolak, serta logout dari browser nyata.
 
 Referensi: [Compose di Coolify](https://coolify.io/docs/applications/builds/docker-compose), [Compose run sekali jalan](https://docs.docker.com/reference/cli/docker/compose/run/).
@@ -37,14 +37,14 @@ Contoh Compose biasa dari root repo, dengan file secret berizin 0600 di luar Git
 
 ```bash
 STAGING_ENV_FILE=/private/attendance-staging.env
-docker compose -p attendance-staging --env-file "$STAGING_ENV_FILE" -f deploy/compose.application.yml build
-docker compose -p attendance-staging --env-file "$STAGING_ENV_FILE" -f deploy/compose.application.yml run --rm -T migrate
+docker compose --project-directory . -p attendance-staging --env-file "$STAGING_ENV_FILE" -f deploy/compose.application.yml build
+docker compose --project-directory . -p attendance-staging --env-file "$STAGING_ENV_FILE" -f deploy/compose.application.yml run --rm -T migrate
 
 read -r -s -p 'Password admin pertama: ' BOOTSTRAP_PASSWORD
-printf '%s' "$BOOTSTRAP_PASSWORD" | docker compose -p attendance-staging --env-file "$STAGING_ENV_FILE" -f deploy/compose.application.yml run --rm --no-deps -T api bootstrap --email admin@school.example --name 'Admin Sekolah' --school-name 'Nama Sekolah'
+printf '%s' "$BOOTSTRAP_PASSWORD" | docker compose --project-directory . -p attendance-staging --env-file "$STAGING_ENV_FILE" -f deploy/compose.application.yml run --rm --no-deps -T api bootstrap --email admin@school.example --name 'Admin Sekolah' --school-name 'Nama Sekolah'
 unset BOOTSTRAP_PASSWORD
 
-docker compose -p attendance-staging --env-file "$STAGING_ENV_FILE" -f deploy/compose.application.yml up -d
+docker compose --project-directory . -p attendance-staging --env-file "$STAGING_ENV_FILE" -f deploy/compose.application.yml up -d
 ```
 
 Pada Coolify gunakan **nama project, file Compose hasil render, secret, dan koneksi network yang sama dengan resource target**; jangan menciptakan project Compose kedua yang terputus dari DB. Container API boleh sedang restart karena sekolah belum ada; `run --no-deps ... api bootstrap` tetap memakai image/config API dalam container baru. Tidak perlu `docker exec` ke API yang belum sehat. Bootstrap kedua harus ditolak.

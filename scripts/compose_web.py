@@ -7,6 +7,8 @@ ROOT = Path(__file__).resolve().parents[1]
 COMPOSE = [
     "docker",
     "compose",
+    "--project-directory",
+    str(ROOT),
     "-p",
     "attendance",
     "--env-file",

@@ -1,7 +1,9 @@
+# Resolve build paths from the repository root.
+# Local commands must use: docker compose --project-directory . -f deploy/compose.application.yml ...
 services:
   init-models:
     build:
-      context: ../services/ai
+      context: ./services/ai
     user: "0:0"
     command: ["python", "-m", "app.models", "--directory", "/models"]
     volumes:
@@ -9,7 +11,7 @@ services:
     restart: "no"
   web:
     build:
-      context: ../apps/web
+      context: ./apps/web
     environment:
       HOST: 0.0.0.0
       PORT: 3000
@@ -29,7 +31,7 @@ services:
     mem_limit: 512m
   migrate:
     build:
-      context: ../services/api
+      context: ./services/api
     environment:
       GOOSE_DRIVER: postgres
       GOOSE_DBSTRING: ${MIGRATION_DATABASE_URL:?Set least-privilege migration PostgreSQL URL}
@@ -37,7 +39,7 @@ services:
     restart: "no"
   api:
     build:
-      context: ../services/api
+      context: ./services/api
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -60,7 +62,7 @@ services:
     mem_limit: 256m
   ai:
     build:
-      context: ../services/ai
+      context: ./services/ai
     depends_on:
       init-models:
         condition: service_completed_successfully

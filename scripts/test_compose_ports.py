@@ -1,6 +1,8 @@
 import json
 import os
+import shutil
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -8,11 +10,61 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ComposeWebPortTests(unittest.TestCase):
+    def test_coolify_project_directory_resolves_all_builds_inside_checkout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            checkout = Path(directory) / "checkout"
+            (checkout / "deploy").mkdir(parents=True)
+            for name in ["compose.application.yml", ".env.example"]:
+                shutil.copy2(ROOT / "deploy" / name, checkout / "deploy" / name)
+            expected = {
+                "api": "services/api",
+                "migrate": "services/api",
+                "ai": "services/ai",
+                "init-models": "services/ai",
+                "web": "apps/web",
+            }
+            for context in set(expected.values()):
+                (checkout / context).mkdir(parents=True)
+                shutil.copy2(
+                    ROOT / context / "Dockerfile", checkout / context / "Dockerfile"
+                )
+            result = subprocess.run(
+                [
+                    "docker",
+                    "compose",
+                    "--env-file",
+                    str(checkout / "deploy/.env.example"),
+                    "--project-name",
+                    "coolify-regression",
+                    "--project-directory",
+                    str(checkout),
+                    "-f",
+                    str(checkout / "deploy/compose.application.yml"),
+                    "config",
+                    "--format",
+                    "json",
+                ],
+                cwd=directory,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            services = json.loads(result.stdout)["services"]
+            for service, context in expected.items():
+                with self.subTest(service=service):
+                    build = services[service]["build"]
+                    self.assertEqual(Path(build["context"]), checkout / context)
+                    self.assertTrue(
+                        (Path(build["context"]) / build["dockerfile"]).is_file()
+                    )
+
     def test_web_uses_container_port_3000_and_selectable_loopback_host_port(self):
         result = subprocess.run(
             [
                 "docker",
                 "compose",
+                "--project-directory",
+                str(ROOT),
                 "--env-file",
                 "deploy/.env.example",
                 "-f",
@@ -43,6 +95,8 @@ class ComposeWebPortTests(unittest.TestCase):
             [
                 "docker",
                 "compose",
+                "--project-directory",
+                str(ROOT),
                 "--env-file",
                 "deploy/.env.example",
                 "-f",
@@ -70,6 +124,8 @@ class ComposeWebPortTests(unittest.TestCase):
             [
                 "docker",
                 "compose",
+                "--project-directory",
+                str(ROOT),
                 "-p",
                 "deployment-test",
                 "--env-file",
@@ -159,6 +215,8 @@ class ComposeWebPortTests(unittest.TestCase):
             [
                 "docker",
                 "compose",
+                "--project-directory",
+                str(ROOT),
                 "--env-file",
                 "/dev/null",
                 "-f",
