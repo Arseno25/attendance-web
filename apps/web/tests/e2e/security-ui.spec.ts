@@ -89,14 +89,11 @@ test('role rows use named shared actions and preserve delete confirmation', asyn
   await expect(page.getByRole('button', { name: 'Hapus peran: Admin', exact: true })).toBeFocused()
 })
 
-test('public service status hydrates without mismatches', async ({ page }) => {
-  const errors: string[] = []
-  page.on('console', (message) => {
-    if (/hydration|mismatch/i.test(message.text())) errors.push(message.text())
-  })
+test('opening the root route redirects to the login page', async ({ page }) => {
   await page.goto('/')
-  await expect(page.locator('main').getByRole('status')).toHaveText('Layanan terhubung')
-  expect(errors).toEqual([])
+  await expect(page).toHaveURL(/\/login$/)
+  await expect(page.getByLabel('Email', { exact: true })).toBeVisible()
+  await expect(page.getByLabel('Password', { exact: true })).toBeVisible()
 })
 
 test('chart title, description and report action stack on narrow screens', async ({ page }) => {
