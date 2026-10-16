@@ -1,4 +1,4 @@
-"""Pinned CPU model installation; installation never authorizes recognition."""
+"""Pinned CPU model installation; camera accuracy needs separate evaluation."""
 
 import argparse
 import hashlib

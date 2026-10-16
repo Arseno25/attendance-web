@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from './zod.ts'
 import { byteLength, reason, requiredText, uuid } from './shared.ts'
 
 export const pairingSchema = z.object({

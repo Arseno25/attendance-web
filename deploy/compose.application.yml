@@ -46,7 +46,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:?Set private PostgreSQL URL}
       WEB_ORIGIN: ${WEB_ORIGIN:?Set exact HTTPS web origin}
       ALLOW_LOCAL_WEB_PORT_RANGE: ${ALLOW_LOCAL_WEB_PORT_RANGE:-0}
-      SCHOOL_ID: ${SCHOOL_ID:?Set school UUID}
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-}
       AI_BASE_URL: ${AI_BASE_URL:-http://ai:8001}
       AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:?Set strong service-to-service token}
     expose:
@@ -69,12 +69,19 @@ services:
       AI_MODELS_DIR: /models
       AI_TEMPLATE_KEY_BASE64: ${AI_TEMPLATE_KEY_BASE64:?Set private template encryption key}
       AI_TEMPLATE_KEY_ID: ${AI_TEMPLATE_KEY_ID:?Set template key identifier}
+      # Camera thresholds remain provisional until independent evaluation.
+      AI_MATCH_THRESHOLD: ${AI_MATCH_THRESHOLD:-0.8}
+      AI_MATCH_MARGIN: ${AI_MATCH_MARGIN:-0.1}
+      AI_LIVENESS_THRESHOLD: ${AI_LIVENESS_THRESHOLD:-0.95}
+      AI_DUPLICATE_THRESHOLD: ${AI_DUPLICATE_THRESHOLD:-0.85}
+      AI_RECOGNITION_APPROVAL_PATH: ${AI_RECOGNITION_APPROVAL_PATH:-}
+      AI_RECOGNITION_APPROVAL_SHA256: ${AI_RECOGNITION_APPROVAL_SHA256:-}
     volumes:
       - model_data:/models:ro
     expose:
       - "8001"
     healthcheck:
-      # Readiness covers detection/enrollment; automatic attendance has a separate evaluation gate.
+      # Liveness here checks process availability; API writes require a fresh verified match.
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/internal/v1/health/live', timeout=3)"]
       interval: 30s
       timeout: 5s

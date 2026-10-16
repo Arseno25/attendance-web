@@ -1,0 +1,20 @@
+{
+  "expires": "2026-11-15",
+  "advisories": [
+    {
+      "package": "braces",
+      "url": "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm",
+      "reason": "Nuxt/Nitro and shadcn CLI file-pattern tooling. Build inputs are controlled; no user glob patterns. Forbidden in runtime output. No fixed upstream version available."
+    },
+    {
+      "package": "node-forge",
+      "url": "https://github.com/advisories/GHSA-86w9-cpqp-85rv",
+      "reason": "listhen development HTTPS certificate tooling, not application authentication or deployed TLS. Forbidden in runtime output. No fixed upstream version available."
+    },
+    {
+      "package": "decode-uri-component",
+      "url": "https://github.com/advisories/GHSA-vcc3-ghjq-m6fr",
+      "reason": "Stylus/source-map conversion in build/CLI tooling; this project uses Tailwind and CSS. Forbidden in runtime output. No fixed upstream version available."
+    }
+  ]
+}

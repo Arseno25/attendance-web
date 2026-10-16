@@ -33,6 +33,10 @@ func (s *Service) assignments(w http.ResponseWriter, r *http.Request) {
 		s.list(w, r, sc, assignmentSelect+` AND ($4='' OR a.class_id=NULLIF($4,'')::uuid) AND (NOT $5::boolean OR a.class_id=ANY($6::uuid[]))`, s.schoolID, sc.classScoped, sc.user.ID, classID, sc.classScoped, sc.classes)
 		return
 	}
+	if sc.classScoped {
+		httpresponse.Error(w, 403, "FORBIDDEN", "Penugasan kelas hanya dapat dikelola oleh pengelola sekolah")
+		return
+	}
 	var input struct {
 		User  string `json:"user_id"`
 		Class string `json:"class_id"`
@@ -116,6 +120,10 @@ func (s *Service) assignment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer sc.tx.Rollback(context.Background())
+	if sc.classScoped {
+		httpresponse.Error(w, 403, "FORBIDDEN", "Penugasan kelas hanya dapat dikelola oleh pengelola sekolah")
+		return
+	}
 	var input struct {
 		Active *bool `json:"is_active"`
 	}
@@ -127,7 +135,8 @@ func (s *Service) assignment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var active bool
-	if err := sc.tx.QueryRow(r.Context(), `SELECT is_active FROM user_class_assignments WHERE school_id=$1 AND id=$2`, s.schoolID, id).Scan(&active); err != nil {
+	var userID string
+	if err := sc.tx.QueryRow(r.Context(), `SELECT is_active,user_id::text FROM user_class_assignments WHERE school_id=$1 AND id=$2`, s.schoolID, id).Scan(&active, &userID); err != nil {
 		dbError(w, err)
 		return
 	}
@@ -142,6 +151,10 @@ func (s *Service) assignment(w http.ResponseWriter, r *http.Request) {
 	}
 	if result.RowsAffected() == 0 {
 		conflict(w, "Penugasan tidak tersedia atau sudah dicabut")
+		return
+	}
+	if _, err = sc.tx.Exec(r.Context(), `DELETE FROM device_sessions WHERE school_id=$1 AND paired_by=$2`, s.schoolID, userID); err != nil {
+		dbError(w, err)
 		return
 	}
 	entity, err := one(r.Context(), sc.tx, assignmentSelect+` AND a.id=$4`, s.schoolID, false, sc.user.ID, id)

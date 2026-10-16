@@ -39,6 +39,18 @@ func TestPasswordHashIsSaltedAndRejectsInvalidParameters(t *testing.T) {
 	}
 }
 
+func TestWritersCanReadTheirOwnResourceWithoutCrossClassAccess(t *testing.T) {
+	for _, pair := range [][2]string{{"students.read", "students.write"}, {"academics.read", "academics.write"}, {"devices.health", "devices.manage"}} {
+		u := User{SchoolID: "school-a", Role: "custom", Active: true, Scope: ScopeAssignedClasses, ClassIDs: []string{"class-a"}, PermissionsList: []string{pair[1]}}
+		if !u.Can(pair[0], "school-a", "class-a") {
+			t.Fatalf("%s cannot read its own resource", pair[1])
+		}
+		if u.Can(pair[0], "school-a", "class-b") || u.Can(pair[0], "school-b", "class-a") {
+			t.Fatal("read implication bypassed resource scope")
+		}
+	}
+}
+
 func TestPolicyEnforcesSchoolClassAndSecurityRole(t *testing.T) {
 	admin := User{SchoolID: "school-a", Role: "super_admin", Active: true, Scope: ScopeSchool, PermissionsList: []string{"users.read", "users.write", "roles.manage"}}
 	if !admin.Can("users.write", "school-a", "") {

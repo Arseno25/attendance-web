@@ -1,0 +1,30 @@
+{
+  "baseline": "8773abf",
+  "date": "2026-10-15",
+  "layout_samples": 100,
+  "overflow": [
+    {
+      "route": "58568ea5-9108-4dc6-bbb0-ac6413cc0691",
+      "page": "student-detail",
+      "mode": "mobile-dark",
+      "viewport": 390,
+      "scrollWidth": 514
+    },
+    {
+      "route": "58568ea5-9108-4dc6-bbb0-ac6413cc0691",
+      "page": "student-detail",
+      "mode": "narrow-light",
+      "viewport": 320,
+      "scrollWidth": 514
+    },
+    {
+      "route": "/admin/devices",
+      "page": "/admin/devices",
+      "mode": "narrow-light",
+      "viewport": 320,
+      "scrollWidth": 365
+    }
+  ],
+  "unlabelled_visible_inputs": 0,
+  "unnamed_visible_buttons": 0
+}

@@ -46,7 +46,7 @@ func run(email, name, school string) error {
 		return err
 	}
 	defer pool.Close()
-	svc, err := auth.New(pool, cfg.SchoolID, cfg.WebOrigin)
+	svc, err := auth.New(pool, "", cfg.WebOrigin)
 	if err != nil {
 		return err
 	}

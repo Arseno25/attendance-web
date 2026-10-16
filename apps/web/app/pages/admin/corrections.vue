@@ -4,7 +4,7 @@ import { decisionSchema, correctionFilterSchema } from '~/lib/validation/attenda
 import { statusVariant } from '~/lib/status'
 import type { Result } from '~/types/auth'
 import { attendanceLabels, correctionLabels, type Correction } from '~/types/attendance'
-definePageMeta({ layout: 'admin', middleware: ['auth', 'attendance'] })
+definePageMeta({ layout: 'admin', middleware: ['auth', 'corrections'] })
 const { request, dateTime, canApprove } = useAttendance()
 const auth = useAuth()
 const entries = ref<Correction[]>([])
@@ -223,6 +223,7 @@ await load()
                   label: 'Lihat sesi',
                   icon: 'view',
                   to: `/admin/attendance/${item.session_id}`,
+                  hidden: !auth.has('attendance.read', 'attendance.manual'),
                 },
                 {
                   label: 'Setujui koreksi',

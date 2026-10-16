@@ -1,18 +1,19 @@
 <script setup lang="ts">
 import { toast } from 'vue-sonner'
-import {
-  scheduleSchema,
-  newScheduleSchema,
-  calendarSchema,
-  calendarDateSchema,
-} from '~/lib/validation/attendance'
+import { scheduleSchema, newScheduleSchema } from '~/lib/validation/attendance'
 import { statusVariant } from '~/lib/status'
-import { Plus } from '@lucide/vue'
+import { Plus, RefreshCw } from '@lucide/vue'
 import type { Result } from '~/types/auth'
 import type { SchoolClass } from '~/types/master'
-import type { Schedule, CalendarDay } from '~/types/attendance'
+import type { Schedule } from '~/types/attendance'
+import SchoolCalendar from '~/components/SchoolCalendar.vue'
 definePageMeta({ layout: 'admin', middleware: ['auth', 'academics'] })
-const { request, options, canConfigure, today } = useAttendance()
+const { request, options, canConfigure } = useAttendance()
+const auth = useAuth()
+const canManageCalendar = computed(
+  () => canConfigure.value && auth.session.value?.user.scope === 'school',
+)
+const schoolCalendar = ref<InstanceType<typeof SchoolCalendar> | null>(null)
 const tab = ref('schedules')
 const schedules = ref<Schedule[]>([])
 const classes = ref<SchoolClass[]>([])
@@ -23,9 +24,6 @@ const saving = ref(false)
 const open = ref(false)
 const editing = ref('')
 const message = ref('')
-const date = ref(today())
-const calendar = reactive({ is_school_day: true, reason: '' })
-const calendarInfo = ref('')
 const form = reactive({
   name: '',
   class_id: '',
@@ -33,20 +31,13 @@ const form = reactive({
   checkin_start: '07:00',
   checkin_cutoff: '07:30',
   grace_minutes: 0,
-  close_time: '12:00',
+  checkout_start: '12:00',
+  close_time: '13:00',
   is_active: true,
 })
 const { errors, validate, clear } = useFormValidation(
   () => (editing.value ? scheduleSchema : newScheduleSchema),
   () => form,
-)
-const { errors: calendarErrors, validate: validateCalendar } = useFormValidation(
-  () => calendarSchema,
-  () => ({ date: date.value, ...calendar }),
-)
-const { errors: dateErrors, validate: validateDate } = useFormValidation(
-  () => calendarDateSchema,
-  () => ({ date: date.value }),
 )
 const dayLabels = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu']
 async function load() {
@@ -78,7 +69,8 @@ async function show(item?: Schedule) {
       checkin_start: '07:00',
       checkin_cutoff: '07:30',
       grace_minutes: 0,
-      close_time: '12:00',
+      checkout_start: '12:00',
+      close_time: '13:00',
       is_active: true,
     },
     item ?? {},
@@ -86,6 +78,7 @@ async function show(item?: Schedule) {
   form.weekdays = [...form.weekdays]
   form.checkin_start = form.checkin_start.slice(0, 5)
   form.checkin_cutoff = form.checkin_cutoff.slice(0, 5)
+  form.checkout_start = item?.checkout_start?.slice(0, 5) ?? (item ? '' : '12:00')
   form.close_time = form.close_time.slice(0, 5)
   try {
     if (!item) classes.value = await options<SchoolClass>('/classes', { active: 'true' })
@@ -106,6 +99,7 @@ async function save() {
       checkin_cutoff: form.checkin_cutoff,
       grace_minutes: Number(form.grace_minutes),
       close_time: form.close_time,
+      checkout_start: form.checkout_start,
       is_active: form.is_active,
       ...(!editing.value ? { class_id: form.class_id } : {}),
     }
@@ -122,45 +116,11 @@ async function save() {
     saving.value = false
   }
 }
-async function loadCalendar() {
-  if (!validateDate()) return
-  loading.value = true
-  message.value = ''
-  try {
-    const data = (await request<Result<CalendarDay>>(`/school/calendar/${date.value}`)).data
-    calendar.is_school_day = data.is_school_day ?? true
-    calendar.reason = data.is_override ? data.reason : ''
-    calendarInfo.value = data.is_override
-      ? 'Tanggal ini memiliki pengaturan khusus.'
-      : 'Tanggal ini mengikuti hari aktif pada jadwal kelas.'
-  } catch (error) {
-    message.value = apiMessage(error)
-  } finally {
-    loading.value = false
-  }
-}
-async function saveCalendar() {
-  if (saving.value || !validateCalendar()) return
-  saving.value = true
-  message.value = ''
-  try {
-    await request(`/school/calendar/${date.value}`, { method: 'PUT', body: calendar })
-    toast.success(
-      'Kalender tersimpan. Perubahan berlaku untuk sesi yang dibuat berikutnya. Batalkan sesi terjadwal yang sudah tersedia bila hari menjadi libur.',
-    )
-    await loadCalendar()
-  } catch (error) {
-    toast.error(apiMessage(error))
-  } finally {
-    saving.value = false
-  }
-}
 async function changePage(value: number) {
   page.value = value
   await load()
 }
 await load()
-await loadCalendar()
 </script>
 <template>
   <div class="flex min-w-0 flex-col gap-6">
@@ -176,15 +136,23 @@ await loadCalendar()
           <Plus />
           Tambah jadwal
         </Button>
-        <Button
-          v-if="canConfigure && tab === 'calendar'"
-          type="submit"
-          form="calendar-form"
-          :disabled="saving || loading"
-        >
-          <Spinner v-if="saving" />
-          Simpan kalender
-        </Button>
+        <template v-if="canManageCalendar && tab === 'calendar'">
+          <Button
+            variant="outline"
+            :disabled="schoolCalendar?.busy"
+            @click="schoolCalendar?.sync()"
+          >
+            <RefreshCw />
+            Perbarui libur nasional
+          </Button>
+          <Button
+            :disabled="schoolCalendar?.busy"
+            @click="schoolCalendar?.show()"
+          >
+            <Plus />
+            Tambah libur sekolah
+          </Button>
+        </template>
       </template>
     </PageHeader>
     <Alert
@@ -255,10 +223,11 @@ await loadCalendar()
                 {{ item.weekdays.map((day) => dayLabels[day - 1]).join(', ') }}
               </template>
               <template #cell-jam-toleransi="{ item }">
-                {{ item.checkin_start.slice(0, 5) }} – {{ item.close_time.slice(0, 5) }}
+                Masuk {{ item.checkin_start.slice(0, 5) }} · Pulang
+                {{ item.checkout_start?.slice(0, 5) ?? 'Belum diatur' }}
                 <div class="text-xs text-muted-foreground">
                   Batas {{ item.checkin_cutoff.slice(0, 5) }} + {{ item.grace_minutes }} menit ·
-                  {{ item.timezone }}
+                  Tutup {{ item.close_time.slice(0, 5) }} · {{ item.timezone }}
                 </div>
               </template>
               <template #cell-status="{ item }">
@@ -305,79 +274,10 @@ await loadCalendar()
         </Card>
       </TabsContent>
       <TabsContent value="calendar">
-        <Card class="max-w-2xl">
-          <CardHeader>
-            <CardTitle>Pengaturan hari sekolah</CardTitle>
-            <CardDescription>
-              Override hari pada jadwal untuk tanggal tertentu. {{ calendarInfo }}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form
-              id="calendar-form"
-              novalidate
-              class="space-y-6"
-              @submit.prevent="saveCalendar"
-            >
-              <FieldGroup>
-                <Field :data-invalid="!!(calendarErrors.date || dateErrors.date)">
-                  <FieldLabel for="calendar-date">Tanggal</FieldLabel>
-                  <Input
-                    id="calendar-date"
-                    v-model="date"
-                    :aria-invalid="!!(calendarErrors.date || dateErrors.date)"
-                    :aria-describedby="
-                      calendarErrors.date || dateErrors.date ? 'calendar-date-error' : undefined
-                    "
-                    type="date"
-                    required
-                    :disabled="saving || loading"
-                    @change="loadCalendar"
-                  />
-                  <FieldError
-                    v-if="calendarErrors.date || dateErrors.date"
-                    id="calendar-date-error"
-                  >
-                    {{ calendarErrors.date || dateErrors.date }}
-                  </FieldError>
-                </Field>
-                <Field orientation="horizontal">
-                  <Switch
-                    id="school-day"
-                    v-model="calendar.is_school_day"
-                    :disabled="!canConfigure || saving || loading"
-                  />
-                  <FieldContent>
-                    <FieldLabel for="school-day">Hari efektif sekolah</FieldLabel>
-                    <FieldDescription>
-                      Nonaktifkan untuk hari libur. Batalkan sesi terjadwal yang sudah tersedia.
-                      Sesi terbuka tetap perlu ditutup dan ditinjau.
-                    </FieldDescription>
-                  </FieldContent>
-                </Field>
-                <Field :data-invalid="!!calendarErrors.reason">
-                  <FieldLabel for="calendar-reason">Alasan pengaturan</FieldLabel>
-                  <Textarea
-                    id="calendar-reason"
-                    v-model="calendar.reason"
-                    :aria-invalid="!!calendarErrors.reason"
-                    :aria-describedby="calendarErrors.reason ? 'calendar-reason-error' : undefined"
-                    required
-                    maxlength="500"
-                    :disabled="!canConfigure || saving || loading"
-                    placeholder="Contoh: libur nasional atau pengganti hari belajar"
-                  />
-                  <FieldError
-                    v-if="calendarErrors.reason"
-                    id="calendar-reason-error"
-                  >
-                    {{ calendarErrors.reason }}
-                  </FieldError>
-                </Field>
-              </FieldGroup>
-            </form>
-          </CardContent>
-        </Card>
+        <SchoolCalendar
+          ref="schoolCalendar"
+          :can-edit="canManageCalendar"
+        />
       </TabsContent>
     </Tabs>
     <Dialog
@@ -534,6 +434,29 @@ await loadCalendar()
                   id="schedule-cutoff-error"
                 >
                   {{ errors.checkin_cutoff }}
+                </FieldError>
+              </Field>
+              <Field :data-invalid="!!errors.checkout_start">
+                <FieldLabel for="schedule-checkout">Mulai absen pulang</FieldLabel>
+                <Input
+                  id="schedule-checkout"
+                  v-model="form.checkout_start"
+                  type="time"
+                  :disabled="saving"
+                  :aria-invalid="!!errors.checkout_start"
+                  :aria-describedby="
+                    errors.checkout_start ? 'schedule-checkout-error' : 'schedule-checkout-hint'
+                  "
+                />
+                <FieldDescription id="schedule-checkout-hint">
+                  Kamera otomatis mencatat pulang mulai jam ini. Kosongkan bila hanya mencatat
+                  masuk.
+                </FieldDescription>
+                <FieldError
+                  v-if="errors.checkout_start"
+                  id="schedule-checkout-error"
+                >
+                  {{ errors.checkout_start }}
                 </FieldError>
               </Field>
               <Field :data-invalid="!!errors.close_time">

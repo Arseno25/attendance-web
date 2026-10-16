@@ -54,7 +54,7 @@ Rollback aplikasi: pilih binary/image kompatibel schema7. Migration5/6/7 menamba
 - AI/model unavailable: manual terus berjalan; feature tetapdisabled; jangan turunkan threshold untuk demo.
 - Salah match/purge backlog/key compromise setelah biometrik aktif: disable recognition, simpan audit nonbiometrik, ikuti prosedur sekolah; investigasi/rekey/purge/rebuild sebelum membuka ulang.
 
-Compose migrasi memakai service satu-kali Goose dengan `MIGRATION_DATABASE_URL` terpisah; API hanya mulai setelah migrasi sukses. Compose menjalankan migrasi saat stack dibuat/reconciled, bukan hanya saat file migrasi berubah. Uji retry dan kegagalan migrasi pada Coolify target sebelum trafik. Admin awal dibuat manual satu kali melalui binary `bootstrap` setelah migration/API siap; password hanya lewat stdin privat dan bootstrap berulang ditolak.
+Compose migrasi memakai service satu-kali Goose dengan `MIGRATION_DATABASE_URL` terpisah; API hanya mulai setelah migrasi sukses. Compose menjalankan migrasi saat stack dibuat/reconciled, bukan hanya saat file migrasi berubah. Uji retry dan kegagalan migrasi pada Coolify target sebelum trafik. Admin awal dibuat manual satu kali melalui binary `bootstrap` setelah migration berhasil, sebelum API dijalankan. Pada database kosong, gunakan one-off container `docker compose run --rm --no-deps -T api bootstrap` dengan password lewat stdin privat; console container API belum tersedia sebelum sekolah dibuat. Bootstrap membuat sekolah/ID otomatis dan menolak setup berulang.
 
 Coolify deployment belum dijalankan pada server. Verifikasi live volume, secret, urutan startup dan kegagalan migrasi di target tetap wajib. HTTPS cookies/CORS pada domain sebenarnya, RBAC least-privilege DB roles, encrypted backup schedule/RPO/RTO, load test500gallery/2kiosk, UAT/training/DPIA/pilotsign-off tetap gate produksi. WP12 adalah kegiatan sekolah nyata, bukan fungsi yang dapat ditandai selesai dari fixture.
 
@@ -107,3 +107,23 @@ JPG/PNG maksimal 2 MB dan 12 megapiksel diperiksa sebelum decode, orientasi JPEG
 Teks antarmuka menggunakan peran, hak akses, daftar siswa, kode penghubung, dan foto pendaftaran. Detail implementasi tetap berada di API/log untuk pengembang. Tidak ada pengunggahan foto atau perubahan identitas sekolah pengguna selama verifikasi browser; pengujian upload menggunakan gambar sintetis dalam schema database sementara.
 
 Verifikasi akhir: seluruh tes Go dengan `-race`/database nyata, 51 tes UI Node, 65 tes AI, dan satu tes Python lolos; lint/typecheck/build/Go vet juga lolos. Delapan orientasi JPEG, orientasi PNG, metadata rusak, batas gambar, akses foto antar-akun, dan CSRF diuji. Browser desktop/mobile memperlihatkan form pengaturan/profil tanpa overflow, pemilih gambar berbahasa Indonesia, dan identitas sekolah di halaman masuk; tidak ada error console. Backup terenkripsi berhasil diverifikasi sebelum migrasi 00010; fingerprint data sekolah, akun, dan wajah lama tetap sama. Tiga fixture form lama yang sebelumnya gagal sudah disesuaikan dengan schema peran saat ini.
+
+## ID sekolah otomatis — 14 Oktober 2026
+
+ID sekolah tidak dikonfigurasi melalui environment. API membaca tepat satu sekolah dari database; jika belum ada, jalankan CLI bootstrap dahulu. Bootstrap membuat sekolah dan admin dalam satu transaksi dengan ID PostgreSQL otomatis, atau mempertahankan satu sekolah lama. Database lebih dari satu sekolah ditolak, termasuk jika sekolah lainnya nonaktif. Penonaktifan sekolah tidak menyebabkan aplikasi beralih ke sekolah lain. Relasi `school_id`, akun, sesi, perangkat, dan konteks enkripsi wajah lama tetap dipertahankan.
+
+Generator env dan kedua contoh env tidak menghasilkan ID sekolah. Seed development tidak menambah sekolah demo bila sudah ada sekolah; bootstrap serentak diserialisasi agar tidak membuat sekolah/admin ganda. Tidak ada migrasi ulang maupun perubahan ID pada database yang sudah berjalan.
+
+Verifikasi perubahan: suite Go dengan `-race` dan PostgreSQL nyata, bootstrap serentak/rollback/ambiguity, lima tes Python env/Compose, Go vet dan build API/bootstrap lolos. CLI diuji pada schema sementara tanpa konfigurasi ID, termasuk startup sebelum setup ditolak dengan petunjuk bootstrap, setup awal, login dan penolakan setup berulang. Keenam container lokal tidak memuat env ID sekolah; kedua API siap, login dan halaman absensi terverifikasi di browser. Fingerprint sekolah, akun, dan ciphertext wajah sebelum/sesudah identik. Server Coolify tidak diubah.
+
+## Reset seluruh data lokal — 14 Oktober 2026
+
+Atas permintaan pengguna, seluruh database aplikasi lokal dibuat ulang dari database kosong. Migrasi 00001–00011, seed sekolah demo, empat peran bawaan, dan bootstrap administrator development dijalankan terlebih dahulu pada database baru. ID sekolah dan akun dibuat otomatis. Data siswa, akademik, absensi, perangkat, gambar/logo, wajah terenkripsi, persetujuan, sesi akun/perangkat dan audit lama tidak dipertahankan di database aktif; dua schema fixture lama ikut hilang dari database aktif.
+
+Backup sebelum reset ada di `.tools/full-reset-2026-10-14-27e74f53/pre-reset.dump.gpg`, AES256 terenkripsi dengan kunci terpisah private 0600; env/kunci wajah dan kredensial admin lama juga disimpan dalam snapshot terenkripsi. Backup dipulihkan penuh ke database sementara dan jumlah/checksum seluruh tabel public cocok sebelum database diganti. Kedua API dihentikan saat snapshot/swap, lalu dimulai kembali untuk membaca ID sekolah baru. AI dimulai ulang untuk membersihkan state sementara. Database lama dihapus hanya setelah backup dan readiness database baru terverifikasi.
+
+Hasil: 1 sekolah demo, 1 admin lokal, 4 peran; tabel operasional dan biometrik kosong. Kredensial development mengikuti `make dev-bootstrap`, tersimpan lokal dalam `.tools/local-admin.json` 0600. Login dan dashboard kosong diverifikasi di browser, kedua API dan AI siap. Model, konfigurasi koneksi, dan server production tidak diubah. Backup/key recovery tidak dimasukkan ke Git. Reset ini tindakan operator lokal, bukan endpoint reset publik.
+
+## Staging dan pengujian browser
+
+Lihat [runbook staging](STAGING-RUNBOOK.md) untuk bootstrap sekali jalan sebelum API, konfigurasi proxy, Playwright dengan schema terisolasi, evaluasi PAD/hold-out, dan gate aktivasi. Data aplikasi lokal tidak dipakai sebagai fixture browser.

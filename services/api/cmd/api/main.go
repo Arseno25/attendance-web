@@ -15,6 +15,7 @@ import (
 	"attendance.local/api/internal/masterdata"
 	"attendance.local/api/internal/platform/aiclient"
 	"attendance.local/api/internal/platform/config"
+	"attendance.local/api/internal/platform/holidays"
 	"attendance.local/api/internal/platform/httpserver"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -39,7 +40,13 @@ func run() error {
 		return errors.New("invalid database configuration")
 	}
 	defer pool.Close()
-	authService, err := auth.NewWithLocalOrigins(pool, cfg.SchoolID, cfg.WebOrigin, cfg.AllowLocalWebPortRange)
+	startup, cancelStartup := context.WithTimeout(ctx, 15*time.Second)
+	schoolID, err := auth.ResolveSchoolID(startup, pool)
+	cancelStartup()
+	if err != nil {
+		return err
+	}
+	authService, err := auth.NewWithLocalOrigins(pool, schoolID, cfg.WebOrigin, cfg.AllowLocalWebPortRange, cfg.TrustedProxies...)
 	if err != nil {
 		return errors.New("authentication initialization failed")
 	}
@@ -50,10 +57,11 @@ func run() error {
 			return err
 		}
 	}
-	masterService := masterdata.New(pool, cfg.SchoolID, authService)
+	masterService := masterdata.New(pool, schoolID, authService)
 	masterService.SetAI(aiClient)
-	attendanceService := attendance.New(pool, cfg.SchoolID, authService)
+	attendanceService := attendance.New(pool, schoolID, authService)
 	attendanceService.SetAI(aiClient)
+	attendanceService.SetHolidays(holidays.New(holidays.Source))
 	go attendanceService.Run(ctx)
 	server := &http.Server{
 		Addr: cfg.Address,

@@ -1,4 +1,4 @@
-"""CPU enrollment/detection. Recognition requires evidence this project does not yet have."""
+"""Checksum-verified CPU face processing and encrypted enrollment."""
 
 import base64
 import binascii
@@ -14,8 +14,8 @@ import numpy as np
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from app.models import MANIFEST, verify_model
+from app.reference_photo import encrypt_reference_photo
 
-BLOCK_REASON = "MODEL_LIVENESS_NOT_EVALUATED"
 EVALUATION = {
     "status": "not_evaluated",
     "required": ["camera_hold_out", "liveness_spoof", "threshold_calibration"],
@@ -175,7 +175,11 @@ class TemplateCipher:
 class Pipeline:
     def __init__(self, directory):
         manifest = json.loads(MANIFEST.read_text())
-        detector_spec, recognizer_spec = manifest["models"]
+        specs = {spec["name"]: spec for spec in manifest["models"]}
+        detector_spec, recognizer_spec = (
+            specs["face_detection_yunet"],
+            specs["face_recognition_sface"],
+        )
         detector_path = verify_model(directory, detector_spec)
         recognizer_path = verify_model(directory, recognizer_spec)
         threads = int(os.environ.get("AI_OPENCV_THREADS", "2"))
@@ -271,10 +275,21 @@ class Pipeline:
             "message": message,
         }
 
-    def enroll(self, frames, cipher, school_id, student_id, consent_id):
+    def enroll(
+        self,
+        frames,
+        cipher,
+        school_id,
+        student_id,
+        consent_id,
+        *,
+        gallery=(),
+        duplicate_threshold=0.85,
+    ):
         if not 3 <= len(frames) <= 5:
             raise ImageError("FRAME_COUNT", "Ambil 3–5 foto dari kamera.")
         vectors, seen = [], set()
+        reference = None
         for value in frames:
             frame, digest = decode_image(value)
             if digest in seen:
@@ -286,6 +301,8 @@ class Pipeline:
                     "FACE_COUNT", "Pastikan setiap foto hanya menampilkan satu wajah."
                 )
             self.check_quality(frame, faces[0])
+            if reference is None:
+                reference = (frame, faces[0])
             vector = self.feature(frame, faces[0])
             # shortcut: 0.6 is a provisional consistency filter, recalibrate with permitted camera data.
             if any(float(vector @ previous) < 0.6 for previous in vectors):
@@ -294,30 +311,37 @@ class Pipeline:
                     "Foto menampilkan wajah yang berbeda. Ulangi pengambilan.",
                 )
             vectors.append(vector)
+        if not np.isfinite(duplicate_threshold) or not 0 < duplicate_threshold <= 1:
+            raise ValueError("Invalid duplicate threshold")
+        embedding = normalize(np.mean(vectors, axis=0))
+        for template in gallery:
+            if template["student_id"] == student_id:
+                continue
+            if template["model_sha256"] != self.model_sha256:
+                raise ValueError("Incompatible gallery model")
+            previous = cipher.decrypt(
+                template, school_id, template["student_id"], template.get("consent_id")
+            )
+            if float(embedding @ previous) >= duplicate_threshold:
+                raise ImageError(
+                    "DUPLICATE_IDENTITY",
+                    "Wajah ini sudah terdaftar. Periksa data siswa atau hubungi pengelola.",
+                )
         result = cipher.encrypt(
-            np.mean(vectors, axis=0),
+            embedding,
             school_id,
             student_id,
             consent_id,
             self.model_sha256,
         )
-        return dict(result, frame_count=len(vectors), status="provisional")
-
-    def recognize(self, image):
-        frame, _ = decode_image(image)
-        faces = self.detect(frame)
-        boxes = self.boxes(frame, faces)
-        # No liveness implementation or genuine camera hold-out report exists yet.
-        return {
-            "decision": "no_face"
-            if not boxes
-            else "unknown"
-            if len(boxes) == 1
-            else "inconclusive",
-            "faces": boxes,
-            "recognition_enabled": False,
-            "block_reason": BLOCK_REASON,
-        }
+        return dict(
+            result,
+            frame_count=len(vectors),
+            status="provisional",
+            reference_photo=encrypt_reference_photo(
+                *reference, cipher, school_id, student_id
+            ),
+        )
 
 
 @lru_cache(maxsize=1)
@@ -358,11 +382,21 @@ def status():
             "block_reason": "PIPELINE_NOT_CONFIGURED",
             "evaluation": EVALUATION,
         }
+    evaluation = EVALUATION
+    enabled = False
+    try:
+        from app.recognition import get_recognition_service
+
+        service = get_recognition_service()
+        evaluation = service.evaluation or EVALUATION
+        enabled = callable(service.liveness_hook)
+    except OSError, ValueError, cv2.error:
+        pass
     return {
         "pipeline_ready": True,
-        "recognition_enabled": False,
-        "block_reason": BLOCK_REASON,
+        "recognition_enabled": enabled,
+        "block_reason": "" if enabled else "PIPELINE_NOT_CONFIGURED",
         "model_sha256": pipeline.model_sha256,
         "detector_sha256": pipeline.detector_sha256,
-        "evaluation": EVALUATION,
+        "evaluation": evaluation,
     }

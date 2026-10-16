@@ -9,6 +9,7 @@ export interface Schedule {
   checkin_start: string
   checkin_cutoff: string
   grace_minutes: number
+  checkout_start: string | null
   close_time: string
   is_active: boolean
 }
@@ -21,6 +22,7 @@ export interface AttendanceSession {
   timezone: string
   starts_at: string
   late_after: string
+  checkout_at: string | null
   closes_at: string
   status: string
   reconciled_at: string | null
@@ -61,6 +63,8 @@ export interface CalendarDay {
   is_school_day: boolean | null
   reason: string
   is_override: boolean
+  source: 'school' | 'national_holiday' | 'joint_leave' | 'schedule'
+  holiday_name: string
 }
 export const attendanceLabels: Record<string, string> = {
   not_recorded: 'Belum tercatat',
@@ -81,4 +85,14 @@ export const correctionLabels: Record<string, string> = {
   pending: 'Menunggu',
   approved: 'Disetujui',
   rejected: 'Ditolak',
+}
+
+export interface SchoolCalendarMonth {
+  days: CalendarDay[]
+  sync: {
+    year: number
+    status: 'ready' | 'unavailable' | 'not_synced'
+    synced_at: string | null
+    attempted_at: string | null
+  }
 }

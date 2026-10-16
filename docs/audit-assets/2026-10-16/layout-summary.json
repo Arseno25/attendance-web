@@ -1,0 +1,912 @@
+{
+  "fixture": "synthetic, isolated DB",
+  "results": [
+    {
+      "route": "/",
+      "mode": "desktop-light",
+      "viewport": 1440,
+      "scrollWidth": 1440,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin",
+      "mode": "desktop-light",
+      "viewport": 1440,
+      "scrollWidth": 1440,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/academics",
+      "mode": "desktop-light",
+      "viewport": 1440,
+      "scrollWidth": 1440,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/students",
+      "mode": "desktop-light",
+      "viewport": 1440,
+      "scrollWidth": 1440,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/students/23fa27f6-2c50-4cde-ad26-2f8ad42dacb8",
+      "mode": "desktop-light",
+      "viewport": 1440,
+      "scrollWidth": 1440,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/students/import",
+      "mode": "desktop-light",
+      "viewport": 1440,
+      "scrollWidth": 1440,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/biometrics",
+      "mode": "desktop-light",
+      "viewport": 1440,
+      "scrollWidth": 1440,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/schedules",
+      "mode": "desktop-light",
+      "viewport": 1440,
+      "scrollWidth": 1440,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/attendance",
+      "mode": "desktop-light",
+      "viewport": 1440,
+      "scrollWidth": 1440,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/attendance/319be4c4-c373-4124-bd75-6400e186e742",
+      "mode": "desktop-light",
+      "viewport": 1440,
+      "scrollWidth": 1440,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/corrections",
+      "mode": "desktop-light",
+      "viewport": 1440,
+      "scrollWidth": 1440,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/reports",
+      "mode": "desktop-light",
+      "viewport": 1440,
+      "scrollWidth": 1440,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/devices",
+      "mode": "desktop-light",
+      "viewport": 1440,
+      "scrollWidth": 1440,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/users",
+      "mode": "desktop-light",
+      "viewport": 1440,
+      "scrollWidth": 1440,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/roles",
+      "mode": "desktop-light",
+      "viewport": 1440,
+      "scrollWidth": 1440,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/audit",
+      "mode": "desktop-light",
+      "viewport": 1440,
+      "scrollWidth": 1440,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/account",
+      "mode": "desktop-light",
+      "viewport": 1440,
+      "scrollWidth": 1440,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/settings",
+      "mode": "desktop-light",
+      "viewport": 1440,
+      "scrollWidth": 1440,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/absensi",
+      "mode": "desktop-light",
+      "viewport": 1440,
+      "scrollWidth": 1440,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/login",
+      "mode": "desktop-light",
+      "viewport": 1440,
+      "scrollWidth": 1440,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/",
+      "mode": "mobile-dark",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin",
+      "mode": "mobile-dark",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/academics",
+      "mode": "mobile-dark",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/students",
+      "mode": "mobile-dark",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/students/23fa27f6-2c50-4cde-ad26-2f8ad42dacb8",
+      "mode": "mobile-dark",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/students/import",
+      "mode": "mobile-dark",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/biometrics",
+      "mode": "mobile-dark",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/schedules",
+      "mode": "mobile-dark",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/attendance",
+      "mode": "mobile-dark",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/attendance/319be4c4-c373-4124-bd75-6400e186e742",
+      "mode": "mobile-dark",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/corrections",
+      "mode": "mobile-dark",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/reports",
+      "mode": "mobile-dark",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/devices",
+      "mode": "mobile-dark",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/users",
+      "mode": "mobile-dark",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/roles",
+      "mode": "mobile-dark",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/audit",
+      "mode": "mobile-dark",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/account",
+      "mode": "mobile-dark",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/settings",
+      "mode": "mobile-dark",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/absensi",
+      "mode": "mobile-dark",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/login",
+      "mode": "mobile-dark",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/",
+      "mode": "narrow-light",
+      "viewport": 320,
+      "scrollWidth": 320,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin",
+      "mode": "narrow-light",
+      "viewport": 320,
+      "scrollWidth": 320,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/academics",
+      "mode": "narrow-light",
+      "viewport": 320,
+      "scrollWidth": 320,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/students",
+      "mode": "narrow-light",
+      "viewport": 320,
+      "scrollWidth": 320,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/students/23fa27f6-2c50-4cde-ad26-2f8ad42dacb8",
+      "mode": "narrow-light",
+      "viewport": 320,
+      "scrollWidth": 320,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/students/import",
+      "mode": "narrow-light",
+      "viewport": 320,
+      "scrollWidth": 320,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/biometrics",
+      "mode": "narrow-light",
+      "viewport": 320,
+      "scrollWidth": 320,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/schedules",
+      "mode": "narrow-light",
+      "viewport": 320,
+      "scrollWidth": 320,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/attendance",
+      "mode": "narrow-light",
+      "viewport": 320,
+      "scrollWidth": 320,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/attendance/319be4c4-c373-4124-bd75-6400e186e742",
+      "mode": "narrow-light",
+      "viewport": 320,
+      "scrollWidth": 320,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/corrections",
+      "mode": "narrow-light",
+      "viewport": 320,
+      "scrollWidth": 320,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/reports",
+      "mode": "narrow-light",
+      "viewport": 320,
+      "scrollWidth": 320,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/devices",
+      "mode": "narrow-light",
+      "viewport": 320,
+      "scrollWidth": 320,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/users",
+      "mode": "narrow-light",
+      "viewport": 320,
+      "scrollWidth": 320,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/roles",
+      "mode": "narrow-light",
+      "viewport": 320,
+      "scrollWidth": 320,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/audit",
+      "mode": "narrow-light",
+      "viewport": 320,
+      "scrollWidth": 320,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/account",
+      "mode": "narrow-light",
+      "viewport": 320,
+      "scrollWidth": 320,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/settings",
+      "mode": "narrow-light",
+      "viewport": 320,
+      "scrollWidth": 320,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/absensi",
+      "mode": "narrow-light",
+      "viewport": 320,
+      "scrollWidth": 320,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/login",
+      "mode": "narrow-light",
+      "viewport": 320,
+      "scrollWidth": 320,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/",
+      "mode": "tablet-dark",
+      "viewport": 768,
+      "scrollWidth": 768,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin",
+      "mode": "tablet-dark",
+      "viewport": 768,
+      "scrollWidth": 768,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/academics",
+      "mode": "tablet-dark",
+      "viewport": 768,
+      "scrollWidth": 768,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/students",
+      "mode": "tablet-dark",
+      "viewport": 768,
+      "scrollWidth": 768,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/students/23fa27f6-2c50-4cde-ad26-2f8ad42dacb8",
+      "mode": "tablet-dark",
+      "viewport": 768,
+      "scrollWidth": 768,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/students/import",
+      "mode": "tablet-dark",
+      "viewport": 768,
+      "scrollWidth": 768,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/biometrics",
+      "mode": "tablet-dark",
+      "viewport": 768,
+      "scrollWidth": 768,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/schedules",
+      "mode": "tablet-dark",
+      "viewport": 768,
+      "scrollWidth": 768,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/attendance",
+      "mode": "tablet-dark",
+      "viewport": 768,
+      "scrollWidth": 768,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/attendance/319be4c4-c373-4124-bd75-6400e186e742",
+      "mode": "tablet-dark",
+      "viewport": 768,
+      "scrollWidth": 768,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/corrections",
+      "mode": "tablet-dark",
+      "viewport": 768,
+      "scrollWidth": 768,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/reports",
+      "mode": "tablet-dark",
+      "viewport": 768,
+      "scrollWidth": 768,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/devices",
+      "mode": "tablet-dark",
+      "viewport": 768,
+      "scrollWidth": 768,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/users",
+      "mode": "tablet-dark",
+      "viewport": 768,
+      "scrollWidth": 768,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/roles",
+      "mode": "tablet-dark",
+      "viewport": 768,
+      "scrollWidth": 768,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/audit",
+      "mode": "tablet-dark",
+      "viewport": 768,
+      "scrollWidth": 768,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/account",
+      "mode": "tablet-dark",
+      "viewport": 768,
+      "scrollWidth": 768,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/settings",
+      "mode": "tablet-dark",
+      "viewport": 768,
+      "scrollWidth": 768,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/absensi",
+      "mode": "tablet-dark",
+      "viewport": 768,
+      "scrollWidth": 768,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/login",
+      "mode": "tablet-dark",
+      "viewport": 768,
+      "scrollWidth": 768,
+      "overflow": false,
+      "dark": true,
+      "mainCount": 1
+    },
+    {
+      "route": "/",
+      "mode": "laptop-light",
+      "viewport": 1024,
+      "scrollWidth": 1024,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin",
+      "mode": "laptop-light",
+      "viewport": 1024,
+      "scrollWidth": 1024,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/academics",
+      "mode": "laptop-light",
+      "viewport": 1024,
+      "scrollWidth": 1024,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/students",
+      "mode": "laptop-light",
+      "viewport": 1024,
+      "scrollWidth": 1024,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/students/23fa27f6-2c50-4cde-ad26-2f8ad42dacb8",
+      "mode": "laptop-light",
+      "viewport": 1024,
+      "scrollWidth": 1024,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/students/import",
+      "mode": "laptop-light",
+      "viewport": 1024,
+      "scrollWidth": 1024,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/biometrics",
+      "mode": "laptop-light",
+      "viewport": 1024,
+      "scrollWidth": 1024,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/schedules",
+      "mode": "laptop-light",
+      "viewport": 1024,
+      "scrollWidth": 1024,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/attendance",
+      "mode": "laptop-light",
+      "viewport": 1024,
+      "scrollWidth": 1024,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/attendance/319be4c4-c373-4124-bd75-6400e186e742",
+      "mode": "laptop-light",
+      "viewport": 1024,
+      "scrollWidth": 1024,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/corrections",
+      "mode": "laptop-light",
+      "viewport": 1024,
+      "scrollWidth": 1024,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/reports",
+      "mode": "laptop-light",
+      "viewport": 1024,
+      "scrollWidth": 1024,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/devices",
+      "mode": "laptop-light",
+      "viewport": 1024,
+      "scrollWidth": 1024,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/users",
+      "mode": "laptop-light",
+      "viewport": 1024,
+      "scrollWidth": 1024,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/roles",
+      "mode": "laptop-light",
+      "viewport": 1024,
+      "scrollWidth": 1024,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/audit",
+      "mode": "laptop-light",
+      "viewport": 1024,
+      "scrollWidth": 1024,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/account",
+      "mode": "laptop-light",
+      "viewport": 1024,
+      "scrollWidth": 1024,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/admin/settings",
+      "mode": "laptop-light",
+      "viewport": 1024,
+      "scrollWidth": 1024,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/absensi",
+      "mode": "laptop-light",
+      "viewport": 1024,
+      "scrollWidth": 1024,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    },
+    {
+      "route": "/login",
+      "mode": "laptop-light",
+      "viewport": 1024,
+      "scrollWidth": 1024,
+      "overflow": false,
+      "dark": false,
+      "mainCount": 1
+    }
+  ],
+  "console": [
+    "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+    "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+    "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+    "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+    "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+  ]
+}

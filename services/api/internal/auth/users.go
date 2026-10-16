@@ -245,6 +245,9 @@ func (s *Service) updateUser(w http.ResponseWriter, r *http.Request) {
 	_, err = tx.Exec(r.Context(), "UPDATE users SET email=$3,full_name=$4,role=$5,is_active=$6,updated_at=now() WHERE school_id=$1 AND id=$2", s.schoolID, id, u.Email, u.FullName, u.Role, u.Active)
 	if err == nil && (u.Role != previousRole || u.Active != previousActive || u.Email != previousEmail) {
 		_, err = tx.Exec(r.Context(), "DELETE FROM user_sessions WHERE school_id=$1 AND user_id=$2", s.schoolID, id)
+		if err == nil {
+			_, err = tx.Exec(r.Context(), "DELETE FROM device_sessions WHERE school_id=$1 AND paired_by=$2", s.schoolID, id)
+		}
 	}
 	if err == nil {
 		err = audit(r.Context(), tx, s.schoolID, actor.ID, "users.updated", "user", id, w.Header().Get("X-Request-ID"))

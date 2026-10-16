@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url'
 
 const requireWeb = createRequire(resolve('apps/web/package.json'))
 const { parse, compileScript, compileTemplate } = requireWeb('@vue/compiler-sfc')
-const { ref, nextTick, watch } = requireWeb('vue')
+const { ref, nextTick, watch, computed } = requireWeb('vue')
 const flush = async () => { await nextTick(); await new Promise(r => setImmediate(r)); await nextTick() }
 
 test('all authored Vue templates compile after formatting', () => {
@@ -56,7 +56,7 @@ test('dialog focus returns to a row trigger and respects removed targets or canc
 let mounted, unmounted
 function context(request) {
   mounted = undefined; unmounted = undefined
-  Object.assign(globalThis, { ref, watch, nextTick, onMounted: f => { mounted = f }, onBeforeUnmount: f => { unmounted = f }, useApi: () => request, useMasterData: () => ({ options: async path => (await request(path)).data }), useRuntimeConfig: () => ({ public: { apiBase: 'http://localhost:8080/api/v1' } }), definePageMeta: () => {}, useHead: () => {}, useAuth: () => ({ session: ref({ permissions: ['devices.health'] }), load: async () => true }) })
+  Object.assign(globalThis, { requestAnimationFrame:fn=>{fn();return 0}, ref, computed, watch, nextTick, onMounted: f => { mounted = f }, onBeforeUnmount: f => { unmounted = f }, useApi: () => request, useMasterData: () => ({ options: async path => (await request(path)).data }), useRuntimeConfig: () => ({ public: { apiBase: 'http://localhost:8080/api/v1' } }), definePageMeta: () => {}, useHead: () => {}, useAuth: () => ({ session: ref({ permissions: ['devices.health'] }), load: async () => true }) })
   globalThis.document = Object.assign(new EventTarget(), { hidden: false, querySelector: () => null, querySelectorAll: () => [] })
   globalThis.window = new EventTarget()
   Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: true } })
@@ -174,17 +174,139 @@ test('late recognition cannot render names after camera stops and uses device CS
   context(async () => ({ data: session }))
   let finish, options
   const originalFetch = globalThis.$fetch
-  globalThis.$fetch = (_url, input) => { options = input; return new Promise(resolve => { finish = resolve }) }
+  globalThis.$fetch = (url, input) => url.endsWith('/capture-challenge') ? Promise.resolve({data:{event_id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'}}) : (options = input, new Promise(resolve => { finish = resolve }))
   const page = await kioskSetup()
   try {
     await mounted(); page.camera.value = { capture: () => '/9j/AA==', stop() {} }
     page.cameraChanged(true)
+    await flush()
     assert.equal(options.headers['X-CSRF-Token'], 'csrf')
     assert.equal(options.credentials, 'include')
-    assert.match(options.body.event_id, /^[0-9a-f-]{36}$/)
+    assert.equal(options.body.event_id, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')
     page.stopCamera()
     finish({ data: { decision: 'accepted', recognition_enabled: true, attendance: { outcome: 'recorded' }, faces: [{ box: { x: 0, y: 0, width: 0.5, height: 0.5 }, label: 'Old identity', student_id: 'old' }] } })
     await flush(); assert.deepEqual(page.faces.value, []); assert.equal(page.cameraActive.value, false)
   }
   finally { unmounted(); globalThis.$fetch = originalFetch }
+})
+
+test('pending frames retain the live box, then clear it on disappearance without discarding the last attendance', async () => {
+  context(async () => ({data: session}))
+  const originalFetch=globalThis.$fetch
+  let finish
+  globalThis.$fetch=(url)=>url.endsWith('/capture-challenge') ? Promise.resolve({data:{event_id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'}}) : new Promise(resolve=>{finish=resolve})
+  const page=await kioskSetup()
+  try {
+    await mounted()
+    page.camera.value={capture:()=>'/9j/AA==',stop(){}}
+    const known={decision:'accepted',recognition_enabled:true,faces:[{box:{x:0,y:0,width:0.5,height:0.5},student_id:'student',label:'Siswa A',similarity:0.89}],attendance:{outcome:'recorded',mode:'check_in',record:{id:'record',status:'present',check_in_at:'2026-10-15T00:00:00Z',check_out_at:null}}}
+    page.showResult(known)
+    page.cameraChanged(true)
+    assert.equal(page.faces.value[0].label,'Siswa A')
+    await flush()
+    finish({data:{decision:'no_face',recognition_enabled:false,faces:[]}})
+    await flush()
+    assert.deepEqual(page.faces.value,[])
+    assert.equal(page.lastResult.value.name,'Siswa A')
+    assert.equal(page.recent.value.length,1)
+    page.showResult(known); assert.equal(page.recent.value.length,1)
+    page.clock.value=Date.parse('2026-10-15T08:00:00Z')
+    page.kiosk.value.checkout_at='2026-10-15T08:00:00Z'
+    assert.equal(page.departure.value,true)
+    assert.equal(page.formatTime('2026-10-15T00:00:00Z'),'07.00')
+  } finally {unmounted(); globalThis.$fetch=originalFetch}
+})
+
+test('kiosk confirms committed attendance once per pupil, supports the next pupil and distinguishes departure', async () => {
+ context(async()=>({data:session}))
+ const page=await kioskSetup()
+ const match=(id,name,outcome='recorded',departed=false)=>({decision:'accepted',recognition_enabled:true,faces:[{box:{x:0,y:0,width:0.5,height:0.5},student_id:id,label:name,similarity:0.9}],attendance:{outcome,mode:departed?'check_out':'check_in',record:{id,status:'present',check_in_at:'2026-10-15T00:00:00Z',check_out_at:departed?'2026-10-15T08:00:00Z':null}}})
+ try {
+  await mounted();page.showResult(match('a','Siswa A'))
+  assert.equal(page.notice.value.name,'Siswa A');assert.equal(page.notice.value.saved,true)
+  assert.match(page.notice.value.title,/masuk/i)
+  const first=page.notice.value
+  const repeated=match('a','Siswa A','already_recorded');repeated.faces[0].similarity=0.71
+  page.showResult(repeated)
+  assert.equal(page.lastResult.value.similarity,0.9,'repeat scan replaced the first verified score')
+  assert.equal(page.notice.value,first,'continuous frames repeated the notification')
+  const nextPupil=match('b','Siswa B');nextPupil.faces[0].similarity=0.94
+  page.showResult(nextPupil);assert.equal(page.notice.value.name,'Siswa B')
+  assert.equal(page.lastResult.value.similarity,0.94,'next pupil reused a different pupils score')
+  page.showResult(match('a','Siswa A','already_recorded'))
+  const departureMatch=match('a','Siswa A','checked_out',true);departureMatch.faces[0].similarity=0.83
+  page.showResult(departureMatch);assert.match(page.notice.value.title,/pulang/i)
+  assert.equal(page.lastResult.value.similarity,0.83,'departure reused the arrival score')
+  assert.equal(page.recent.value.length,3)
+  page.showResult({...match('c','Siswa C'),attendance:{outcome:'check_in_required',mode:'check_out',record:null}})
+  assert.equal(page.notice.value.saved,false);assert.match(page.notice.value.title,/belum/i)
+  assert.equal(page.recent.value.length,3)
+  const originalNow=Date.now;let now=originalNow()
+  try {
+    Date.now=()=>now
+    page.showResult(match('a','Siswa A','already_checked_out',true))
+    const prior=page.notice.value
+    page.showResult({decision:'no_face',faces:[],recognition_enabled:false})
+    now+=1600;page.showResult({decision:'no_face',faces:[],recognition_enabled:false})
+    page.showResult(match('a','Siswa A','already_checked_out',true))
+    assert.notEqual(page.notice.value,prior,'returning pupil did not receive confirmation')
+  } finally {Date.now=originalNow}
+  for(let n=0;n<100;n++) page.showResult(match(`pupil-${n}`,`Siswa ${n}`))
+  assert.equal(page.recent.value.length,5);assert.equal(page.notice.value.name,'Siswa 99')
+  page.stopCamera();assert.equal(page.notice.value,null)
+ } finally {unmounted()}
+})
+
+
+test('stopped camera never captures or recognizes after a late capture permit', async () => {
+ context(async()=>({data:session}))
+ const originalFetch=globalThis.$fetch
+ let permit, captures=0
+ const requests=[]
+ globalThis.$fetch=(url)=>{requests.push(url);return new Promise(resolve=>{permit=resolve})}
+ const page=await kioskSetup()
+ try{
+  await mounted();page.camera.value={capture:()=>{captures++;return '/9j/AA=='},stop(){}}
+  page.cameraChanged(true)
+  assert.equal(captures,0)
+  assert.ok(requests[0].endsWith('/capture-challenge'))
+  page.stopCamera();permit({data:{event_id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'}})
+  await flush()
+  assert.equal(captures,0);assert.equal(requests.length,1);assert.equal(page.cameraActive.value,false)
+ }finally{unmounted();globalThis.$fetch=originalFetch}
+})
+
+test('paired kiosk waits between sessions and follows the next session without a pairing code', async () => {
+  context(async () => ({ data: { ...session, session_id: 'old', session_ready: true } }))
+  const originalFetch = globalThis.$fetch
+  let response = { ...session, session_id: null, session_ready: false, connection_status: 'waiting_session' }
+  globalThis.$fetch = async () => ({ data: response })
+  const page = await kioskSetup()
+  try {
+    await mounted(); page.cameraActive.value = true
+    await page.refreshConnection()
+    assert.ok(page.kiosk.value); assert.equal(page.sessionReady.value, false); assert.equal(page.cameraActive.value, false)
+    response = { ...session, session_id: 'next', session_ready: true, connection_status: 'ready' }
+    await page.refreshConnection()
+    assert.equal(page.kiosk.value.session_id, 'next'); assert.equal(page.sessionReady.value, true)
+    assert.equal(page.pairingToken.value, '')
+  } finally { unmounted(); globalThis.$fetch = originalFetch }
+})
+
+test('opening kiosk offline restores the remembered device when connectivity returns', async () => {
+  let available = false
+  context(async path => {
+    if (path === '/kiosk/me') {
+      if (!available) throw new Error('offline')
+      return { data: session }
+    }
+    return { data: [] }
+  })
+  const page = await kioskSetup()
+  try {
+    await mounted(); assert.equal(page.kiosk.value, null)
+    available = true; window.dispatchEvent(new Event('online')); await flush()
+    assert.equal(page.kiosk.value.device_name, 'Gate')
+    assert.equal(page.pairingToken.value, '')
+  } finally { unmounted() }
 })

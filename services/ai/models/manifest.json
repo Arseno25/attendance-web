@@ -18,6 +18,19 @@
       "license": "Apache-2.0",
       "license_url": "https://raw.githubusercontent.com/opencv/opencv_zoo/47534e27c9851bb1128ccc0102f1145e27f23f98/models/face_recognition_sface/LICENSE",
       "url": "https://media.githubusercontent.com/media/opencv/opencv_zoo/47534e27c9851bb1128ccc0102f1145e27f23f98/models/face_recognition_sface/face_recognition_sface_2021dec.onnx"
+    },
+    {
+      "name": "face_antispoof_minifasnet",
+      "filename": "minifasnet_v2.onnx",
+      "sha256": "d7b3cd9ba8a7ceb13baa8c4720902e27ca3112eff52f926c08804af6b6eecc7b",
+      "size": 1744116,
+      "license": "Apache-2.0",
+      "source_commit": "d29c87568ca9b5662da803b10f217c4db20b142b",
+      "upstream": "https://github.com/minivision-ai/Silent-Face-Anti-Spoofing",
+      "upstream_weights_sha256": "a5eb02e1843f19b5386b953cc4c9f011c3f985d0ee2bb9819eea9a142099bec0",
+      "live_class": 1,
+      "license_url": "https://huggingface.co/garciafido/minifasnet-v2-anti-spoofing-onnx/resolve/d29c87568ca9b5662da803b10f217c4db20b142b/LICENSE",
+      "url": "https://huggingface.co/garciafido/minifasnet-v2-anti-spoofing-onnx/resolve/d29c87568ca9b5662da803b10f217c4db20b142b/minifasnet_v2.onnx"
     }
   ]
 }

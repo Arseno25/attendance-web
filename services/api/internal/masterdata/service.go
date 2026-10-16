@@ -32,6 +32,7 @@ func New(pool *pgxpool.Pool, schoolID string, a *auth.Service) *Service {
 func (s *Service) SetAI(client *aiclient.Client) { s.ai = client }
 func (s *Service) Register(m *http.ServeMux) {
 	m.HandleFunc("/api/v1/students/{id}/face-status", s.faceStatus)
+	m.HandleFunc("/api/v1/students/{id}/face-photo", s.facePhoto)
 	m.HandleFunc("/api/v1/students/{id}/face-preview", s.facePreview)
 	m.HandleFunc("/api/v1/biometrics/students", s.biometricStudents)
 	m.HandleFunc("/api/v1/students/{id}/enrollments", s.enrollFace)
@@ -59,8 +60,8 @@ type scope struct {
 	classScoped bool
 }
 
-func (s *Service) begin(w http.ResponseWriter, r *http.Request, permission string, write bool) (*scope, bool) {
-	tx, user, ok := s.auth.BeginAuthorized(w, r, permission, write)
+func (s *Service) begin(w http.ResponseWriter, r *http.Request, permission string, write bool, alternatives ...string) (*scope, bool) {
+	tx, user, ok := s.auth.BeginAuthorized(w, r, permission, write, alternatives...)
 	if !ok {
 		return nil, false
 	}

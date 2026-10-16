@@ -5,11 +5,13 @@ import { readFileSync, writeFileSync, mkdirSync, symlinkSync, rmSync } from 'nod
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { loginSchema } from '../apps/web/app/lib/validation/auth.ts'
+import { useAuth } from '../apps/web/app/composables/useAuth.ts'
 import { useFormValidation } from '../apps/web/app/composables/useFormValidation.ts'
 
 const requireWeb = createRequire(resolve('apps/web/package.json'))
 const { parse, compileScript } = requireWeb('@vue/compiler-sfc')
-const { computed, ref, watch, effectScope, nextTick } = requireWeb('vue')
+const { computed, ref, watch, effectScope, nextTick, createSSRApp } = requireWeb('vue')
+const { renderToString } = requireWeb('vue/server-renderer')
 const directory = resolve('.tools/navigation-login-regression')
 mkdirSync(directory, { recursive: true })
 writeFileSync(directory + '/package.json', JSON.stringify({ type: 'module' }))
@@ -27,11 +29,14 @@ async function component(name, file) {
 }
 const Sidebar = await component('Sidebar', 'apps/web/app/components/AppSidebar.vue')
 const Login = await component('Login', 'apps/web/app/components/login-04/components/LoginForm.vue')
+const Overview = await component('Overview', 'apps/web/app/pages/admin/index.vue')
 Object.assign(globalThis, { computed, ref, watch, useFormValidation, useRuntimeConfig: () => ({ public: { apiBase: 'http://localhost/api/v1' } }), useSchoolBranding: () => ({ branding: ref({ app_name: 'Absensi Sekolah' }) }) })
 
 test('sidebar groups only authorized links, hides empty categories and reacts to access changes', () => {
-  const session = ref({ user: { role: 'super_admin' }, permissions: ['academics.read', 'attendance.read', 'devices.health', 'biometrics.enroll', 'users.read', 'roles.manage', 'audit.read'] })
-  globalThis.useAuth = () => ({ session })
+  const session = ref({ user: { role: 'super_admin' }, permissions: ['students.read', 'academics.read', 'corrections.request', 'attendance.read', 'devices.health', 'biometrics.enroll', 'users.read', 'roles.manage', 'audit.read'] })
+  globalThis.useState = () => session
+  globalThis.useApi = () => async () => ({ data: [] })
+  globalThis.useAuth = useAuth
   const page = Sidebar.setup({}, { expose() {} })
   assert.deepEqual(page.groups.value.map(g => g.title), ['Utama', 'Akademik', 'Kehadiran', 'Administrasi'])
   const links = page.groups.value.flatMap(g => g.items.map(i => i.url))
@@ -43,6 +48,32 @@ test('sidebar groups only authorized links, hides empty categories and reacts to
   session.value = { user: { role: 'teacher' }, permissions: ['academics.read', 'attendance.read'] }
   assert.ok(page.groups.value.flatMap(g => g.items).some(i => i.url === '/admin/reports'))
   assert.ok(page.groups.value.flatMap(g => g.items).some(i => i.url === '/admin/settings'))
+  session.value = { user: { role: 'custom' }, permissions: ['students.write', 'reports.export', 'attendance.approve'] }
+  const customLinks = page.groups.value.flatMap(g => g.items.map(i => i.url))
+  assert.ok(customLinks.includes('/admin/students'))
+  assert.ok(customLinks.includes('/admin/reports'))
+  assert.ok(customLinks.includes('/admin/corrections'))
+  assert.ok(!customLinks.includes('/admin/academics'))
+  assert.ok(!customLinks.includes('/admin/attendance'))
+})
+
+test('overview loads by effective attendance permission rather than built-in role', async () => {
+  globalThis.definePageMeta = () => {}
+  globalThis.useRoute = () => ({ query: {} })
+  for (const [role, permissions, expected] of [['custom', ['attendance.read'], 1], ['admin', [], 0]]) {
+    const session = ref({ user: { role }, permissions })
+    let calls = 0
+    globalThis.useState = () => session
+    globalThis.useAuth = useAuth
+    globalThis.useApi = () => async path => {
+      assert.equal(path, '/dashboard/summary')
+      calls++
+      return { data: { totals: null, trend: [], recent: [], filters: {} } }
+    }
+    globalThis.apiMessage = error => { throw error }
+    await renderToString(createSSRApp({ ...Overview, render: () => null }))
+    assert.equal(calls, expected, role)
+  }
 })
 
 function loginContext(login, query = {}) {

@@ -35,7 +35,7 @@ type User struct {
 	FullName        string    `json:"full_name"`
 	Role            string    `json:"role"`
 	RoleName        string    `json:"role_name"`
-	Scope           RoleScope `json:"-"`
+	Scope           RoleScope `json:"scope"`
 	PermissionsList []string  `json:"-"`
 	Active          bool      `json:"is_active"`
 	ClassIDs        []string  `json:"class_ids,omitempty"`
@@ -91,7 +91,18 @@ func (u User) Permissions() []string {
 
 func (u User) Can(permission, schoolID, classID string) bool {
 	effective := u.Permissions()
-	if !u.Active || u.SchoolID != schoolID || !knownPermission(permission) || !slices.Contains(effective, permission) {
+	required := permission
+	if !slices.Contains(effective, required) {
+		switch permission {
+		case "students.read":
+			required = "students.write"
+		case "academics.read":
+			required = "academics.write"
+		case "devices.health":
+			required = "devices.manage"
+		}
+	}
+	if !u.Active || u.SchoolID != schoolID || !knownPermission(permission) || !slices.Contains(effective, required) {
 		return false
 	}
 	if permission == "users.read" || permission == "users.write" || permission == "audit.read" || permission == "school.write" {

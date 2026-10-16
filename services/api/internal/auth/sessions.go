@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
-	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -105,10 +104,7 @@ func (s *Service) login(w http.ResponseWriter, r *http.Request) {
 	if !httpresponse.Method(w, r, "POST") || !s.writeOrigin(w, r) {
 		return
 	}
-	ip, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		ip = r.RemoteAddr
-	}
+	ip := s.clientIP(r)
 	if !s.limits.allow("ip:"+hex.EncodeToString(tokenHash(ip)), 30, time.Now()) {
 		httpresponse.Error(w, 429, "RATE_LIMITED", "Terlalu banyak percobaan; coba lagi nanti")
 		return
@@ -244,7 +240,7 @@ func (s *Service) logout(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) Bootstrap(ctx context.Context, email, name, password, schoolName string) error {
 	email, err := normalizeEmail(email)
-	if err != nil || !validName(name) || !validName(schoolName) || !httpresponse.ValidID(s.schoolID) {
+	if err != nil || !validName(name) || !validName(schoolName) || (s.schoolID != "" && !httpresponse.ValidID(s.schoolID)) {
 		return errors.New("invalid bootstrap input")
 	}
 	hash, err := HashPassword(password)
@@ -256,15 +252,27 @@ func (s *Service) Bootstrap(ctx context.Context, email, name, password, schoolNa
 		return err
 	}
 	defer tx.Rollback(context.Background())
-	_, err = tx.Exec(ctx, "INSERT INTO schools(id,name) VALUES($1,$2) ON CONFLICT(id) DO NOTHING", s.schoolID, strings.TrimSpace(schoolName))
+	schoolID := s.schoolID
+	if schoolID == "" {
+		// Serialize first-time setup so concurrent bootstraps cannot create separate schools.
+		if _, err = tx.Exec(ctx, "LOCK TABLE schools IN SHARE ROW EXCLUSIVE MODE"); err != nil {
+			return err
+		}
+		schoolID, err = ResolveSchoolID(ctx, tx)
+		if errors.Is(err, ErrSchoolNotConfigured) {
+			err = tx.QueryRow(ctx, "INSERT INTO schools(name) VALUES($1) RETURNING id::text", strings.TrimSpace(schoolName)).Scan(&schoolID)
+		}
+	} else {
+		_, err = tx.Exec(ctx, "INSERT INTO schools(id,name) VALUES($1,$2) ON CONFLICT(id) DO NOTHING", schoolID, strings.TrimSpace(schoolName))
+	}
 	if err != nil {
 		return err
 	}
-	if err = seedBuiltinRoles(ctx, tx, s.schoolID); err != nil {
+	if err = seedBuiltinRoles(ctx, tx, schoolID); err != nil {
 		return err
 	}
 	var active bool
-	err = tx.QueryRow(ctx, "SELECT is_active FROM schools WHERE id=$1 FOR UPDATE", s.schoolID).Scan(&active)
+	err = tx.QueryRow(ctx, "SELECT is_active FROM schools WHERE id=$1 FOR UPDATE", schoolID).Scan(&active)
 	if err != nil {
 		return err
 	}
@@ -272,16 +280,16 @@ func (s *Service) Bootstrap(ctx context.Context, email, name, password, schoolNa
 		return errors.New("school inactive")
 	}
 	var count int
-	if err = tx.QueryRow(ctx, "SELECT count(*) FROM users WHERE school_id=$1", s.schoolID).Scan(&count); err != nil {
+	if err = tx.QueryRow(ctx, "SELECT count(*) FROM users WHERE school_id=$1", schoolID).Scan(&count); err != nil {
 		return err
 	}
 	if count != 0 {
 		return errors.New("bootstrap already completed")
 	}
 	var id string
-	err = tx.QueryRow(ctx, "INSERT INTO users(school_id,email,full_name,password_hash,role) VALUES($1,$2,$3,$4,'super_admin') RETURNING id::text", s.schoolID, email, strings.TrimSpace(name), hash).Scan(&id)
+	err = tx.QueryRow(ctx, "INSERT INTO users(school_id,email,full_name,password_hash,role) VALUES($1,$2,$3,$4,'super_admin') RETURNING id::text", schoolID, email, strings.TrimSpace(name), hash).Scan(&id)
 	if err == nil {
-		err = audit(ctx, tx, s.schoolID, id, "auth.bootstrap", "user", id, "bootstrap-cli")
+		err = audit(ctx, tx, schoolID, id, "auth.bootstrap", "user", id, "bootstrap-cli")
 	}
 	if err != nil {
 		return err

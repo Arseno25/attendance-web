@@ -15,8 +15,6 @@ import (
 	"time"
 )
 
-const BlockReason = "MODEL_LIVENESS_NOT_EVALUATED"
-
 var ErrUnavailable = errors.New("AI service unavailable")
 
 type Client struct {
@@ -52,23 +50,27 @@ func (c *Client) Status(ctx context.Context) Status {
 }
 
 type Template struct {
-	StudentID  string `json:"student_id,omitempty"`
-	ConsentID  string `json:"consent_id,omitempty"`
-	Ciphertext string `json:"ciphertext"`
-	Nonce      string `json:"nonce"`
-	KeyID      string `json:"key_id"`
-	ModelSHA   string `json:"model_sha256"`
-	FrameCount int    `json:"frame_count,omitempty"`
-	Status     string `json:"status,omitempty"`
+	StudentID      string          `json:"student_id,omitempty"`
+	ConsentID      string          `json:"consent_id,omitempty"`
+	Ciphertext     string          `json:"ciphertext"`
+	Nonce          string          `json:"nonce"`
+	KeyID          string          `json:"key_id"`
+	ModelSHA       string          `json:"model_sha256"`
+	FrameCount     int             `json:"frame_count,omitempty"`
+	Status         string          `json:"status,omitempty"`
+	ReferencePhoto *ReferencePhoto `json:"reference_photo,omitempty"`
 }
 
-func (c *Client) Enroll(ctx context.Context, school, student, consent string, frames []string) (Template, error) {
+func (c *Client) Enroll(ctx context.Context, school, student, consent string, frames []string, gallery ...Template) (Template, error) {
 	var out Template
 	var contextConsent any
 	if consent != "" {
 		contextConsent = consent
 	}
-	err := c.call(ctx, "POST", "/internal/v1/enroll", map[string]any{"school_id": school, "student_id": student, "consent_id": contextConsent, "frames": frames}, &out)
+	if gallery == nil {
+		gallery = []Template{}
+	}
+	err := c.call(ctx, "POST", "/internal/v1/enroll", map[string]any{"school_id": school, "student_id": student, "consent_id": contextConsent, "frames": frames, "gallery": gallery}, &out)
 	return out, err
 }
 
@@ -79,9 +81,10 @@ type Box struct {
 	Height float64 `json:"height"`
 }
 type Face struct {
-	Box       Box    `json:"box"`
-	StudentID string `json:"student_id,omitempty"`
-	Label     string `json:"label,omitempty"`
+	Box        Box      `json:"box"`
+	StudentID  string   `json:"student_id,omitempty"`
+	Label      string   `json:"label,omitempty"`
+	Similarity *float64 `json:"similarity,omitempty"`
 }
 type PreviewFace struct {
 	Box Box `json:"box"`
@@ -153,6 +156,10 @@ func (c *Client) FacePreview(ctx context.Context, image string) (FacePreview, er
 }
 
 type Recognition struct {
+	EngineStatus       string         `json:"engine_status"`
+	Reason             string         `json:"reason"`
+	LivenessPassed     bool           `json:"liveness_passed"`
+	Confirmed          bool           `json:"is_confirmed"`
 	Decision           string         `json:"decision"`
 	Faces              []Face         `json:"faces"`
 	RecognitionEnabled bool           `json:"recognition_enabled"`

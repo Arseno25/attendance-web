@@ -2,11 +2,25 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"attendance.local/api/internal/platform/httpresponse"
 	"github.com/jackc/pgx/v5"
 )
+
+// UserCan checks the current authority behind a delegated device credential.
+func (s *Service) UserCan(ctx context.Context, tx pgx.Tx, userID, permission, classID string) (bool, error) {
+	u := User{ID: userID, SchoolID: s.schoolID}
+	err := tx.QueryRow(ctx, `SELECT role,is_active FROM users WHERE school_id=$1 AND id=$2`, s.schoolID, userID).Scan(&u.Role, &u.Active)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err == nil {
+		err = s.loadAccess(ctx, tx, &u)
+	}
+	return err == nil && u.Can(permission, s.schoolID, classID), err
+}
 
 // BeginAuthorized serializes school writes and checks live permissions after acquiring the lock.
 func (s *Service) BeginAuthorized(w http.ResponseWriter, r *http.Request, permission string, write bool, alternatives ...string) (pgx.Tx, User, bool) {

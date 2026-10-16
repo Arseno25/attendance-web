@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Laptop, Moon, Sun } from '@lucide/vue'
-import { z } from 'zod'
+import { z } from '~/lib/validation/zod'
 const colorMode = useColorMode()
 const theme = z.enum(['light', 'dark', 'system'])
 const modes = [

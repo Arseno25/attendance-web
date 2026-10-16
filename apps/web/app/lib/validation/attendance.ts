@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from './zod.ts'
 import {
   byteLength,
   date,
@@ -27,6 +27,7 @@ const scheduleFields = z.object({
   checkin_start: time,
   checkin_cutoff: time,
   close_time: time,
+  checkout_start: z.union([time, z.literal('')]).optional(),
   grace_minutes: z
     .union([z.number(), z.string().min(1, 'Toleransi wajib diisi.')])
     .pipe(
@@ -40,6 +41,18 @@ const scheduleFields = z.object({
 })
 const minutes = (value: string) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5))
 function scheduleOrder(value: z.infer<typeof scheduleFields>, ctx: z.RefinementCtx) {
+  if (
+    value.checkout_start &&
+    (minutes(value.checkout_start) <= minutes(value.checkin_cutoff) + value.grace_minutes ||
+      value.checkout_start >= value.close_time)
+  )
+    ctx.addIssue({
+      code: 'custom',
+      path: ['checkout_start'],
+      message:
+        'Jam pulang harus setelah batas tepat waktu dan toleransi, serta sebelum tutup absensi.',
+    })
+
   if (value.checkin_start >= value.checkin_cutoff)
     ctx.addIssue({
       code: 'custom',
@@ -59,6 +72,19 @@ export const newScheduleSchema = scheduleFields
   .superRefine(scheduleOrder)
 export const calendarDateSchema = z.object({ date })
 export const calendarSchema = calendarDateSchema.extend({ is_school_day: z.boolean(), reason })
+export const calendarRangeSchema = z
+  .object({ from: date, to: date, is_school_day: z.boolean(), reason })
+  .superRefine((value, ctx) => {
+    if (
+      value.to < value.from ||
+      Date.parse(`${value.to}T00:00:00Z`) - Date.parse(`${value.from}T00:00:00Z`) > 365 * 86400000
+    )
+      ctx.addIssue({
+        code: 'custom',
+        path: ['to'],
+        message: 'Pilih rentang berurutan maksimal 366 hari.',
+      })
+  })
 export const sessionSchema = z.object({ schedule_id: uuid, date })
 export const sessionFilterSchema = z.object({ date: optionalDate })
 export const rosterFilterSchema = z.object({

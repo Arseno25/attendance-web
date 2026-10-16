@@ -20,7 +20,7 @@ from app.main import app
 from app.pipeline import Pipeline, TemplateCipher
 
 SHA = "a" * 64
-CONFIG = EngineConfig(threshold=0.8, margin=0.1, min_interval=0, cooldown=0)
+CONFIG = EngineConfig(threshold=0.8, margin=0.1, min_interval=0)
 
 
 def matcher(gallery=None, config=CONFIG):
@@ -148,25 +148,33 @@ def test_engine_multiple_faces_quality_exceptions_stale_and_bounded_sessions(
     assert "private" not in repr(failed)
 
 
-def test_cooldown_and_sampling_never_echo_cached_identity(monkeypatch):
-    result, frame = engine(monkeypatch, replace(CONFIG, cooldown=10))
+def test_continuous_confirmation_uses_a_fresh_match_each_frame(monkeypatch):
+    result, frame = engine(monkeypatch, CONFIG)
     for _ in range(3):
         confirmed = result.process_frame(frame, "camera")
     assert confirmed.status == "CONFIRMED"
-    monkeypatch.setattr(
-        result.pipeline, "feature", lambda *_: pytest.fail("cooldown extracted")
-    )
-    cooled = result.process_frame(frame, "camera")
-    assert (
-        cooled.status == "PROCESSING"
-        and cooled.student_id is None
-        and not cooled.is_confirmed
-    )
+    for _ in range(4):
+        fresh = result.process_frame(frame, "camera")
+        assert fresh.status == "CONFIRMED" and fresh.student_id == "a"
+        assert fresh.similarity == pytest.approx(1)
+    monkeypatch.setattr(result.pipeline, "feature", lambda *_: vector(3))
+    unknown = result.process_frame(frame, "camera")
+    assert unknown.status == "UNKNOWN" and unknown.student_id is None
+    assert unknown.similarity == pytest.approx(0)
     result._slot.acquire()
     try:
         assert result.process_frame(frame, "camera").reason == "INFERENCE_BUSY"
     finally:
         result._slot.release()
+
+
+def test_sampling_does_not_echo_cached_identity(monkeypatch):
+    result, frame = engine(monkeypatch)
+    for _ in range(3):
+        result.process_frame(frame, "camera")
+    result.config = replace(CONFIG, min_interval=10)
+    skipped = result.process_frame(frame, "camera")
+    assert skipped.reason == "INFERENCE_INTERVAL" and skipped.student_id is None
 
 
 def test_gallery_decryption_preserves_consent_binding_and_model(monkeypatch):
@@ -317,3 +325,20 @@ def test_invalid_or_stale_frame_clears_pending_confirmation(monkeypatch, invalid
     assert not result._sessions["camera"].matches
     assert result._sessions["camera"].last_timestamp == timestamp
     assert result.process_frame(frame, "camera").status == "PROCESSING"
+
+
+def test_verified_track_keeps_fresh_identity_while_liveness_rechecks(monkeypatch):
+    result, frame = engine(monkeypatch)
+    result.liveness_hook = lambda *_: True
+    for _ in range(3):
+        result.process_frame(frame, "camera")
+    result.liveness_hook = lambda *_: False
+    pending = result.process_frame(frame, "camera")
+    assert pending.status == "VERIFYING" and pending.student_id == "a"
+    assert pending.similarity == pytest.approx(1) and pending.liveness_passed is False
+    result.liveness_hook = lambda *_: True
+    assert result.process_frame(frame, "camera").status == "CONFIRMED"
+    result.liveness_hook = lambda *_: False
+    monkeypatch.setattr(result.pipeline, "feature", lambda *_: vector(3))
+    lost = result.process_frame(frame, "camera")
+    assert lost.student_id is None and lost.status == "UNKNOWN"

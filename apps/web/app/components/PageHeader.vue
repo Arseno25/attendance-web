@@ -5,7 +5,7 @@ defineProps<{ title: string; description?: string }>()
 <template>
   <header class="flex flex-wrap items-start justify-between gap-4">
     <div class="min-w-0 basis-full sm:flex-1 sm:basis-auto">
-      <h1 class="text-2xl font-semibold tracking-tight">{{ title }}</h1>
+      <h1 class="text-2xl font-semibold tracking-tight wrap-anywhere">{{ title }}</h1>
       <p
         v-if="description"
         class="mt-2 max-w-2xl text-sm text-muted-foreground"
@@ -15,7 +15,7 @@ defineProps<{ title: string; description?: string }>()
     </div>
     <div
       v-if="$slots.actions"
-      class="ml-auto flex shrink-0 flex-wrap justify-end gap-2"
+      class="ml-auto flex w-full min-w-0 max-w-full flex-wrap justify-end gap-2 sm:w-auto"
     >
       <slot name="actions" />
     </div>

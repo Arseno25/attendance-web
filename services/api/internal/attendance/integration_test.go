@@ -4,6 +4,7 @@ import (
 	"attendance.local/api/internal/attendance"
 	"attendance.local/api/internal/auth"
 	"attendance.local/api/internal/masterdata"
+	"attendance.local/api/internal/platform/holidays"
 	"attendance.local/api/internal/platform/httpserver"
 	"bytes"
 	"context"
@@ -82,11 +83,44 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 	if err = a.Bootstrap(ctx, "owner@example.test", "Owner", password, "School"); err != nil {
 		t.Fatal(err)
 	}
+
+	holidayTime := time.Now().In(time.FixedZone("Jakarta", 7*3600)).AddDate(0, 0, 2)
+	holidayDate, jointDate := holidayTime.Format("2006-01-02"), holidayTime.AddDate(0, 0, 1).Format("2006-01-02")
+	providerFailure, providerEmpty := false, false
+	var providerStarted, providerRelease chan struct{}
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if providerStarted != nil {
+			close(providerStarted)
+			<-providerRelease
+		}
+		if providerFailure {
+			w.WriteHeader(503)
+			return
+		}
+		var year int
+		fmt.Sscanf(r.URL.Path, "/holidays/%d", &year)
+		data := []holidays.Day{}
+		for _, d := range []holidays.Day{{Date: holidayDate, Name: "Synthetic national holiday", Type: "national_holiday"}, {Date: jointDate, Name: "Synthetic joint leave", Type: "joint_leave"}} {
+			if strings.HasPrefix(d.Date, fmt.Sprint(year)) {
+				data = append(data, d)
+			}
+		}
+		if len(data) == 0 {
+			data = append(data, holidays.Day{Date: fmt.Sprintf("%d-01-01", year), Name: "Synthetic New Year", Type: "national_holiday"})
+		}
+		if providerEmpty {
+			data = []holidays.Day{}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"meta": map[string]int{"year": year, "count": len(data)}, "data": data})
+	}))
+	defer provider.Close()
+	attendanceService := attendance.New(pool, schoolID, a)
+	attendanceService.SetHolidays(holidays.New(provider.URL))
 	master := masterdata.New(pool, schoolID, a)
 	h := httpserver.NewHandler(pool.Ping, "http://localhost:3000", func(m *http.ServeMux) {
 		a.Register(m)
 		master.Register(m)
-		attendance.New(pool, schoolID, a).Register(m)
+		attendanceService.Register(m)
 	})
 	cookie := (*http.Cookie)(nil)
 	csrf := ""
@@ -189,7 +223,7 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 	assignment := expect(call("POST", "/class-assignments", map[string]any{"user_id": teacher["id"], "class_id": class["id"]}), 201)["data"].(map[string]any)
 	operatorRole := expect(call("POST", "/roles", map[string]any{"name": "Attendance operator", "scope": "school", "permissions": []string{"attendance.manual"}}), 201)["data"].(map[string]any)
 	operator := expect(call("POST", "/users", map[string]any{"email": "operator@example.test", "full_name": "Operator", "role": operatorRole["key"], "password": password}), 201)["data"].(map[string]any)
-	scheduleBody := map[string]any{"class_id": class["id"], "name": "Daily", "weekdays": []int{1, 2, 3, 4, 5, 6, 7}, "checkin_start": "00:00", "checkin_cutoff": "00:01", "grace_minutes": 0, "close_time": "23:59"}
+	scheduleBody := map[string]any{"class_id": class["id"], "name": "Daily", "checkout_start": "23:30", "weekdays": []int{1, 2, 3, 4, 5, 6, 7}, "checkin_start": "00:00", "checkin_cutoff": "00:01", "grace_minutes": 0, "close_time": "23:59"}
 	schedule := expect(call("POST", "/attendance-schedules", scheduleBody), 201)["data"].(map[string]any)
 	scheduleID := schedule["id"].(string)
 	expect(call("POST", "/attendance-schedules", scheduleBody), 409)
@@ -199,17 +233,144 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT (now() AT TIME ZONE 'Asia/Jakarta')::date::text`).Scan(&day); err != nil {
 		t.Fatal(err)
 	}
+	expect(call("POST", "/attendance-sessions", map[string]any{"schedule_id": scheduleID, "date": day}), 409)
+	if err := attendanceService.Tick(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if existing := expect(call("GET", "/attendance-sessions?date="+day, nil), 200)["data"].([]any); len(existing) != 0 {
+		t.Fatal("unknown calendar generated attendance session", existing)
+	}
+	expect(call("POST", "/school/calendar/sync", map[string]any{"year": now.Year()}), 200)
+
+	if holidayTime.Year() != now.Year() {
+		expect(call("POST", "/school/calendar/sync", map[string]any{"year": holidayTime.Year()}), 200)
+	}
+	if holidayTime.AddDate(0, 0, 1).Year() != holidayTime.Year() {
+		expect(call("POST", "/school/calendar/sync", map[string]any{"year": holidayTime.AddDate(0, 0, 1).Year()}), 200)
+	}
+	national := expect(call("GET", "/school/calendar/"+holidayDate, nil), 200)["data"].(map[string]any)
+	joint := expect(call("GET", "/school/calendar/"+jointDate, nil), 200)["data"].(map[string]any)
+	if national["source"] != "national_holiday" || national["is_school_day"] != false || joint["source"] != "joint_leave" {
+		t.Fatal("holidays not applied", national, joint)
+	}
+	expect(call("POST", "/attendance-sessions", map[string]any{"schedule_id": scheduleID, "date": holidayDate}), 409)
+	expect(call("PUT", "/school/calendar/"+holidayDate, map[string]any{"is_school_day": true, "reason": "Replacement school day"}), 200)
+	expect(call("POST", "/attendance-sessions", map[string]any{"schedule_id": scheduleID, "date": holidayDate}), 201)
+	expect(call("DELETE", "/school/calendar/"+holidayDate, nil), 200)
+	if reset := expect(call("GET", "/school/calendar/"+holidayDate, nil), 200)["data"].(map[string]any); reset["is_override"] != false || reset["is_school_day"] != false {
+		t.Fatal("reset lost automatic holiday", reset)
+	}
+	expect(call("PUT", "/school/calendar", map[string]any{"from": holidayDate, "to": jointDate, "is_school_day": false, "reason": "Libur semester"}), 200)
+	providerFailure = true
+	expect(call("POST", "/school/calendar/sync", map[string]any{"year": holidayTime.Year()}), 503)
+	providerFailure = false
+	providerEmpty = true
+	expect(call("POST", "/school/calendar/sync", map[string]any{"year": holidayTime.Year()}), 503)
+	providerEmpty = false
+	after := expect(call("GET", "/school/calendar/"+holidayDate, nil), 200)["data"].(map[string]any)
+	if after["source"] != "school" || after["reason"] != "Libur semester" || after["holiday_name"] != "Synthetic national holiday" {
+		t.Fatal("sync destroyed local/cached calendar", after)
+	}
+	monthData := expect(call("GET", "/school/calendar/month?month="+holidayDate[:7], nil), 200)["data"].(map[string]any)
+	if len(monthData["days"].([]any)) < 28 || monthData["sync"].(map[string]any)["synced_at"] == nil {
+		t.Fatal("month/cache unavailable", monthData)
+	}
+	expect(call("PUT", "/school/calendar", map[string]any{"from": jointDate, "to": holidayDate, "is_school_day": false, "reason": "Reversed"}), 400)
+	expect(call("PUT", "/school/calendar", map[string]any{"from": "2026-01-01", "to": "2027-01-02", "is_school_day": false, "reason": "Too long"}), 400)
+	expect(call("POST", "/school/calendar/sync", map[string]any{"year": 99999}), 400)
+	expect(call("GET", "/school/calendar/month?month=invalid", nil), 400)
+	expect(call("DELETE", "/school/calendar/"+holidayDate, nil), 200)
+	expect(call("DELETE", "/school/calendar/"+jointDate, nil), 200)
+	expect(call("POST", "/school/calendar/sync", map[string]any{"year": holidayTime.Year()}), 200)
+
+	syncRole := expect(call("POST", "/roles", map[string]any{"name": "School calendar writer", "scope": "school", "permissions": []string{"academics.write", "attendance.read"}}), 201)["data"].(map[string]any)
+	syncUser := expect(call("POST", "/users", map[string]any{"email": "calendar-sync@example.test", "full_name": "Sync writer", "role": syncRole["key"], "password": password}), 201)["data"].(map[string]any)
+	var beforeSync, afterSync time.Time
+	if err := pool.QueryRow(ctx, `SELECT synced_at FROM school_holiday_sync WHERE school_id=$1 AND year=$2`, schoolID, holidayTime.Year()).Scan(&beforeSync); err != nil {
+		t.Fatal(err)
+	}
+	login("calendar-sync@example.test")
+	req := httptest.NewRequest("POST", "/api/v1/school/calendar/sync", strings.NewReader(fmt.Sprintf(`{"year":%d}`, holidayTime.Year())))
+	req.Header.Set("Origin", "http://localhost:3000")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-CSRF-Token", csrf)
+	req.AddCookie(cookie)
+	providerStarted, providerRelease = make(chan struct{}), make(chan struct{})
+	syncResult := make(chan *httptest.ResponseRecorder, 1)
+	go func() { response := httptest.NewRecorder(); h.ServeHTTP(response, req); syncResult <- response }()
+	select {
+	case <-providerStarted:
+	case <-time.After(3 * time.Second):
+		close(providerRelease)
+		t.Fatal("holiday provider did not start")
+	}
+	login("owner@example.test")
+	expect(call("PATCH", "/users/"+syncUser["id"].(string), map[string]any{"is_active": false}), 200)
+	close(providerRelease)
+	expect(<-syncResult, 401)
+	providerStarted, providerRelease = nil, nil
+	if err := pool.QueryRow(ctx, `SELECT synced_at FROM school_holiday_sync WHERE school_id=$1 AND year=$2`, schoolID, holidayTime.Year()).Scan(&afterSync); err != nil || !beforeSync.Equal(afterSync) {
+		t.Fatal("revoked sync request mutated holiday cache", beforeSync, afterSync, err)
+	}
+	limitedRole := expect(call("POST", "/roles", map[string]any{"name": "Class calendar writer", "scope": "assigned_classes", "permissions": []string{"academics.write"}}), 201)["data"].(map[string]any)
+	limitedUser := expect(call("POST", "/users", map[string]any{"email": "calendar-class@example.test", "full_name": "Calendar scoped", "role": limitedRole["key"], "password": password}), 201)["data"].(map[string]any)
+	expect(call("POST", "/class-assignments", map[string]any{"user_id": limitedUser["id"], "class_id": class["id"]}), 201)
+	login("calendar-class@example.test")
+	expect(call("GET", "/school/calendar/month?month="+day[:7], nil), 200)
+	expect(call("PUT", "/school/calendar/"+day, map[string]any{"is_school_day": false, "reason": "Outside authority"}), 403)
+	expect(call("DELETE", "/school/calendar/"+day, nil), 403)
+	expect(call("PUT", "/school/calendar", map[string]any{"from": day, "to": day, "is_school_day": false, "reason": "Outside authority"}), 403)
+	expect(call("POST", "/school/calendar/sync", map[string]any{"year": now.Year()}), 403)
+	login("owner@example.test")
 	expect(call("GET", "/school/calendar/"+day, nil), 200)
 	expect(call("PUT", "/school/calendar/"+day, map[string]any{"is_school_day": false, "reason": "Holiday"}), 200)
 	expect(call("POST", "/attendance-sessions", map[string]any{"schedule_id": scheduleID, "date": day}), 409)
 	expect(call("PUT", "/school/calendar/"+day, map[string]any{"is_school_day": true, "reason": "School day"}), 200)
 	se := expect(call("POST", "/attendance-sessions", map[string]any{"schedule_id": scheduleID, "date": day}), 201)["data"].(map[string]any)
 	sessionID := se["id"].(string)
+	if se["checkout_at"] == nil {
+		t.Fatal("session missing departure snapshot", se)
+	}
+	expect(call("PATCH", "/attendance-schedules/"+scheduleID, map[string]any{"checkout_start": "23:00"}), 200)
+	frozenCheckout := expect(call("GET", "/attendance-sessions/"+sessionID, nil), 200)["data"].(map[string]any)
+	if frozenCheckout["checkout_at"] != se["checkout_at"] {
+		t.Fatal("schedule edit changed existing session", frozenCheckout)
+	}
+	// The remaining lifecycle fixtures move the session window independently.
+	if _, err := pool.Exec(ctx, `UPDATE attendance_sessions SET checkout_at=NULL WHERE id=$1`, sessionID); err != nil {
+		t.Fatal(err)
+	}
+
 	expect(call("POST", "/attendance-sessions", map[string]any{"schedule_id": scheduleID, "date": day}), 409)
+	expect(call("PUT", "/school/calendar/"+day, map[string]any{"is_school_day": false, "reason": "Holiday after scheduling"}), 200)
+	expect(call("POST", "/attendance-sessions/"+sessionID+"/open", map[string]any{"reason": "Must not open on holiday"}), 409)
+	if err := attendance.New(pool, schoolID, a).Tick(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if blocked := expect(call("GET", "/attendance-sessions/"+sessionID, nil), 200)["data"].(map[string]any); blocked["status"] != "scheduled" {
+		t.Fatal("worker opened a scheduled session on a holiday", blocked)
+	}
+	expect(call("PUT", "/school/calendar/"+day, map[string]any{"is_school_day": true, "reason": "School day restored"}), 200)
 	expect(call("POST", "/attendance-sessions/"+sessionID+"/open", map[string]any{"reason": "Start"}), 200)
+	expect(call("PUT", "/school/calendar/"+day, map[string]any{"is_school_day": false, "reason": "Do not rewrite an open session"}), 200)
+	if err := attendance.New(pool, schoolID, a).Tick(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if opened := expect(call("GET", "/attendance-sessions/"+sessionID, nil), 200)["data"].(map[string]any); opened["status"] != "open" {
+		t.Fatal("calendar edit changed an already open session", opened)
+	}
+	expect(call("PUT", "/school/calendar/"+day, map[string]any{"is_school_day": true, "reason": "Continue school day"}), 200)
 	activeDevice := expect(call("POST", "/devices", map[string]string{"name": "Gate 2", "location": "Side"}), 201)["data"].(map[string]any)
 	pairing := expect(call("POST", "/devices/"+activeDevice["id"].(string)+"/pairing-token", nil), 201)["data"].(map[string]any)
 	pairBody := map[string]any{"pairing_token": pairing["pairing_token"], "session_id": sessionID}
+
+	restrictedRole := expect(call("POST", "/roles", map[string]any{"name": "Scoped device operator", "scope": "assigned_classes", "permissions": []string{"devices.health"}}), 201)["data"].(map[string]any)
+	restrictedUser := expect(call("POST", "/users", map[string]any{"email": "restricted-device@example.test", "full_name": "Restricted device", "role": restrictedRole["key"], "password": password}), 201)["data"].(map[string]any)
+	login("restricted-device@example.test")
+	if data := expect(call("GET", "/kiosk/session-options", nil), 200)["data"].([]any); len(data) != 0 {
+		t.Errorf("unassigned operator saw %d sessions", len(data))
+	}
+	expect(call("POST", "/kiosk/session", pairBody), 404)
 	login("deviceonly@example.test")
 	pairResponse := call("POST", "/kiosk/session", pairBody)
 	paired := expect(pairResponse, 201)["data"].(map[string]any)
@@ -235,12 +396,137 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 		return w
 	}
 	expect(call("POST", "/kiosk/session", pairBody), 401)
+	expires, err := time.Parse(time.RFC3339Nano, paired["expires_at"].(string))
+	if err != nil || time.Until(expires) < 29*24*time.Hour || deviceCookie.MaxAge < 29*24*3600 {
+		t.Fatal("device must remain paired between school days", expires, deviceCookie.MaxAge)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE attendance_sessions SET status='closed',closed_at=clock_timestamp() WHERE id=$1`, sessionID); err != nil {
+		t.Fatal(err)
+	}
+	var otherSession, otherSchedule string
+	if err := pool.QueryRow(ctx, `INSERT INTO attendance_schedules(school_id,class_id,name,timezone,weekdays,checkin_start,checkin_cutoff,close_time,is_active) SELECT school_id,$2,'Other class',timezone,weekdays,checkin_start,checkin_cutoff,close_time,false FROM attendance_schedules WHERE id=(SELECT schedule_id FROM attendance_sessions WHERE id=$1) RETURNING id::text`, sessionID, class2["id"]).Scan(&otherSchedule); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `INSERT INTO attendance_sessions(school_id,schedule_id,class_id,date,name,timezone,starts_at,late_after,closes_at,status,opened_at) SELECT school_id,$2,$3,date,'Other class session',timezone,starts_at,late_after,closes_at,'open',clock_timestamp() FROM attendance_sessions WHERE id=$1 RETURNING id::text`, sessionID, otherSchedule, class2["id"]).Scan(&otherSession); err != nil {
+		t.Fatal(err)
+	}
+	waiting := expect(deviceCall("/kiosk/heartbeat", paired["csrf_token"].(string)), 200)["data"].(map[string]any)
+	if waiting["session_ready"] != false || waiting["device_name"] != "Gate 2" {
+		t.Fatal("closed session must preserve device connection", waiting)
+	}
+	expect(deviceCall("/kiosk/capture-challenge", paired["csrf_token"].(string)), 409)
+	if _, err := pool.Exec(ctx, `DELETE FROM attendance_sessions WHERE id=$1`, otherSession); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM attendance_schedules WHERE id=$1`, otherSchedule); err != nil {
+		t.Fatal(err)
+	}
+	// Heartbeat refreshes inactivity expiry without needing the operator login again.
+	if _, err := pool.Exec(ctx, `UPDATE device_sessions SET expires_at=clock_timestamp()+interval '10 minutes' WHERE device_id=$1`, activeDevice["id"]); err != nil {
+		t.Fatal(err)
+	}
+	renewal := deviceCall("/kiosk/heartbeat", paired["csrf_token"].(string))
+	expect(renewal, 200)
+	if renewal.Result().Cookies()[0].MaxAge < 29*24*3600 {
+		t.Fatal("device cookie was not renewed")
+	}
+	var nextSession string
+	if err := pool.QueryRow(ctx, `INSERT INTO attendance_sessions(school_id,schedule_id,class_id,date,name,timezone,starts_at,late_after,closes_at,status,opened_at) SELECT school_id,schedule_id,class_id,date+1,'Next school day',timezone,starts_at,late_after,closes_at,'open',clock_timestamp() FROM attendance_sessions WHERE id=$1 RETURNING id::text`, sessionID).Scan(&nextSession); err != nil {
+		t.Fatal(err)
+	}
+	next := expect(deviceCall("/kiosk/heartbeat", paired["csrf_token"].(string)), 200)["data"].(map[string]any)
+	if next["session_id"] != nextSession || next["session_ready"] != true {
+		t.Fatal("paired device did not follow next class session", next)
+	}
+	// Two open sessions must pause attendance, never choose an arbitrary roster.
+	if _, err := pool.Exec(ctx, `UPDATE attendance_sessions SET status='open',closed_at=NULL WHERE id=$1`, sessionID); err != nil {
+		t.Fatal(err)
+	}
+	ambiguous := expect(deviceCall("/kiosk/heartbeat", paired["csrf_token"].(string)), 200)["data"].(map[string]any)
+	if ambiguous["connection_status"] != "multiple_sessions" || ambiguous["session_ready"] != false {
+		t.Fatal("ambiguous sessions must wait", ambiguous)
+	}
+	expect(deviceCall("/kiosk/capture-challenge", paired["csrf_token"].(string)), 409)
+	if _, err := pool.Exec(ctx, `UPDATE device_sessions SET session_id=$1 WHERE session_id=$2`, sessionID, nextSession); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM attendance_sessions WHERE id=$1`, nextSession); err != nil {
+		t.Fatal(err)
+	}
 	expect(deviceCall("/kiosk/heartbeat", "wrong"), 403)
 	expect(deviceCall("/kiosk/heartbeat", paired["csrf_token"].(string)), 200)
 	expect(deviceCall("/kiosk/recognitions", paired["csrf_token"].(string)), 400)
+	login("owner@example.test")
+	roleList := expect(call("GET", "/roles", nil), 200)["data"].([]any)
+	var deviceRoleID string
+	for _, item := range roleList {
+		row := item.(map[string]any)
+		if row["key"] == "operator" {
+			deviceRoleID = row["id"].(string)
+		}
+	}
+	expect(call("PATCH", "/roles/"+deviceRoleID, map[string]any{"permissions": []string{}}), 200)
+	expect(deviceCall("/kiosk/heartbeat", paired["csrf_token"].(string)), 401)
+	expect(call("PATCH", "/roles/"+deviceRoleID, map[string]any{"permissions": []string{"devices.health"}}), 200)
+	expect(deviceCall("/kiosk/heartbeat", paired["csrf_token"].(string)), 401)
+
 	var leaked int
 	if err = pool.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE metadata::text LIKE '%PRIVATE-%' OR metadata::text LIKE '%'||$1||'%'`, pairing["pairing_token"]).Scan(&leaked); err != nil || leaked != 0 {
 		t.Fatalf("sensitive audit leak %d %v", leaked, err)
+	}
+
+	restrictedAssignment := expect(call("POST", "/class-assignments", map[string]any{"user_id": restrictedUser["id"], "class_id": class["id"]}), 201)["data"].(map[string]any)
+	for _, scenario := range []string{"assignment_gap", "assignment_expiry", "assignment_revoke", "role_change", "account_disabled"} {
+		var grantEnds time.Time
+		if scenario == "assignment_gap" {
+			if err := pool.QueryRow(ctx, `UPDATE user_class_assignments SET ends_at=clock_timestamp()+interval '1 second' WHERE id=$1 RETURNING ends_at`, restrictedAssignment["id"]).Scan(&grantEnds); err != nil {
+				t.Fatal(err)
+			}
+		}
+		pairing := expect(call("POST", "/devices/"+activeDevice["id"].(string)+"/pairing-token", nil), 201)["data"].(map[string]any)
+		login("restricted-device@example.test")
+		response := call("POST", "/kiosk/session", map[string]any{"pairing_token": pairing["pairing_token"], "session_id": sessionID})
+		data := expect(response, 201)["data"].(map[string]any)
+		scopedCookie := response.Result().Cookies()[0]
+		heartbeatScoped := func() *httptest.ResponseRecorder {
+			req := httptest.NewRequest("POST", "/api/v1/kiosk/heartbeat", nil)
+			req.Header.Set("Origin", "http://localhost:3000")
+			req.Header.Set("X-CSRF-Token", data["csrf_token"].(string))
+			req.AddCookie(scopedCookie)
+			result := httptest.NewRecorder()
+			h.ServeHTTP(result, req)
+			return result
+		}
+		expect(heartbeatScoped(), 200)
+		if scenario == "assignment_gap" {
+			expiry, err := time.Parse(time.RFC3339Nano, data["expires_at"].(string))
+			if err != nil || expiry.After(grantEnds) {
+				t.Fatalf("device credential outlives its class grant: %v %v", expiry, err)
+			}
+			time.Sleep(time.Until(grantEnds.Add(10 * time.Millisecond)))
+		}
+		login("owner@example.test")
+		switch scenario {
+		case "assignment_expiry":
+			if _, err := pool.Exec(ctx, `UPDATE user_class_assignments SET starts_at=clock_timestamp()-interval '2 hours',ends_at=clock_timestamp()-interval '1 hour' WHERE id=$1`, restrictedAssignment["id"]); err != nil {
+				t.Fatal(err)
+			}
+		case "assignment_revoke":
+			expect(call("PATCH", "/class-assignments/"+restrictedAssignment["id"].(string), map[string]any{"is_active": false}), 200)
+		case "role_change":
+			expect(call("PATCH", "/users/"+restrictedUser["id"].(string), map[string]any{"role": "teacher"}), 200)
+		case "account_disabled":
+			expect(call("PATCH", "/users/"+restrictedUser["id"].(string), map[string]any{"is_active": false}), 200)
+		}
+		if scenario != "assignment_gap" {
+			expect(heartbeatScoped(), 401)
+		}
+		// Restore only fixture authority; an invalidated device credential must stay invalid.
+		expect(call("PATCH", "/users/"+restrictedUser["id"].(string), map[string]any{"role": restrictedRole["key"], "is_active": true}), 200)
+		if _, err := pool.Exec(ctx, `UPDATE user_class_assignments SET starts_at=clock_timestamp()-interval '1 hour',ends_at=clock_timestamp()+interval '1 hour',is_active=true,revoked_at=NULL WHERE id=$1`, restrictedAssignment["id"]); err != nil {
+			t.Fatal(err)
+		}
+		expect(heartbeatScoped(), 401)
 	}
 	expect(call("POST", "/devices/"+activeDevice["id"].(string)+"/revoke", map[string]string{"reason": "Compromised"}), 200)
 	expect(deviceCall("/kiosk/heartbeat", paired["csrf_token"].(string)), 401)
@@ -371,9 +657,17 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 	}
 	expect(call("POST", "/attendance-sessions/"+sessionID+"/reconcile", map[string]any{"reason": "Pending request"}), 409)
 	// Approver is distinct from requester; teacher never receives approval grant.
-	approverRole := expect(call("POST", "/roles", map[string]any{"name": "Attendance approver", "scope": "school", "permissions": []string{"attendance.approve", "attendance.read"}}), 201)["data"].(map[string]any)
-	expect(call("POST", "/users", map[string]any{"email": "approver@example.test", "full_name": "Approver", "role": approverRole["key"], "password": password}), 201)
+	approverRole := expect(call("POST", "/roles", map[string]any{"name": "Attendance approver", "scope": "assigned_classes", "permissions": []string{"attendance.approve", "attendance.read"}}), 201)["data"].(map[string]any)
+	approver := expect(call("POST", "/users", map[string]any{"email": "approver@example.test", "full_name": "Approver", "role": approverRole["key"], "password": password}), 201)["data"].(map[string]any)
+	expect(call("POST", "/class-assignments", map[string]any{"user_id": approver["id"], "class_id": class["id"]}), 201)
 	login("approver@example.test")
+	expect(call("GET", "/classes", nil), 200)
+	expect(call("GET", "/academic-years", nil), 200)
+	expect(call("POST", "/classes", map[string]any{"name": "Not allowed"}), 403)
+	expect(call("GET", "/attendance-corrections/"+own["id"].(string), nil), 200)
+	if pending := expect(call("GET", "/attendance-corrections?status=pending", nil), 200)["data"].([]any); len(pending) == 0 {
+		t.Fatal("class approver cannot see another request")
+	}
 	expect(call("POST", "/attendance-corrections/"+own["id"].(string)+"/decision", map[string]any{"decision": "rejected", "reason": "Sick record correct"}), 200)
 	expect(call("POST", "/attendance-sessions/"+sessionID+"/reconcile", map[string]any{"reason": "Administrative review complete"}), 200)
 	expect(call("POST", "/attendance-sessions/"+sessionID+"/reconcile", map[string]any{"reason": "Retry"}), 200)
@@ -510,6 +804,7 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 	// First-insert contention uses a new participant, not an existing record.
 	student4 := expect(call("POST", "/students", map[string]any{"nis": "004", "full_name": "Student four", "class_id": class["id"]}), 201)["data"].(map[string]any)
 	// A separate fixture session is open for this concurrency check.
+	delete(scheduleBody, "checkout_start")
 	scheduleBody["class_id"] = class2["id"]
 	scheduleBody["name"] = "Worker class B"
 	schedB := expect(call("POST", "/attendance-schedules", scheduleBody), 201)["data"].(map[string]any)
@@ -677,6 +972,18 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 		t.Fatal("duplicate checkout", outs, err)
 	}
 
+	exportRole := expect(call("POST", "/roles", map[string]any{"name": "Reports only", "scope": "assigned_classes", "permissions": []string{"reports.export"}}), 201)["data"].(map[string]any)
+	exporter := expect(call("POST", "/users", map[string]any{"email": "reports@example.test", "full_name": "Reports only", "role": exportRole["key"], "password": password}), 201)["data"].(map[string]any)
+	expect(call("POST", "/class-assignments", map[string]any{"user_id": exporter["id"], "class_id": class["id"]}), 201)
+	login("reports@example.test")
+	expect(call("GET", "/reports/attendance?date="+day, nil), 200)
+	if csv := call("GET", "/reports/attendance?format=csv&date="+day, nil); csv.Code != 200 {
+		t.Fatal("report-only role cannot export", csv.Code, csv.Body.String())
+	}
+	expect(call("GET", "/classes", nil), 200)
+	expect(call("GET", "/academic-years", nil), 200)
+	expect(call("GET", "/attendance-sessions", nil), 403)
+	login("owner@example.test")
 	wsServer := httptest.NewServer(h)
 	defer wsServer.Close()
 	wsURL := "ws" + strings.TrimPrefix(wsServer.URL, "http") + "/api/v1/ws/attendance?session_id=" + outSession

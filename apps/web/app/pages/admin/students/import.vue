@@ -4,8 +4,8 @@ import { Download } from '@lucide/vue'
 import { importSchema, importCommitSchema } from '~/lib/validation/master'
 import type { Result } from '~/types/auth'
 import type { SchoolClass } from '~/types/master'
-definePageMeta({ layout: 'admin', middleware: ['auth', 'academics'] })
-const { request, options, canWrite, dateTime } = useMasterData()
+definePageMeta({ layout: 'admin', middleware: ['auth', 'students'] })
+const { request, options, canWrite, dateTime } = useMasterData('students.write')
 interface Preview {
   id: string
   hash: string

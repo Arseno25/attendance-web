@@ -25,7 +25,7 @@ const links = computed(() => [
   auth.session.value?.permissions.includes('biometrics.revoke')
     ? [{ title: 'Wajah siswa', url: '/admin/biometrics', icon: ScanFace, category: 'Kehadiran' }]
     : []),
-  ...(auth.session.value?.permissions.includes('academics.read')
+  ...(auth.has('academics.read')
     ? [
         {
           title: 'Data akademik',
@@ -33,10 +33,9 @@ const links = computed(() => [
           icon: GraduationCap,
           category: 'Akademik',
         },
-        { title: 'Siswa', url: '/admin/students', icon: Users, category: 'Akademik' },
       ]
     : []),
-  ...(auth.session.value?.permissions.includes('academics.read')
+  ...(auth.has('academics.read')
     ? [
         {
           title: 'Jadwal & kalender',
@@ -46,8 +45,10 @@ const links = computed(() => [
         },
       ]
     : []),
-  ...(auth.session.value?.permissions.includes('attendance.read') ||
-  auth.session.value?.permissions.includes('attendance.manual')
+  ...(auth.has('students.read')
+    ? [{ title: 'Siswa', url: '/admin/students', icon: Users, category: 'Akademik' }]
+    : []),
+  ...(auth.has('attendance.read', 'attendance.manual')
     ? [
         {
           title: 'Sesi absensi',
@@ -55,6 +56,10 @@ const links = computed(() => [
           icon: ClipboardCheck,
           category: 'Kehadiran',
         },
+      ]
+    : []),
+  ...(auth.has('corrections.request', 'attendance.approve', 'attendance.manual')
+    ? [
         {
           title: 'Koreksi absensi',
           url: '/admin/corrections',
@@ -63,10 +68,10 @@ const links = computed(() => [
         },
       ]
     : []),
-  ...(auth.session.value?.permissions.includes('attendance.read')
+  ...(auth.has('attendance.read', 'reports.export')
     ? [{ title: 'Laporan kehadiran', url: '/admin/reports', icon: FileDown, category: 'Kehadiran' }]
     : []),
-  ...(auth.session.value?.permissions.includes('devices.health')
+  ...(auth.has('devices.health')
     ? [
         {
           title: 'Perangkat absensi',

@@ -5,8 +5,8 @@ import { statusVariant } from '~/lib/status'
 import { Plus } from '@lucide/vue'
 import type { Result } from '~/types/auth'
 import { statusLabels, type Student, type SchoolClass } from '~/types/master'
-definePageMeta({ layout: 'admin', middleware: ['auth', 'academics'] })
-const { request, options, canWrite } = useMasterData()
+definePageMeta({ layout: 'admin', middleware: ['auth', 'students'] })
+const { request, options, canWrite } = useMasterData('students.write')
 const students = ref<Student[]>([])
 const classes = ref<SchoolClass[]>([])
 const page = ref(1)
@@ -250,12 +250,7 @@ await load()
           :loading="loading"
         >
           <template #cell-nama-siswa="{ item: student }">
-            <NuxtLink
-              :to="`/admin/students/${student.id}`"
-              class="hover:underline"
-            >
-              {{ student.full_name }}
-            </NuxtLink>
+            {{ student.full_name }}
           </template>
           <template #cell-nis="{ item: student }">{{ student.nis }}</template>
           <template #cell-kelas-terakhir="{ item: student }">

@@ -4,7 +4,19 @@ export function faceOverlays(result: Recognition): FaceOverlay[] {
   const accepted =
     result.decision === 'accepted' &&
     result.recognition_enabled &&
-    ['recorded', 'already_recorded'].includes(result.attendance?.outcome ?? '')
+    [
+      'recorded',
+      'already_recorded',
+      'checked_out',
+      'already_checked_out',
+      'check_in_required',
+      'status_locked',
+      'correction_pending',
+    ].includes(result.attendance?.outcome ?? '')
+  const continuing =
+    result.decision === 'verification_required' &&
+    result.identity_continuous === true &&
+    !result.recognition_enabled
   return result.faces
     .filter(({ box }) => {
       const values = [box.x, box.y, box.width, box.height]
@@ -17,11 +29,19 @@ export function faceOverlays(result: Recognition): FaceOverlay[] {
       )
     })
     .map((face) => {
-      const identified = accepted && !!face.student_id && !!face.label?.trim()
+      const identified = (accepted || continuing) && !!face.student_id && !!face.label?.trim()
       return {
         box: face.box,
         label: identified ? face.label! : 'Belum dikenali',
-        accepted: identified,
+        accepted: identified && !continuing,
+        tone: continuing ? ('warning' as const) : undefined,
+        similarity:
+          typeof face.similarity === 'number' &&
+          Number.isFinite(face.similarity) &&
+          face.similarity >= -1 &&
+          face.similarity <= 1
+            ? face.similarity
+            : undefined,
       }
     })
 }
@@ -46,4 +66,35 @@ export function captureJpeg(video: HTMLVideoElement) {
       'Foto terlalu besar. Gunakan pengaturan kamera yang lebih rendah dan coba lagi.',
     )
   return image
+}
+
+export function attendanceFeedback(attendance: NonNullable<Recognition['attendance']>) {
+  const blocked: Record<string, string> = {
+    check_in_required: 'Jam masuk belum tercatat. Hubungi petugas sebelum mencatat pulang.',
+    status_locked: 'Status siswa sudah diatur petugas. Hubungi petugas untuk perubahan.',
+    correction_pending: 'Kehadiran sedang ditinjau petugas. Tunggu koreksi selesai.',
+  }
+  const warning = blocked[attendance.outcome]
+  if (warning)
+    return {
+      saved: false,
+      status: 'Perlu bantuan petugas',
+      tone: 'warning' as const,
+      message: warning,
+    }
+  const departed = !!attendance.record?.check_out_at
+  const late = attendance.record?.status === 'late'
+  return {
+    saved: !!attendance.record,
+    status: departed ? 'Sudah pulang' : late ? 'Terlambat' : 'Hadir',
+    tone: late && !departed ? ('warning' as const) : ('success' as const),
+    message:
+      attendance.outcome === 'checked_out'
+        ? 'Jam pulang tersimpan.'
+        : attendance.outcome === 'already_checked_out'
+          ? 'Jam pulang sudah tercatat.'
+          : attendance.outcome === 'recorded'
+            ? 'Kehadiran tersimpan.'
+            : 'Kehadiran sudah tercatat.',
+  }
 }

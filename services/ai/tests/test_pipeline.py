@@ -118,6 +118,11 @@ def test_enrollment_consistency_duplicate_and_ciphertext_only(monkeypatch):
     result = pipeline.enroll(frames, cipher, "s", "st", "co")
     assert result["frame_count"] == 3 and result["status"] == "provisional"
     assert "embedding" not in result and "frames" not in result
+    from app.reference_photo import decrypt_reference_photo
+
+    portrait = decrypt_reference_photo(result["reference_photo"], cipher, "s", "st")
+    assert decode_image(portrait)[0].shape == (192, 192, 3)
+    assert portrait not in frames
     assert np.allclose(cipher.decrypt(result, "s", "st", "co"), vector())
     with pytest.raises(ImageError, match="berbeda"):
         pipeline.enroll([frames[0]] * 3, cipher, "s", "st", "co")
@@ -141,22 +146,12 @@ def test_matching_unknown_spoof_ambiguity_and_stability_cannot_identify():
     )
 
 
-def test_detection_returns_only_boxes_and_honest_gate(monkeypatch):
-    pipeline = fake_pipeline(monkeypatch)
-    result = pipeline.recognize(image(1))
-    assert result["decision"] == "unknown" and result["recognition_enabled"] is False
-    assert len(result["faces"]) == 1
-    assert list(result["faces"][0]) == ["box"]
-    assert all(0 <= v <= 1 for v in result["faces"][0]["box"].values())
-    assert result["block_reason"] == "MODEL_LIVENESS_NOT_EVALUATED"
-
-
 def test_internal_body_limits_and_validation_do_not_echo_images(monkeypatch):
     monkeypatch.setenv("AI_SERVICE_TOKEN", "a" * 48)
     with TestClient(app) as client:
         result = client.post(
             "/internal/v1/enroll",
-            content=b"x" * ((2 << 20) + 1),
+            content=b"x" * ((6 << 20) + 1),
             headers={
                 "Authorization": "Bearer " + "a" * 48,
                 "Content-Type": "application/json",
@@ -212,7 +207,7 @@ def test_enrollment_nullable_context_preserves_legacy_binding(monkeypatch):
         )
     assert response.status_code == 200
     template = response.json()
-    assert template["recognition_enabled"] is False
+    assert template["status"] == "provisional"
     assert np.allclose(cipher.decrypt(template, school, student, None), vector())
     with pytest.raises(InvalidTag):
         cipher.decrypt(

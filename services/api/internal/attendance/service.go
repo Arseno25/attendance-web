@@ -3,6 +3,7 @@ package attendance
 import (
 	"attendance.local/api/internal/auth"
 	"attendance.local/api/internal/platform/aiclient"
+	"attendance.local/api/internal/platform/holidays"
 	"attendance.local/api/internal/platform/httpresponse"
 	"context"
 	"encoding/json"
@@ -13,6 +14,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"unicode/utf8"
 )
 
@@ -22,12 +24,15 @@ type Service struct {
 	auth      *auth.Service
 	liveSlots chan struct{}
 	ai        *aiclient.Client
+	holidays  *holidays.Client
+	holidayMu sync.Mutex
 }
 
 func New(p *pgxpool.Pool, school string, a *auth.Service) *Service {
 	return &Service{pool: p, schoolID: strings.ToLower(school), auth: a, liveSlots: make(chan struct{}, 32)}
 }
-func (s *Service) SetAI(client *aiclient.Client) { s.ai = client }
+func (s *Service) SetHolidays(client *holidays.Client) { s.holidays = client }
+func (s *Service) SetAI(client *aiclient.Client)       { s.ai = client }
 func (s *Service) Register(m *http.ServeMux) {
 	m.HandleFunc("/api/v1/devices", s.devices)
 	m.HandleFunc("/api/v1/devices/{id}/revoke", s.deviceRevoke)
@@ -35,6 +40,7 @@ func (s *Service) Register(m *http.ServeMux) {
 	m.HandleFunc("/api/v1/kiosk/session", s.kioskSession)
 	m.HandleFunc("/api/v1/kiosk/session-options", s.kioskOptions)
 	m.HandleFunc("/api/v1/kiosk/me", s.kioskMe)
+	m.HandleFunc("/api/v1/kiosk/capture-challenge", s.captureChallenge)
 	m.HandleFunc("/api/v1/kiosk/heartbeat", s.heartbeat)
 	m.HandleFunc("/api/v1/kiosk/recognitions", s.recognize)
 	m.HandleFunc("/api/v1/kiosk/recognize", s.recognize)
@@ -44,6 +50,8 @@ func (s *Service) Register(m *http.ServeMux) {
 	m.HandleFunc("/api/v1/attendance-schedules", s.schedules)
 	m.HandleFunc("/api/v1/attendance-schedules/{id}", s.schedule)
 	m.HandleFunc("/api/v1/school/calendar", s.calendarList)
+	m.HandleFunc("/api/v1/school/calendar/month", s.calendarMonth)
+	m.HandleFunc("/api/v1/school/calendar/sync", s.calendarSync)
 	m.HandleFunc("/api/v1/school/calendar/{date}", s.calendar)
 	m.HandleFunc("/api/v1/attendance-sessions", s.sessions)
 	m.HandleFunc("/api/v1/attendance-sessions/{id}", s.session)
@@ -121,9 +129,9 @@ func (s *Service) audit(r *http.Request, tx pgx.Tx, actor, action, target, id st
 
 // Worker and handlers supply request IDs without exposing record bodies in logs.
 func wRequestID(r *http.Request) string { return r.Header.Get("X-Internal-Request-ID") }
-func (s *Service) begin(w http.ResponseWriter, r *http.Request, perm string, write bool) (pgx.Tx, auth.User, bool) {
+func (s *Service) begin(w http.ResponseWriter, r *http.Request, perm string, write bool, alternatives ...string) (pgx.Tx, auth.User, bool) {
 	r.Header.Set("X-Internal-Request-ID", w.Header().Get("X-Request-ID"))
-	return s.auth.BeginAuthorized(w, r, perm, write)
+	return s.auth.BeginAuthorized(w, r, perm, write, alternatives...)
 }
 func (s *Service) finish(w http.ResponseWriter, r *http.Request, tx pgx.Tx, user auth.User, status int, data map[string]any, action, target string, meta map[string]any) {
 	id, _ := data["id"].(string)

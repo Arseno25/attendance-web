@@ -15,6 +15,7 @@ import type {
 definePageMeta({ layout: 'admin', middleware: ['auth', 'reports'] })
 const { request, options, dateTime, canExport, defaultFilters, download } = useReports()
 const route = useRoute()
+const auth = useAuth()
 const form = reactive(defaultFilters())
 const { errors, validate, clear } = useFormValidation(
   () => reportSchema,
@@ -445,11 +446,8 @@ await load({ ...form })
             { id: 'siswa', label: 'Siswa', cellClass: 'font-medium' },
             { id: 'kelas-tahun', label: 'Kelas / tahun' },
             { id: 'status', label: 'Status' },
-            {
-              id: 'waktu-hadir-pulang',
-              label: 'Waktu hadir / pulang',
-              cellClass: 'whitespace-nowrap',
-            },
+            { id: 'jam-masuk', label: 'Jam masuk', cellClass: 'tabular-nums' },
+            { id: 'jam-pulang', label: 'Jam pulang', cellClass: 'tabular-nums' },
             { id: 'alasan', label: 'Alasan', cellClass: 'max-w-48 whitespace-normal' },
             {
               id: 'tindakan',
@@ -482,14 +480,33 @@ await load({ ...form })
               {{ attendanceLabels[item.status] }}
             </Badge>
           </template>
-          <template #cell-waktu-hadir-pulang="{ item }">
-            {{ item.check_in_at ? dateTime(item.check_in_at) : '—' }}
-            <div
-              v-if="item.check_out_at"
-              class="text-xs text-muted-foreground"
+          <template #cell-jam-masuk="{ item }">
+            <time
+              v-if="item.check_in_at"
+              :datetime="item.check_in_at"
             >
-              Pulang: {{ dateTime(item.check_out_at) }}
-            </div>
+              {{ dateTime(item.check_in_at, { timeStyle: 'long', timeZone: item.timezone }) }}
+            </time>
+            <span
+              v-else
+              class="text-muted-foreground"
+            >
+              Belum tercatat
+            </span>
+          </template>
+          <template #cell-jam-pulang="{ item }">
+            <time
+              v-if="item.check_out_at"
+              :datetime="item.check_out_at"
+            >
+              {{ dateTime(item.check_out_at, { timeStyle: 'long', timeZone: item.timezone }) }}
+            </time>
+            <span
+              v-else
+              class="text-muted-foreground"
+            >
+              Belum tercatat
+            </span>
           </template>
           <template #cell-alasan="{ item }">{{ item.reason ?? '—' }}</template>
           <template #cell-tindakan="{ item }">
@@ -500,6 +517,7 @@ await load({ ...form })
                   label: 'Lihat sesi',
                   icon: 'view',
                   to: `/admin/attendance/${item.session_id}`,
+                  hidden: !auth.has('attendance.read', 'attendance.manual'),
                 },
               ]"
             />

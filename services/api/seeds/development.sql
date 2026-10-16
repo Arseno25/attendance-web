@@ -1,4 +1,6 @@
--- Dummy school only; never creates a default admin password or biometric data.
-INSERT INTO schools(id, name)
-VALUES ('00000000-0000-4000-8000-000000000001', 'Sekolah Demo')
-ON CONFLICT (id) DO NOTHING;
+-- Dummy school only; preserve an existing school and never create default credentials.
+BEGIN;
+LOCK TABLE schools IN SHARE ROW EXCLUSIVE MODE;
+INSERT INTO schools(name)
+SELECT 'Sekolah Demo' WHERE NOT EXISTS(SELECT 1 FROM schools);
+COMMIT;

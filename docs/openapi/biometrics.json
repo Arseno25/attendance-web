@@ -169,7 +169,7 @@
     "/api/v1/students/{id}/enrollments": {
       "post": {
         "summary": "Enroll provisional face template",
-        "description": "Live biometrics.enroll and active student required in local and production. 3–5 distinct quality-checked JPEGs; JSON <=2 MiB. Only encrypted templates stored. Guardian consent is not part of enrollment. Automatic attendance remains disabled until evaluation.",
+        "description": "Live biometrics.enroll and active student required in local and production. 3\u20135 distinct quality-checked JPEGs; JSON <=2 MiB. Only encrypted templates stored. Guardian consent is not part of enrollment. Automatic attendance remains disabled until evaluation.",
         "security": [
           {
             "UserCookie": []
@@ -312,7 +312,7 @@
     "/api/v1/kiosk/recognize": {
       "post": {
         "summary": "Detect faces from a paired device",
-        "description": "Device cookie + Origin/CSRF, current school/session/roster. JSON <=512 KiB. Current unevaluated pipeline returns real boxes and no candidate identities. Compatible alias /api/v1/kiosk/recognitions.",
+        "description": "Device cookie + Origin/CSRF, live school/device/operator/session/roster/template checks. JSON <=512 KiB. Stable fresh recognition and liveness record check-in before checkout_at; at/after it record checkout only for already present/late students. No frames are persisted. Mutations are idempotent; repeated frames do not generate new ledger rows. Compatible alias /api/v1/kiosk/recognitions. First obtain event_id from POST /api/v1/kiosk/capture-challenge, then capture a fresh JPEG. Permits expire after 10 seconds and are device-bound and single-use; identical JPEGs are rejected for 24 hours. On a lost response or 409 CAPTURE_REPLAY/RECOGNITION_STALE, obtain a new permit and capture a new frame; never retry the same frame. Authority and gallery are revalidated after inference.",
         "security": [
           {
             "DeviceCookie": []
@@ -353,6 +353,9 @@
           },
           "503": {
             "description": "Service unavailable; no automatic attendance"
+          },
+          "409": {
+            "description": "CAPTURE_REPLAY for a used, expired, foreign-device permit or duplicate JPEG; RECOGNITION_STALE when gallery/device/session changes during inference. Obtain a new permit and fresh frame."
           }
         },
         "parameters": [
@@ -388,7 +391,7 @@
     "/api/v1/students/{id}/face-preview": {
       "post": {
         "summary": "Check enrollment camera frame quality",
-        "description": "Live biometrics.enroll and active student, rechecked after inference. Strict JSON <=512 KiB; raw base64 JPEG <=384 KiB and dimensions 160–1280. Ephemeral frames; only geometry and quality returned. No guardian consent required.",
+        "description": "Live biometrics.enroll and active student, rechecked after inference. Strict JSON <=512 KiB; raw base64 JPEG <=384 KiB and dimensions 160\u20131280. Ephemeral frames; only geometry and quality returned. No guardian consent required.",
         "security": [
           {
             "UserCookie": []
@@ -490,6 +493,97 @@
           }
         }
       ]
+    },
+    "/api/v1/kiosk/capture-challenge": {
+      "post": {
+        "summary": "Issue a single-use device-bound capture event valid for ten seconds",
+        "description": "Requires an active device cookie and matching X-CSRF-Token/Origin. Request before capturing each fresh image. Creating a permit replaces unused permits for that device session.",
+        "responses": {
+          "201": {
+            "description": "data.event_id (UUID) and data.expires_at (date-time)"
+          },
+          "401": {
+            "description": "Device, session, operator authority or assigned class is no longer valid"
+          },
+          "403": {
+            "description": "Origin or CSRF rejected"
+          }
+        }
+      }
+    },
+    "/api/v1/students/{id}/face-photo": {
+      "get": {
+        "summary": "Read one private registration reference portrait",
+        "description": "Live biometrics.enroll OR biometrics.revoke permission and assigned-class scope, checked again after decryption. Encrypted portrait shares face template lifecycle. Returns private/no-store JSON; unavailable for legacy, revoked or inactive registrations. Kiosk cookies cannot access this endpoint.",
+        "security": [
+          {
+            "UserCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success; existing data/request_id envelope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "image": {
+                          "type": "string",
+                          "contentEncoding": "base64",
+                          "contentMediaType": "image/jpeg",
+                          "maxLength": 87384
+                        }
+                      },
+                      "required": [
+                        "image"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "request_id"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Strict payload validation error"
+          },
+          "401": {
+            "description": "Session unauthenticated/expired"
+          },
+          "403": {
+            "description": "Permission, Origin or CSRF rejected"
+          },
+          "503": {
+            "description": "Portrait temporarily unavailable; enrollment/attendance remain valid"
+          },
+          "404": {
+            "description": "No authorized active student reference portrait"
+          }
+        }
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "id",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ]
     }
   },
   "components": {
@@ -534,6 +628,14 @@
               "string",
               "null"
             ]
+          },
+          "reference_photo_version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Current template identifier only when its encrypted reference portrait exists; null for legacy registration."
           }
         },
         "required": [
@@ -541,7 +643,8 @@
           "full_name",
           "nis",
           "status",
-          "class_name"
+          "class_name",
+          "reference_photo_version"
         ],
         "additionalProperties": false
       },
@@ -567,6 +670,14 @@
           },
           "status": {
             "const": "provisional"
+          },
+          "reference_photo_version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Current template identifier only when its encrypted reference portrait exists; null for legacy registration."
           }
         },
         "required": [
@@ -574,7 +685,8 @@
           "created_at",
           "model_sha256",
           "frame_count",
-          "status"
+          "status",
+          "reference_photo_version"
         ],
         "additionalProperties": false
       },
@@ -647,7 +759,7 @@
             "items": {
               "type": "string",
               "maxLength": 524288,
-              "description": "Raw base64 JPEG; decoded <=384 KiB; header dimensions 160–1280 per axis, no data URL."
+              "description": "Raw base64 JPEG; decoded <=384 KiB; header dimensions 160\u20131280 per axis, no data URL."
             },
             "minItems": 3,
             "maxItems": 5
@@ -656,7 +768,8 @@
         "required": [
           "frames"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": " One 192\u00d7192 JPEG cropped from the first validated frame is encrypted and retained for visual verification. Remaining source frames are ephemeral. A failed photo validation preserves the previous registration."
       },
       "Revocation": {
         "type": "object",
@@ -678,11 +791,12 @@
           "image": {
             "type": "string",
             "maxLength": 524288,
-            "description": "Raw base64 JPEG; decoded <=384 KiB; header dimensions 160–1280 per axis, no data URL."
+            "description": "Raw base64 JPEG; decoded <=384 KiB; header dimensions 160\u20131280 per axis, no data URL."
           },
           "event_id": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "description": "Server-issued single-use ID from POST /api/v1/kiosk/capture-challenge; valid for 10 seconds and bound to the paired device cookie."
           },
           "track_id": {
             "type": "string",
@@ -716,7 +830,8 @@
               "no_face",
               "unknown",
               "inconclusive",
-              "accepted"
+              "accepted",
+              "verification_required"
             ]
           },
           "faces": {
@@ -762,6 +877,12 @@
                 "student_id": {
                   "type": "string",
                   "format": "uuid"
+                },
+                "similarity": {
+                  "type": "number",
+                  "minimum": -1,
+                  "maximum": 1,
+                  "description": "Fresh cosine similarity. Not a probability or accuracy percentage. Omitted when no valid embedding is available."
                 }
               },
               "required": [
@@ -785,16 +906,54 @@
               "outcome": {
                 "enum": [
                   "recorded",
-                  "already_recorded"
+                  "already_recorded",
+                  "checked_out",
+                  "already_checked_out",
+                  "check_in_required",
+                  "status_locked",
+                  "correction_pending"
                 ]
               },
               "record": {
-                "type": "object"
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "mode": {
+                "enum": [
+                  "check_in",
+                  "check_out"
+                ]
               }
             }
+          },
+          "engine_status": {
+            "type": "string"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "server_time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "identity_continuous": {
+            "type": "boolean",
+            "description": "True only for a fresh same-identity match on a previously live-verified track during a PAD recheck. Names may remain visible, but recognition_enabled=false and no attendance mutation is permitted."
+          },
+          "reference_photo": {
+            "type": "string",
+            "contentEncoding": "base64",
+            "contentMediaType": "image/jpeg",
+            "maxLength": 87384,
+            "description": "Optional 192\u00d7192 registration portrait, only after runtime-approved recognition with attendance. Never supplied for unknown/unconfirmed faces; excluded from persisted attendance/ledger data."
           }
         },
-        "description": "Current pipeline never emits accepted identity. Labels/IDs require evaluated evidence and committed attendance; unknown/inconclusive responses omit identities."
+        "description": "Names come from the live eligible session roster only after fresh stable recognition and liveness evidence. Attendance outcomes distinguish saved arrival/departure from blocked changes; protected manual statuses and pending corrections remain unchanged. Arrival/departure timestamps are server-authoritative and preserved on repeated frames. Unknown responses omit identities. A verification_required response can retain a previously verified live track name after a fresh same-identity match, with identity_continuous=true, no attendance payload and recognition_enabled=false. Unknown or changed faces never inherit a cached identity."
       },
       "FacePreview": {
         "type": "object",

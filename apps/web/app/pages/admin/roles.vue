@@ -203,24 +203,22 @@ await load()
           <template #cell-users="{ item }">{{ item.user_count }}</template>
           <template #cell-permissions="{ item }">{{ item.permissions.length }}</template>
           <template #cell-actions="{ item }">
-            <div class="flex justify-end gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                @click="edit(item)"
-              >
-                Edit
-              </Button>
-              <Button
-                v-if="!item.is_system"
-                size="sm"
-                variant="destructive"
-                :disabled="saving"
-                @click="deleting = item"
-              >
-                Hapus
-              </Button>
-            </div>
+            <TableActions
+              :label="item.name"
+              :disabled="saving"
+              :actions="[
+                { label: 'Edit peran', icon: 'edit', onSelect: () => edit(item) },
+                {
+                  label: 'Hapus peran',
+                  icon: 'delete',
+                  destructive: true,
+                  hidden: item.is_system,
+                  onSelect: () => {
+                    deleting = item
+                  },
+                },
+              ]"
+            />
           </template>
           <template #empty>
             <Empty>

@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 -include .env
-export DATABASE_URL API_ADDRESS WEB_ORIGIN SCHOOL_ID NUXT_PUBLIC_API_BASE NUXT_PORT WEB_HOST_PORT ALLOW_LOCAL_WEB_PORT_RANGE AI_BASE_URL AI_MODELS_DIR AI_SERVICE_TOKEN POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD
+export DATABASE_URL API_ADDRESS WEB_ORIGIN NUXT_PUBLIC_API_BASE NUXT_PORT WEB_HOST_PORT ALLOW_LOCAL_WEB_PORT_RANGE TRUSTED_PROXY_CIDRS AI_BASE_URL AI_MODELS_DIR AI_SERVICE_TOKEN POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD
 
 UV := $(CURDIR)/.tools/uv
 GOOSE := $(CURDIR)/.tools/goose
@@ -16,7 +16,7 @@ tools: $(UV) $(GOOSE)
 
 $(UV):
 	mkdir -p .tools
-	curl -LsSf https://astral.sh/uv/0.13.0/install.sh -o .tools/uv-install.sh
+	curl -LsSf https://astral.sh/uv/0.13.1/install.sh -o .tools/uv-install.sh
 	UV_INSTALL_DIR=$(CURDIR)/.tools UV_NO_MODIFY_PATH=1 sh .tools/uv-install.sh
 
 $(GOOSE):
@@ -89,6 +89,12 @@ dev-api:
 
 dev-ai: export AI_TEMPLATE_KEY_BASE64 := $(AI_TEMPLATE_KEY_BASE64)
 dev-ai: export AI_TEMPLATE_KEY_ID := $(AI_TEMPLATE_KEY_ID)
+dev-ai: export AI_MATCH_THRESHOLD := $(or $(AI_MATCH_THRESHOLD),0.8)
+dev-ai: export AI_MATCH_MARGIN := $(or $(AI_MATCH_MARGIN),0.1)
+dev-ai: export AI_LIVENESS_THRESHOLD := $(or $(AI_LIVENESS_THRESHOLD),0.95)
+dev-ai: export AI_DUPLICATE_THRESHOLD := $(or $(AI_DUPLICATE_THRESHOLD),0.85)
+dev-ai: export AI_RECOGNITION_APPROVAL_PATH := $(AI_RECOGNITION_APPROVAL_PATH)
+dev-ai: export AI_RECOGNITION_APPROVAL_SHA256 := $(AI_RECOGNITION_APPROVAL_SHA256)
 dev-ai:
 	cd services/ai && $(UV) run fastapi dev --host 127.0.0.1 --port 8001
 

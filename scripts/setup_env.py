@@ -10,7 +10,6 @@ def main():
     password = secrets.token_hex(24)
     content = (
         "POSTGRES_DB=attendance\nPOSTGRES_USER=attendance\n"
-        "SCHOOL_ID=00000000-0000-4000-8000-000000000001\n"
         f"POSTGRES_PASSWORD={password}\n"
         f"DATABASE_URL=postgresql://attendance:{password}@127.0.0.1:54329/attendance?sslmode=disable\n"
         "API_ADDRESS=127.0.0.1:8080\nWEB_ORIGIN=http://localhost:3001\n"

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { toast } from 'vue-sonner'
-import { RefreshCw, Trash2 } from '@lucide/vue'
+import { Ellipsis, RefreshCw, Trash2 } from '@lucide/vue'
 import { enrollmentSchema, reasonSchema } from '~/lib/validation/biometrics-devices'
 import type { Result } from '~/types/auth'
 import type { FaceStatus } from '~/types/biometrics'
@@ -70,7 +70,7 @@ async function save() {
     frames.value = []
     busy.value = false
     emit('update:open', false)
-    toast.success('Wajah berhasil didaftarkan. Absensi otomatis belum tersedia.')
+    toast.success('Wajah berhasil didaftarkan. Gunakan halaman absensi pada sesi yang terbuka.')
   } catch (cause) {
     toast.error(apiMessage(cause))
   } finally {
@@ -131,7 +131,7 @@ function openRevocation() {
   >
     <DialogContent
       :show-close-button="!busy"
-      class="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl"
+      class="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-xl"
       @escape-key-down="
         (event) => {
           if (busy) event.preventDefault()
@@ -143,62 +143,70 @@ function openRevocation() {
         }
       "
     >
-      <DialogHeader>
-        <DialogTitle>
-          {{ canEnroll ? 'Daftar wajah' : 'Wajah siswa'
-          }}{{ studentName ? ` · ${studentName}` : '' }}
-        </DialogTitle>
+      <DialogHeader class="shrink-0 px-6 pt-6 pr-12 text-left">
+        <DialogTitle>{{ canEnroll ? 'Daftar wajah' : 'Wajah siswa' }}</DialogTitle>
         <DialogDescription>
-          Ambil 3–5 foto berbeda dengan satu wajah, pencahayaan baik, dan posisi kepala sedikit
-          bervariasi.
+          {{ studentName || 'Siswa' }} · Ambil 3–5 foto dengan pencahayaan yang baik.
         </DialogDescription>
       </DialogHeader>
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <Badge :variant="status?.enrolled ? 'success' : 'secondary'">
-          {{
-            loading ? 'Memuat status…' : status?.enrolled ? 'Sudah terdaftar' : 'Belum terdaftar'
-          }}
-        </Badge>
-        <span
-          v-if="status?.template"
-          class="text-sm text-muted-foreground"
-        >
-          {{ status.template.frame_count }} foto pendaftaran
-        </span>
-      </div>
-      <p
-        v-if="loading"
-        role="status"
-        class="text-sm text-muted-foreground"
-      >
-        Memuat status wajah…
-      </p>
-      <div class="flex flex-wrap justify-end gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          :disabled="busy || loading"
-          @click="refresh"
-        >
-          <RefreshCw :class="loading ? 'animate-spin' : ''" />
-          Muat ulang status
-        </Button>
-        <Button
-          v-if="canRevoke && status?.enrolled"
-          variant="outline"
-          size="sm"
-          :disabled="busy || loading"
-          @click="openRevocation"
-        >
-          <Trash2 />
-          Hapus data wajah
-        </Button>
-      </div>
       <form
+        id="face-enrollment"
         novalidate
-        class="space-y-4"
+        class="min-h-0 overflow-y-auto px-6 py-4 space-y-4"
         @submit.prevent="save"
       >
+        <div class="flex items-center gap-3">
+          <StudentFacePhoto
+            v-if="status?.enrolled"
+            :student-id="studentId"
+            :revision="status.template?.reference_photo_version"
+            :name="studentName || 'siswa'"
+            class="size-14 shrink-0 rounded-lg"
+          />
+          <div class="min-w-0 flex-1 space-y-1">
+            <Badge :variant="status?.enrolled ? 'success' : 'secondary'">
+              {{
+                loading
+                  ? 'Memuat status…'
+                  : status?.enrolled
+                    ? 'Sudah terdaftar'
+                    : 'Belum terdaftar'
+              }}
+            </Badge>
+            <template v-if="status?.enrolled">
+              <p class="text-sm font-medium">Foto referensi pendaftaran</p>
+              <p class="text-xs text-muted-foreground">
+                {{
+                  status.template?.reference_photo_version
+                    ? 'Ditampilkan saat wajah cocok pada absensi.'
+                    : 'Foto belum tersedia. Perbarui pendaftaran untuk menambahkan foto.'
+                }}
+              </p>
+            </template>
+          </div>
+          <DropdownMenu v-if="canRevoke && status?.enrolled">
+            <DropdownMenuTrigger as-child>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                :disabled="busy || loading"
+                aria-label="Opsi pendaftaran wajah"
+              >
+                <Ellipsis />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                variant="destructive"
+                @select="openRevocation"
+              >
+                <Trash2 />
+                Hapus data wajah
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
         <Alert
           v-if="error"
           variant="destructive"
@@ -210,12 +218,23 @@ function openRevocation() {
           <AlertTitle>Pendaftaran belum tersedia</AlertTitle>
           <AlertDescription>
             {{
-              !status?.enrollment_allowed
+              !status.enrollment_allowed
                 ? 'Siswa harus aktif sebelum pendaftaran wajah.'
-                : 'Kamera belum siap digunakan. Muat ulang status atau coba lagi nanti.'
+                : 'Kamera belum siap digunakan. Coba lagi sebentar.'
             }}
           </AlertDescription>
         </Alert>
+        <Button
+          v-if="!loading && (!status || (canEnroll && !status.pipeline_ready))"
+          type="button"
+          variant="outline"
+          size="sm"
+          :disabled="busy"
+          @click="refresh"
+        >
+          <RefreshCw />
+          Coba lagi
+        </Button>
         <FaceEnrollmentCapture
           v-if="canEnroll"
           ref="capturePanel"
@@ -224,39 +243,44 @@ function openRevocation() {
           :enabled="enrollmentReady && open && !revokeOpen"
           :busy="busy"
         />
-        <Field
-          v-if="canEnroll"
-          :data-invalid="!!errors.frames"
+        <FieldError
+          v-if="canEnroll && errors.frames"
+          role="alert"
         >
-          <FieldDescription>
-            Foto asli tidak disimpan. Pendaftaran ini belum mengaktifkan absensi otomatis.
-          </FieldDescription>
-          <FieldError
-            v-if="errors.frames"
-            role="alert"
-          >
-            {{ errors.frames }}
-          </FieldError>
-        </Field>
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            :disabled="busy"
-            @click="close(false)"
-          >
-            Tutup
-          </Button>
-          <Button
-            v-if="canEnroll"
-            type="submit"
-            :disabled="busy || !enrollmentReady || frames.length < 3"
-          >
-            <Spinner v-if="busy" />
-            {{ status?.enrolled ? 'Simpan pendaftaran ulang' : 'Simpan wajah' }}
-          </Button>
-        </DialogFooter>
+          {{ errors.frames }}
+        </FieldError>
       </form>
+      <DialogFooter class="shrink-0 border-t px-6 py-4 sm:items-center sm:justify-between">
+        <p
+          v-if="canEnroll"
+          class="text-sm text-muted-foreground"
+          role="status"
+        >
+          {{
+            frames.length < 3
+              ? `Ambil ${3 - frames.length} foto lagi untuk menyimpan.`
+              : 'Foto siap disimpan.'
+          }}
+        </p>
+        <Button
+          v-if="canEnroll"
+          type="submit"
+          form="face-enrollment"
+          :disabled="busy || !enrollmentReady || frames.length < 3"
+        >
+          <Spinner v-if="busy" />
+          Simpan wajah
+        </Button>
+        <Button
+          v-else
+          type="button"
+          variant="outline"
+          :disabled="busy"
+          @click="close(false)"
+        >
+          Tutup
+        </Button>
+      </DialogFooter>
     </DialogContent>
   </Dialog>
   <AlertDialog

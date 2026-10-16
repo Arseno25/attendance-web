@@ -1,0 +1,16 @@
+# Kiosk recognition feedback and automatic checkout
+
+User asks for stable live names/scores, a school-time clock, clear arrival/departure and student status, and a clean shadcn-vue screen. Reset means UI refresh, preserving attendance history.
+
+Reuse the existing tracking engine, Go attendance transaction, FaceCamera and shadcn components. Fix the two-second inference pause and pre-request overlay clearing. Each confirmed label must come from a fresh matching frame; disappearance, another identity, invalid data or failed initial liveness clears live identity. A previously live-verified track can retain its name on a fresh same-identity match while PAD rechecks, but cannot write attendance until current PAD passes. A persistent result panel separately retains the last committed attendance.
+
+- [x] Regression then engine fix: consecutive fresh matches keep confirmed identity and score; no cached identity during skipped/failed inference.
+- [x] Server: user chose automatic checkout by schedule. Add optional checkout_start, snapshot checkout_at in each session, and expose timezone/timing; keep server clock and status authoritative, preserve first timestamps, bind replay to session/device/student and protect manual statuses. Only successful mutations enter the request ledger.
+- [x] UI: camera + result column, school clock, clear mode badge, live score, status badge, check-in/out times and recent successful results, responsive existing shadcn styles. Add a prominent success/blocked confirmation and Sonner notifications once per pupil/operation, a three-step queue guide, a bounded five-item teacher history and re-entry detection; no modal or per-frame toast spam. Pairing stays operator-only. Before checkout_at scans record arrival; at/after checkout_at they record departure only for students already checked in. Legacy schedules stay check-in only until configured.
+- [x] Verify migration/fresh install, Go race integration, AI, UI and browser tests. Refresh local runtime and test real Fantech entry and exit, then close the test session and restore the original schedule. No data reset or remote deploy.
+
+References: OpenCV SFace cosine similarity documentation; NVIDIA tracking lifecycle concepts; Context7 and shadcn-vue MCP Card/Badge/Progress/Select examples. No new recognition framework is required.
+
+Implementation notes: names and fresh scores survive a PAD recheck only on an already live-verified, still-matching track. That response has recognition_enabled=false and cannot create attendance. The public API rechecks the roster and model before supplying the name. Initial PAD failure, another identity, no face, poor quality, expiry and gallery changes still clear continuity. Arrival and departure decisions use the snapshotted server schedule, never browser flags.
+
+Queue feedback uses the existing Sonner and shadcn Card/Badge/Progress. One toast ID replaces previous pupils; continuous frames do not repeat notifications. A pupil returning after at least 1.5 seconds without a face receives a fresh confirmation. Messages expire after five seconds, while the saved times and last five distinct results remain visible. Blocked operations show a warning and never a success notification.

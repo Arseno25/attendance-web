@@ -288,6 +288,9 @@ func (s *Service) updateRole(w http.ResponseWriter, r *http.Request) {
 		_, err = tx.Exec(r.Context(), "DELETE FROM user_sessions WHERE school_id=$1 AND user_id IN (SELECT id FROM users WHERE school_id=$1 AND role=$2)", s.schoolID, previous.Key)
 	}
 	if err == nil {
+		_, err = tx.Exec(r.Context(), "DELETE FROM device_sessions WHERE school_id=$1 AND paired_by IN (SELECT id FROM users WHERE school_id=$1 AND role=$2)", s.schoolID, previous.Key)
+	}
+	if err == nil {
 		next, err = loadRole(r.Context(), tx, s.schoolID, id)
 	}
 	if err == nil {

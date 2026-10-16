@@ -2,21 +2,32 @@ package config
 
 import (
 	"attendance.local/api/internal/platform/aiclient"
-	"encoding/hex"
 	"errors"
 	"net"
+	"net/netip"
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
-	Address, DatabaseURL, WebOrigin, SchoolID, AIBaseURL, AIServiceToken string
-	AllowLocalWebPortRange                                               bool
+	Address, DatabaseURL, WebOrigin, AIBaseURL, AIServiceToken string
+	AllowLocalWebPortRange                                     bool
+	TrustedProxies                                             []netip.Prefix
 }
 
 func Load() (Config, error) {
-	c := Config{Address: os.Getenv("API_ADDRESS"), DatabaseURL: os.Getenv("DATABASE_URL"), WebOrigin: os.Getenv("WEB_ORIGIN"), SchoolID: os.Getenv("SCHOOL_ID"), AIBaseURL: os.Getenv("AI_BASE_URL"), AIServiceToken: os.Getenv("AI_SERVICE_TOKEN")}
+	c := Config{Address: os.Getenv("API_ADDRESS"), DatabaseURL: os.Getenv("DATABASE_URL"), WebOrigin: os.Getenv("WEB_ORIGIN"), AIBaseURL: os.Getenv("AI_BASE_URL"), AIServiceToken: os.Getenv("AI_SERVICE_TOKEN")}
+	if value := strings.TrimSpace(os.Getenv("TRUSTED_PROXY_CIDRS")); value != "" {
+		for _, raw := range strings.Split(value, ",") {
+			prefix, err := netip.ParsePrefix(strings.TrimSpace(raw))
+			if err != nil || prefix.Bits() == 0 || prefix.Addr().Is4In6() {
+				return c, errors.New("TRUSTED_PROXY_CIDRS must contain explicit IPv4/IPv6 proxy CIDRs, not a wildcard")
+			}
+			c.TrustedProxies = append(c.TrustedProxies, prefix.Masked())
+		}
+	}
 	if c.Address == "" {
 		c.Address = "127.0.0.1:8080"
 	}
@@ -47,13 +58,6 @@ func Load() (Config, error) {
 		}
 	}
 
-	id := c.SchoolID
-	if len(id) != 36 || id[8] != '-' || id[13] != '-' || id[18] != '-' || id[23] != '-' {
-		return c, errors.New("SCHOOL_ID must be a UUID")
-	}
-	if _, err := hex.DecodeString(id[:8] + id[9:13] + id[14:18] + id[19:23] + id[24:]); err != nil {
-		return c, errors.New("SCHOOL_ID must be a UUID")
-	}
 	if c.AIBaseURL != "" {
 		if _, err := aiclient.New(c.AIBaseURL, c.AIServiceToken); err != nil {
 			return c, err

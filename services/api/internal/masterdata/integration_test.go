@@ -238,4 +238,38 @@ func TestMasterDatabaseScopesAndHistory(t *testing.T) {
 	if count < 7 {
 		t.Fatal("master audit missing")
 	}
+
+	// Write authorization must enforce the same class boundary as reads.
+	expect(call("PATCH", "/roles/"+customRole["id"].(string), map[string]any{"permissions": []string{"students.write", "academics.write"}}), 200)
+	local := expect(call("POST", "/students", map[string]any{"nis": "SCOPE-A", "full_name": "Local scope student", "class_id": classID}), 201)["data"].(map[string]any)
+	foreign := expect(call("POST", "/students", map[string]any{"nis": "SCOPE-B", "full_name": "Foreign scope student", "class_id": class2ID}), 201)["data"].(map[string]any)
+	var batch string
+	if err := pool.QueryRow(ctx, `INSERT INTO import_batches(school_id,actor_id,class_id,payload,fingerprint,valid,row_count) VALUES($1,$2,$3,'[{"nis":"DENIED-IMPORT","nisn":"","full_name":"Denied import"}]'::jsonb,$4,true,1) RETURNING id::text`, schoolID, customUser["id"], class2ID, strings.Repeat("a", 64)).Scan(&batch); err != nil {
+		t.Fatal(err)
+	}
+	login("class-reader@example.test")
+	for _, tc := range []struct {
+		path   string
+		body   any
+		status int
+	}{
+		{"/students/" + foreign["id"].(string) + "/placements", map[string]any{"class_id": classID, "reason": "Denied foreign source"}, 404},
+		{"/students/" + local["id"].(string) + "/placements", map[string]any{"class_id": class2ID, "reason": "Denied foreign destination"}, 404},
+		{"/students/imports/dry-run", map[string]any{"class_id": class2ID, "csv": "nis,nisn,full_name\nDENIED-DRY,,Denied dry run\n"}, 404},
+		{"/students/imports/" + batch + "/commit", map[string]any{"hash": strings.Repeat("a", 64)}, 404},
+		{"/class-assignments", map[string]any{"user_id": customUser["id"], "class_id": class2ID}, 403},
+		{"/class-assignments", map[string]any{"user_id": customUser["id"], "class_id": classID, "ends_at": now.AddDate(0, 5, 0).Format(time.RFC3339)}, 403},
+	} {
+		if w := call("POST", tc.path, tc.body); w.Code != tc.status {
+			t.Errorf("scope write %s: got %d want %d", tc.path, w.Code, tc.status)
+		}
+	}
+	if w := call("PATCH", "/class-assignments/"+customAssignment["id"].(string), map[string]any{"is_active": false}); w.Code != 403 {
+		t.Errorf("scoped assignment revoke got %d want 403", w.Code)
+	}
+	var deniedWrites int
+	if err := pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM students WHERE nis LIKE 'DENIED-%')+(SELECT count(*) FROM student_enrollments WHERE student_id=$1 AND class_id=$2)+(SELECT count(*) FROM student_enrollments WHERE student_id=$3 AND class_id=$4)`, foreign["id"], classID, local["id"], class2ID).Scan(&deniedWrites); err != nil || deniedWrites != 0 {
+		t.Errorf("out-of-scope changes persisted: %d %v", deniedWrites, err)
+	}
+	expect(call("POST", "/students/imports/dry-run", map[string]any{"class_id": classID, "csv": "nis,nisn,full_name\nVALID-SCOPE,,Valid scoped import\n"}), 201)
 }

@@ -323,7 +323,7 @@ await load()
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <dl class="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+          <dl class="grid gap-5 sm:grid-cols-2 xl:grid-cols-5">
             <div>
               <dt class="text-sm text-muted-foreground">Status</dt>
               <dd class="mt-1">
@@ -347,6 +347,12 @@ await load()
               <dd class="mt-1 text-sm font-medium">{{ dateTime(session.late_after) }}</dd>
             </div>
             <div>
+              <dt class="text-sm text-muted-foreground">Mulai absen pulang</dt>
+              <dd class="mt-1 text-sm font-medium">
+                {{ session.checkout_at ? dateTime(session.checkout_at) : 'Belum diatur' }}
+              </dd>
+            </div>
+            <div>
               <dt class="text-sm text-muted-foreground">Tutup terjadwal</dt>
               <dd class="mt-1 text-sm font-medium">{{ dateTime(session.closes_at) }}</dd>
             </div>
@@ -356,7 +362,7 @@ await load()
       <Card class="min-w-0">
         <CardHeader class="flex flex-row flex-wrap items-center justify-between gap-4">
           <div>
-            <CardTitle>Daftar siswa siswa</CardTitle>
+            <CardTitle>Daftar siswa</CardTitle>
             <CardDescription class="mt-1.5">
               {{ session.recorded_count }} dari {{ session.roster_count }} siswa memiliki catatan.
               Daftar siswa tetap saat siswa pindah kelas.
@@ -466,7 +472,8 @@ await load()
             :columns="[
               { id: 'siswa', label: 'Siswa', cellClass: 'font-medium' },
               { id: 'status', label: 'Status' },
-              { id: 'waktu-hadir-pulang', label: 'Waktu hadir / pulang' },
+              { id: 'jam-masuk', label: 'Jam masuk', cellClass: 'tabular-nums' },
+              { id: 'jam-pulang', label: 'Jam pulang', cellClass: 'tabular-nums' },
               { id: 'alasan', label: 'Alasan', cellClass: 'max-w-48 whitespace-normal' },
               {
                 id: 'tindakan',
@@ -491,20 +498,45 @@ await load()
                 {{ attendanceLabels[item.status] }}
               </Badge>
               <div
+                v-if="item.check_out_at"
+                class="mt-1"
+              >
+                <Badge variant="info">Sudah pulang</Badge>
+              </div>
+              <div
                 v-if="item.correction_pending"
                 class="mt-1"
               >
                 <Badge variant="warning">Koreksi menunggu</Badge>
               </div>
             </template>
-            <template #cell-waktu-hadir-pulang="{ item }">
-              {{ item.check_in_at ? dateTime(item.check_in_at) : '—' }}
-              <div
-                v-if="item.check_out_at"
-                class="text-xs text-muted-foreground"
+            <template #cell-jam-masuk="{ item }">
+              <time
+                v-if="item.check_in_at"
+                :datetime="item.check_in_at"
               >
-                Pulang: {{ dateTime(item.check_out_at) }}
-              </div>
+                {{ dateTime(item.check_in_at, { timeStyle: 'long', timeZone: session.timezone }) }}
+              </time>
+              <span
+                v-else
+                class="text-muted-foreground"
+              >
+                Belum tercatat
+              </span>
+            </template>
+            <template #cell-jam-pulang="{ item }">
+              <time
+                v-if="item.check_out_at"
+                :datetime="item.check_out_at"
+              >
+                {{ dateTime(item.check_out_at, { timeStyle: 'long', timeZone: session.timezone }) }}
+              </time>
+              <span
+                v-else
+                class="text-muted-foreground"
+              >
+                Belum tercatat
+              </span>
             </template>
             <template #cell-alasan="{ item }">{{ item.reason ?? '—' }}</template>
             <template #cell-tindakan="{ item }">

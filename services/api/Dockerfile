@@ -8,7 +8,7 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/api ./cmd/api \
     && CGO_ENABLED=0 GOBIN=/out go install -tags='no_clickhouse,no_libsql,no_mssql,no_mysql,no_sqlite3,no_vertica,no_ydb' github.com/pressly/goose/v3/cmd/goose@v3.29.0 \
     && go clean -cache -modcache
 
-FROM docker.io/library/alpine:3.23
+FROM docker.io/library/alpine:3.24.2
 RUN apk add --no-cache ca-certificates && addgroup -S app && adduser -S -G app app
 WORKDIR /app
 COPY --from=build /out/api /out/goose /out/bootstrap /usr/local/bin/

@@ -2,7 +2,7 @@
 
 Fondasi aplikasi absensi satu sekolah. Nuxt 4 untuk web admin/kiosk, Go untuk API dan transaksi, Python FastAPI/ONNX Runtime untuk service AI internal, serta PostgreSQL sebagai resource terpisah.
 
-Status lokal: **core WP-01–05, perangkat/kiosk, P1 dan enrollment provisional**. Semua form menggunakan aturan Zod modular; panel menyediakan edit akun, tema terang/gelap/sistem, pagination bernomor dan aksi halaman di kanan atas. Model YuNet/SFace terpin menjalankan deteksi CPU dan pendaftaran template AES-GCM. `/absensi` memproses frame untuk kotak deteksi; nama hanya tampil setelah keputusan server diterima dan kehadiran terkonfirmasi. Akurasi/liveness **belum dievaluasi**, sehingga absensi wajah otomatis tetap tertutup. Lihat [perubahan UI, akun dan wajah](docs/UI-ACCOUNT-BIOMETRICS-PROGRESS.md), [status paket sebelumnya](docs/LOCAL-COMPLETION-PROGRESS.md) dan [runbook lokal](docs/LOCAL-RUNBOOK.md).
+Status lokal: **core WP-01–05, perangkat/kiosk, P1 dan enrollment provisional**. Semua form menggunakan aturan Zod modular; panel menyediakan edit akun, tema terang/gelap/sistem, pagination bernomor dan aksi halaman di kanan atas. Model YuNet/SFace terpin menjalankan deteksi CPU dan pendaftaran template AES-GCM. `/absensi` memproses frame untuk kotak deteksi; nama hanya tampil setelah keputusan server diterima dan kehadiran terkonfirmasi. Pengenalan mencatat kehadiran setelah kecocokan stabil dan pemeriksaan wajah hidup lulus; akurasi populasi **belum dievaluasi**. Pendaftaran dan absensi memiliki pilihan kamera Fantech yang tersimpan di browser. Lihat [perubahan UI, akun dan wajah](docs/UI-ACCOUNT-BIOMETRICS-PROGRESS.md), [status paket sebelumnya](docs/LOCAL-COMPLETION-PROGRESS.md) dan [runbook lokal](docs/LOCAL-RUNBOOK.md).
 
 Panel admin memakai block resmi shadcn-vue `dashboard-01` dengan sidebar inset, menu akun, breadcrumb dan komponen shadcn untuk forms/tables. Halaman kiosk `/absensi` memakai route/layout mandiri di luar panel. Detail CLI, penyesuaian dan pembagian route ada di [desain panel](docs/PANEL-DESIGN.md).
 
@@ -48,7 +48,7 @@ Database Compose tetap berjalan; perintah ini tidak menghapus volume atau data.
 
 ### Administrator pertama
 
-Tidak ada password bawaan. Sesudah migration, build CLI dan buat super admin pertama di database yang belum memiliki pengguna untuk `SCHOOL_ID` tersebut:
+Tidak ada password bawaan. Sesudah migration, build CLI dan buat super admin pertama sebelum menjalankan API. Bootstrap membuat sekolah dan ID otomatis bila database kosong, atau memakai satu sekolah yang sudah ada tanpa mengubah identitasnya:
 
 ```bash
 make build
@@ -63,7 +63,7 @@ unset attendance_admin_password
 
 Password masuk lewat stdin, bukan argumen CLI atau log. Bootstrap berikutnya ditolak. Buka `/login`, lalu `/admin`; menu pengguna dan audit hanya tersedia bagi super admin. Untuk deployment, binary `bootstrap` juga tersedia di image API; jalankan dengan environment/secrets yang sama dan stdin privat.
 
-Workspace ini sudah memiliki akun pengembangan, tersimpan hanya di `.tools/local-admin.json` (ignored, permission `0600`). Untuk membuat administrator pada instalasi development lokal yang masih kosong, jalankan `make build`, lalu `DEVELOPMENT_MODE=1 make dev-bootstrap`; perintah memeriksa `WEB_ORIGIN` dan `DATABASE_URL` loopback dan memakai password development `Password1!`. Kredensial ini hanya untuk development lokal, jangan gunakan di deployment atau akun nyata. Bootstrap normal di semua lingkungan tetap menerima password kuat melalui stdin. `SCHOOL_ID` wajib berupa UUID dan harus menunjuk sekolah yang akan dikelola; jangan menggantinya untuk berpindah sekolah tanpa memeriksa data.
+Workspace ini sudah memiliki akun pengembangan, tersimpan hanya di `.tools/local-admin.json` (ignored, permission `0600`). Untuk membuat administrator pada instalasi development lokal yang masih kosong, jalankan `make build`, lalu `DEVELOPMENT_MODE=1 make dev-bootstrap`; perintah memeriksa `WEB_ORIGIN` dan `DATABASE_URL` loopback dan memakai password development `Password1!`. Kredensial ini hanya untuk development lokal, jangan gunakan di deployment atau akun nyata. Bootstrap normal di semua lingkungan tetap menerima password kuat melalui stdin. ID sekolah tidak diisi di environment. API membaca satu sekolah dari database saat startup; database kosong memerlukan bootstrap terlebih dahulu, dan database dengan lebih dari satu sekolah ditolak agar scope data tidak tertukar.
 
 Web dan API production harus menggunakan HTTPS pada host dengan **site yang sama**, misalnya `app.school.example` dan `api.school.example`, agar cookie SameSite Lax dapat dikirim pada request web ke API. Domain lintas site memerlukan desain auth berbeda. Exact origin web tetap dikonfigurasi melalui `WEB_ORIGIN`.
 
@@ -116,7 +116,7 @@ Dokumen kebutuhan tetap berada di root. Lihat [rencana induk](07-IMPLEMENTATION-
 | POST `/api/v1/students/{id}/enrollments` | 3–5 JPEG; siswa aktif, kualitas dan konsistensi; template terenkripsi |
 | POST `/api/v1/students/{id}/face-revoke` | Izin revoke + alasan; hapus template |
 | POST `/api/v1/kiosk/recognize` | Cookie device + Origin/CSRF; kotak deteksi tanpa nama kandidat |
-| POST `/internal/v1/recognize` | Token internal wajib; deteksi nyata, identitas otomatis masih tertutup |
+| POST `/internal/v1/recognize` | Token internal wajib; satu wajah, kecocokan stabil dan PAD wajib sebelum pencatatan oleh Go |
 
 Go mengembalikan error JSON, generated request ID, exact-origin CORS dan no-store headers. Log Go hanya metadata request, bukan body, URL query atau secret. Production AI mematikan access log Uvicorn; FastAPI dev CLI hanya dipakai untuk data dummy lokal. Kamera aktif hanya melalui tindakan petugas setelah memilih siswa atau pairing perangkat. Frame diproses tanpa menyimpan foto, dan automatic attendance masih tertutup.
 
@@ -128,7 +128,7 @@ Go mengembalikan error JSON, generated request ID, exact-origin CORS dan no-stor
 4. Hubungkan Compose ke predefined destination network yang sama dengan DB, lalu verifikasi private DNS/port. Baca [networking resmi Coolify](https://github.com/coollabsio/coolify-docs/blob/main/content/docs/core/networking-in-coolify.mdx).
 5. Model YuNet/SFace diunduh ke named volume `model_data` (project-scoped oleh Compose) oleh `init-models`; installer memeriksa ukuran dan SHA-256 manifest. `ai` menunggu init sukses dan memasang volume read-only. Host perlu akses keluar ke sumber model saat volume pertama kali dibuat. Volume bertahan pada redeploy dengan nama project Compose yang sama, tidak berbagi antar-project, tetapi hanya berada pada host itu dan bukan backup. Jika nama project berubah, Compose membuat volume baru dan init mengunduh model lagi; volume lama tidak otomatis dihapus. Buat backup dan uji restore sebelum pindah host. Jangan mount path model relatif checkout.
 6. Service `migrate` menjalankan image API yang sama, Goose `/app/migrations up`, memakai hanya `MIGRATION_DATABASE_URL`. API menunggu `migrate` selesai sukses (`service_completed_successfully`); kegagalan migrasi harus menghentikan startup API. Ini berjalan saat Compose membuat ulang stack, bukan hanya saat file migrasi berubah. Verifikasi perilaku retry/reconciliation pada versi Coolify target sebelum rilis.
-7. Setelah migrasi sukses dan API siap, buat administrator pertama secara manual satu kali. Dari shell operator, minta password tanpa echo dengan `read -r -s -p 'Password admin: ' ADMIN_PASSWORD`, lalu jalankan `printf '%s' "$ADMIN_PASSWORD" | docker exec -i <api-container-id> bootstrap --email admin@school.example --name 'Admin Sekolah' --school-name 'Nama Sekolah'`; sesudahnya `unset ADMIN_PASSWORD`. Ganti placeholder dengan ID container API aktif dari Coolify. Password hanya lewat stdin, tidak di command arguments, environment, Compose atau log. CLI menolak bootstrap kedua. Lanjut verifikasi login, origin, cookie Secure dan pengelolaan pengguna.
+7. Setelah migrasi sukses, bootstrap sekolah/admin **sebelum** menunggu API siap, menggunakan container sekali jalan dengan `docker compose ... run --rm --no-deps -T api bootstrap`, pada project/config/network target yang sama. Password diminta tanpa echo dan hanya dikirim melalui stdin. API memang berhenti bila sekolah belum ada; jangan bergantung pada `docker exec` ke API yang belum sehat. Urutan lengkap dan perintah yang dapat dijalankan ada pada [runbook staging](docs/STAGING-RUNBOOK.md).
 8. Verifikasi health, konfigurasi runtime, backup/restore database dan model. Health AI di Compose memakai liveness; readiness model/enrollment terpisah dari gate recognition dan bukan persetujuan biometrik produksi.
 
 Konfigurasi Compose divalidasi lokal, tetapi belum dijalankan pada server Coolify. Sebelum trafik produksi, uji live bahwa named volume dan secret bekerja, API gagal mulai jika migrasi gagal, dan init model dapat mengisi volume kosong. Backup volume tetap diperlukan. Belum ada deployment ke akun/server Coolify pada tahap ini; domain, credential production, legal policy, model license dan pilot tetap mengikuti gate pada rencana induk.
@@ -147,3 +147,7 @@ Panel: `/admin/settings` untuk tema Terang/Gelap/Sistem dan identitas sekolah be
 ## Audit dependency
 
 CI menjalankan govulncheck dan pip-audit. npm audit menghasilkan artifact dan warning yang harus direview sebelum rilis; job tersebut tidak dinyatakan sebagai audit bersih. Temuan upstream yang belum memiliki patch kompatibel dicatat dalam [setup stack](docs/STACK-SETUP.md). Jangan menjalankan `npm audit fix --force` tanpa menilai perubahan major/downgrade yang ditawarkannya.
+
+## Kesiapan staging dan evaluasi kamera
+
+Perbaikan audit, versi stack yang diverifikasi, instalasi kosong, trusted proxy, aturan dependency CI, alur kamera Fantech dan laporan evaluasi terpisah dijelaskan pada [STAGING-RUNBOOK.md](docs/STAGING-RUNBOOK.md). Absensi otomatis memerlukan bukti runtime wajah hidup dan kecocokan stabil; laporan evaluasi opsional tidak digantikan oleh tes sintetis.

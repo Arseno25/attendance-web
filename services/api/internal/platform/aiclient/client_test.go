@@ -24,7 +24,7 @@ func TestInternalClientAuthorizationBoundedResponseAndNoRedirect(t *testing.T) {
 		}
 		switch mode {
 		case "status":
-			_ = json.NewEncoder(w).Encode(Status{PipelineReady: true, BlockReason: BlockReason})
+			_ = json.NewEncoder(w).Encode(Status{PipelineReady: true, BlockReason: "PIPELINE_NOT_CONFIGURED"})
 		case "redirect":
 			http.Redirect(w, r, "https://example.invalid", 302)
 		case "oversized":

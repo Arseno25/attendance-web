@@ -2,8 +2,24 @@ package config
 
 import "testing"
 
+func TestConfigValidatesTrustedProxyCIDRs(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://localhost/attendance")
+	t.Setenv("WEB_ORIGIN", "http://localhost:3000")
+	t.Setenv("ALLOW_LOCAL_WEB_PORT_RANGE", "0")
+	for _, value := range []string{"not-a-cidr", "0.0.0.0/0", "::/0", "10.0.0.1"} {
+		t.Setenv("TRUSTED_PROXY_CIDRS", value)
+		if _, err := Load(); err == nil {
+			t.Fatalf("unsafe proxy config accepted: %q", value)
+		}
+	}
+	t.Setenv("TRUSTED_PROXY_CIDRS", "10.0.0.2/32, fd00::/64")
+	cfg, err := Load()
+	if err != nil || len(cfg.TrustedProxies) != 2 {
+		t.Fatalf("trusted proxy config failed: %v", err)
+	}
+}
+
 func TestConfigRejectsMissingDatabaseAndUnsafeOrigin(t *testing.T) {
-	t.Setenv("SCHOOL_ID", "00000000-0000-4000-8000-000000000001")
 	t.Setenv("DATABASE_URL", "")
 	t.Setenv("WEB_ORIGIN", "http://localhost:3000")
 	if _, err := Load(); err == nil {
@@ -26,14 +42,12 @@ func TestConfigRejectsMissingDatabaseAndUnsafeOrigin(t *testing.T) {
 	}
 }
 
-func TestAuthConfigRequiresSchoolAndPublicHTTPS(t *testing.T) {
+func TestConfigNeedsNoSchoolEnvironmentAndRequiresPublicHTTPS(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://localhost/attendance")
 	t.Setenv("WEB_ORIGIN", "https://attendance.example.com")
-	t.Setenv("SCHOOL_ID", "")
-	if _, err := Load(); err == nil {
-		t.Fatal("school selection missing")
+	if _, err := Load(); err != nil {
+		t.Fatalf("school environment is unnecessary: %v", err)
 	}
-	t.Setenv("SCHOOL_ID", "00000000-0000-4000-8000-000000000001")
 	t.Setenv("WEB_ORIGIN", "http://attendance.example.com")
 	if _, err := Load(); err == nil {
 		t.Fatal("public insecure auth origin accepted")
@@ -42,7 +56,6 @@ func TestAuthConfigRequiresSchoolAndPublicHTTPS(t *testing.T) {
 
 func TestPublicAndLocalConfig(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://localhost/attendance")
-	t.Setenv("SCHOOL_ID", "00000000-0000-4000-8000-000000000001")
 	t.Setenv("API_ADDRESS", "127.0.0.1:8080")
 	t.Setenv("ALLOW_LOCAL_WEB_PORT_RANGE", "0")
 	for _, origin := range []string{"http://localhost:3000", "https://attendance.example.com"} {
