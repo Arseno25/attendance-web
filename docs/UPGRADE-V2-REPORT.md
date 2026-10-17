@@ -256,10 +256,23 @@ dan tidak dieksekusi ulang penuh pada lingkungan lokal ini — lihat **Remaining
 
 ## 11. Performance Benchmark
 
-**NOT VALIDATED** — benchmark 500 identitas, CPU inference, P95/P99 latency, FPIR/FNIR,
-dan uji serangan (print/replay) memerlukan dataset kalibrasi + perangkat kamera nyata
-yang tidak tersedia pada lingkungan pengembangan ini. Angka benchmark tidak diklaim.
-Target P95 kamera-ke-hasil < 2 detik tetap menjadi sasaran eksperimen, bukan klaim.
+Hasil terukur lengkap ada di [`docs/AI-BENCHMARK-2026-10-17.md`](AI-BENCHMARK-2026-10-17.md)
+(dijalankan pada pipeline produksi nyata via `python -m app.benchmark`). Ringkasan
+(AMD Ryzen 5 5500, CPU, 150 iterasi, P50/P95):
+
+- Deteksi YuNet 640×480: 9,9 / 12,0 ms · 960×720: 27,8 / 34,7 ms · 1280×720: 39,2 / 44,1 ms
+- Embedding SFace: 9,0 / 10,2 ms · PAD MiniFASNet: 2,2 / 2,7 ms
+- Matching 1:N 500 identitas × 2 template: 0,060 ms (P50)
+- End-to-end `process_frame` jalur penuh: 22,6 / 25,9 ms · throughput ≈ 44 fps ·
+  batas desain 5 embedding/detik per sesi (`min_interval` 0,2 s)
+- Memori puncak ≈ 391 MB; muat model 0,15 s
+
+**Masih NOT VALIDATED:** FPIR/FNIR dunia nyata (fixture 4 wajah public domain hanya
+sanity check — `zero_false_accept_upper95` 0,527 dengan 4 probe unknown), evaluasi
+liveness dengan media serangan asli, dan latensi kamera-ke-UI end-to-end. Temuan
+penting: lapisan recognition menerima foto ulang (pertahanan wajib pada PAD +
+capture freshness + gate fail-closed) dan skor PAD MiniFASNet perlu kalibrasi
+kamera. Target P95 kamera-ke-hasil < 2 detik tetap sasaran eksperimen, bukan klaim.
 
 ---
 
