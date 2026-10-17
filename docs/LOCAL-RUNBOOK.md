@@ -66,13 +66,7 @@ Kunci `AI_TEMPLATE_KEY_BASE64` adalah32byte acak base64, `AI_TEMPLATE_KEY_ID` id
 
 Karena disk home hampir penuh saat verifikasi14Oktober2026, virtualenv project dipindahkan ke `/tmp/attendance-ai-venv` dan disymlink; virtualenv development bersifat sementara. Pulihkan setelah reboot dengan `UV_PROJECT_ENVIRONMENT=/tmp/attendance-ai-venv .tools/uv sync --project services/ai --locked`. Ini tidak memindahkan DB, model atau secret. Preview AI sekarang menggunakan image yang dibangun dari Dockerfile/lockfile, tanpa mount virtualenv host.
 
-Import image ke storage home kehabisan ruang. Image AI dibangun pada storage tambahan `/var/tmp/attendance-ai-build/storage` (disk root) dan digunakan read-only. Pertahankan directory ini selama preview memakai image tersebut; jangan masukkan ke pembersihan temp. Untuk menjalankan kembali preview AI:
-
-```bash
-podman --storage-opt additionalimagestore=/var/tmp/attendance-ai-build/storage start attendance-foundation-ai
-```
-
-Build/Compose di host yang cukup ruang dapat memakai storage standar. Root filesystem dan home sama-sama terbatas; ini hanya pengaturan preview workspace lokal.
+Pada 17 Oktober 2026, image build yang menumpuk dibersihkan (`podman image prune`) dan image AI dipindahkan dari additional image store ke storage standar (`podman save` lalu `podman load`). Ketiga container preview kini dikelola dengan podman biasa tanpa `--storage-opt additionalimagestore`; directory lama `/var/tmp/attendance-ai-build/storage` tidak lagi diperlukan dan boleh dihapus manual. Image preview dibangun ulang dari artefak `make build` dengan tag `localhost/attendance-{web,api,ai}:staging-readiness`; jangan menghapus volume database atau image yang sedang dipakai container.
 
 
 ## Reset data demo lokal — 14 Oktober 2026
