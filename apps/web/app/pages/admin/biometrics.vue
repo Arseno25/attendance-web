@@ -15,6 +15,7 @@ const selected = ref<(typeof students.value)[number] | null>(null)
 const page = ref(1)
 const total = ref(0)
 const search = ref('')
+const enrolledFilter = ref('all')
 const loading = ref(false)
 const error = ref('')
 const { errors, validate } = useFormValidation(
@@ -28,7 +29,12 @@ async function load() {
   error.value = ''
   try {
     const result = await request<Result<typeof students.value>>('/biometrics/students', {
-      query: { page: page.value, page_size: 20, search: search.value.trim() },
+      query: {
+        page: page.value,
+        page_size: 20,
+        search: search.value.trim(),
+        enrolled: enrolledFilter.value === 'all' ? '' : enrolledFilter.value,
+      },
     })
     students.value = result.data
     total.value = result.pagination?.total ?? 0
@@ -53,7 +59,7 @@ await load()
   <div class="flex min-w-0 flex-col gap-6">
     <PageHeader
       title="Wajah siswa"
-      description="Cari siswa, buka modal wajah, lalu ambil 3–5 foto kamera untuk pendaftaran."
+      description="Cari siswa, lalu ambil 3–5 foto untuk pendaftaran wajah."
     />
     <Alert
       v-if="error"
@@ -103,6 +109,28 @@ await load()
           >
             Cari
           </Button>
+          <template #filters>
+            <Field class="sm:w-44">
+              <Select
+                v-model="enrolledFilter"
+                :disabled="loading"
+                @update:model-value="filter"
+              >
+                <SelectTrigger
+                  id="face-enrolled-filter"
+                  aria-label="Filter status wajah"
+                  class="w-full sm:w-44"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua wajah</SelectItem>
+                  <SelectItem value="true">Wajah terdaftar</SelectItem>
+                  <SelectItem value="false">Belum terdaftar</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+          </template>
         </DataTableToolbar>
         <DataTable
           :data="students ?? []"

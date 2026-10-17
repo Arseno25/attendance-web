@@ -217,18 +217,6 @@ defineExpose({ start, stop, capture })
             class="absolute left-0 top-0 max-w-full rounded-sm"
           >
             <span class="min-w-0 truncate">{{ face.label }}</span>
-            <span
-              v-if="face.similarity !== undefined"
-              class="shrink-0 tabular-nums"
-            >
-              ·
-              {{
-                face.similarity.toLocaleString('id-ID', {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })
-              }}
-            </span>
           </Badge>
         </div>
       </template>

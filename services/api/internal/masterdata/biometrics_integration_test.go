@@ -790,6 +790,18 @@ func TestBiometricEnrollmentWithoutConsentAndDevicePrivacy(t *testing.T) {
 		t.Fatal("removed template in gallery")
 	}
 	expect(call("POST", "/students/"+id+"/enrollments", enroll), 201)
+	enrolledStudents := expect(call("GET", "/students?enrolled=true", nil), 200)["data"].([]any)
+	if len(enrolledStudents) != 1 || enrolledStudents[0].(map[string]any)["id"] != id || enrolledStudents[0].(map[string]any)["face_enrolled"] != true {
+		t.Fatal("students enrolled=true filter failed", enrolledStudents)
+	}
+	unenrolledBio := expect(call("GET", "/biometrics/students?enrolled=false", nil), 200)["data"].([]any)
+	for _, row := range unenrolledBio {
+		if row.(map[string]any)["id"] == id {
+			t.Fatal("biometrics enrolled=false filter returned enrolled student", row)
+		}
+	}
+	expect(call("GET", "/students?enrolled=invalid", nil), 400)
+	expect(call("GET", "/biometrics/students?enrolled=invalid", nil), 400)
 	if _, err := pool.Exec(ctx, `UPDATE students SET status='inactive' WHERE id=$1`, id); err != nil {
 		t.Fatal(err)
 	}

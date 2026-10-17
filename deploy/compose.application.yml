@@ -78,6 +78,9 @@ services:
       AI_DUPLICATE_THRESHOLD: ${AI_DUPLICATE_THRESHOLD:-0.85}
       AI_RECOGNITION_APPROVAL_PATH: ${AI_RECOGNITION_APPROVAL_PATH:-}
       AI_RECOGNITION_APPROVAL_SHA256: ${AI_RECOGNITION_APPROVAL_SHA256:-}
+      # Fail-closed operation gate: disabled | shadow | approved | provisional.
+      # Use approved only after an independent evaluation report passes human review.
+      AI_OPERATION_MODE: ${AI_OPERATION_MODE:-provisional}
     volumes:
       - model_data:/models:ro
     expose:

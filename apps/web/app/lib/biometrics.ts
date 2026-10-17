@@ -1,4 +1,46 @@
-import type { FaceOverlay, Recognition } from '../types/biometrics.ts'
+import type { FaceOverlay, KioskState, Recognition } from '../types/biometrics.ts'
+
+export const kioskStateLabels: Record<KioskState, string> = {
+  initializing: 'Menyiapkan perangkat',
+  camera_ready: 'Kamera siap',
+  detecting: 'Mendeteksi wajah',
+  processing: 'Memproses identifikasi',
+  recognized: 'Berhasil dikenali',
+  already_recorded: 'Sudah tercatat',
+  unknown: 'Wajah belum dikenali',
+  inconclusive: 'Perlu posisi lebih jelas',
+  multiple_faces: 'Lebih dari satu wajah',
+  camera_error: 'Kamera bermasalah',
+  network_error: 'Gangguan jaringan',
+  session_inactive: 'Sesi belum aktif',
+}
+
+export function deriveKioskState(input: {
+  initialized: boolean
+  sessionReady: boolean
+  cameraActive: boolean
+  cameraError?: boolean
+  networkError?: boolean
+  result?: Recognition | null
+}): KioskState {
+  if (!input.initialized) return 'initializing'
+  if (input.networkError) return 'network_error'
+  if (!input.sessionReady) return 'session_inactive'
+  if (input.cameraError) return 'camera_error'
+  if (!input.cameraActive) return 'camera_ready'
+  const result = input.result
+  if (!result || result.decision === 'no_face') return 'detecting'
+  if (result.engine_status === 'MULTIPLE_FACES' || result.faces.length > 1) return 'multiple_faces'
+  if (result.engine_status === 'PROCESSING' || result.engine_status === 'VERIFYING')
+    return 'processing'
+  if (result.decision === 'accepted' && result.recognition_enabled && result.attendance) {
+    return ['already_recorded', 'already_checked_out'].includes(result.attendance.outcome)
+      ? 'already_recorded'
+      : 'recognized'
+  }
+  if (result.decision === 'unknown') return 'unknown'
+  return 'inconclusive'
+}
 
 export function faceOverlays(result: Recognition): FaceOverlay[] {
   const accepted =

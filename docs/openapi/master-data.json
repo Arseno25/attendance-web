@@ -1078,6 +1078,18 @@
                 "transferred"
               ]
             }
+          },
+          {
+            "in": "query",
+            "name": "enrolled",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            },
+            "description": "Filter by face enrollment status. Empty omits the filter."
           }
         ]
       },
@@ -2658,6 +2670,10 @@
               "string",
               "null"
             ]
+          },
+          "face_enrolled": {
+            "type": "boolean",
+            "description": "True when an active face template exists; pair with the enrolled=true|false query filter."
           }
         },
         "required": [

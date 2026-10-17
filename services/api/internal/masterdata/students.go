@@ -13,7 +13,8 @@ import (
 const studentScope = `(NOT $2::boolean OR (st.status='active' AND EXISTS(SELECT 1 FROM student_enrollments e WHERE e.school_id=st.school_id AND e.student_id=st.id AND e.class_id=ANY($3::uuid[]) AND e.joined_at<=statement_timestamp() AND e.left_at>statement_timestamp())))`
 
 const studentSelect = `SELECT st.id::text AS id,st.school_id::text AS school_id,st.nis,st.nisn,st.full_name,st.status,st.created_at,st.updated_at,
- latest.class_id::text AS class_id,latest.class_name,latest.academic_year_id::text AS academic_year_id,latest.year_name AS academic_year_name
+ latest.class_id::text AS class_id,latest.class_name,latest.academic_year_id::text AS academic_year_id,latest.year_name AS academic_year_name,
+ EXISTS(SELECT 1 FROM face_templates f WHERE f.school_id=st.school_id AND f.student_id=st.id) AS face_enrolled
  FROM students st LEFT JOIN LATERAL(SELECT e.class_id,c.name AS class_name,e.academic_year_id,y.name AS year_name FROM student_enrollments e JOIN classes c ON c.id=e.class_id AND c.school_id=e.school_id JOIN academic_years y ON y.id=e.academic_year_id AND y.school_id=e.school_id WHERE e.student_id=st.id AND e.school_id=st.school_id AND ($4='' OR e.academic_year_id=NULLIF($4,'')::uuid) AND (NOT $2::boolean OR e.class_id=ANY($3::uuid[])) AND e.joined_at<=statement_timestamp() ORDER BY e.joined_at DESC LIMIT 1) latest ON true
  WHERE st.school_id=$1 AND ` + studentScope
 const studentColumns = `id::text AS id,school_id::text AS school_id,nis,nisn,full_name,status,created_at,updated_at`
@@ -53,11 +54,12 @@ func (s *Service) students(w http.ResponseWriter, r *http.Request) {
 		}
 		search := strings.TrimSpace(r.URL.Query().Get("search"))
 		status := r.URL.Query().Get("status")
-		if len(search) > 100 || (status != "" && !studentStatus(status)) {
+		enrolled := r.URL.Query().Get("enrolled")
+		if len(search) > 100 || (status != "" && !studentStatus(status)) || (enrolled != "" && enrolled != "true" && enrolled != "false") {
 			invalid(w, "Filter siswa tidak valid")
 			return
 		}
-		s.list(w, r, sc, studentSelect+` AND ($4='' OR latest.academic_year_id IS NOT NULL) AND ($5='' OR latest.class_id=NULLIF($5,'')::uuid) AND (st.nis ILIKE $6 OR st.full_name ILIKE $6) AND ($7='' OR st.status=$7)`, s.schoolID, sc.classScoped, sc.classes, year, class, "%"+search+"%", status)
+		s.list(w, r, sc, studentSelect+` AND ($4='' OR latest.academic_year_id IS NOT NULL) AND ($5='' OR latest.class_id=NULLIF($5,'')::uuid) AND (st.nis ILIKE $6 OR st.full_name ILIKE $6) AND ($7='' OR st.status=$7) AND ($8='' OR EXISTS(SELECT 1 FROM face_templates f WHERE f.school_id=st.school_id AND f.student_id=st.id)=($8='true'))`, s.schoolID, sc.classScoped, sc.classes, year, class, "%"+search+"%", status, enrolled)
 		return
 	}
 	var in struct {

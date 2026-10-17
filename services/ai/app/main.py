@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.exceptions import HTTPException
 
-from app.pipeline import ImageError, get_cipher, get_pipeline, status
+from app.pipeline import ImageError, evaluate_gate, get_cipher, get_pipeline, status
 from app.recognition import get_recognition_service
 
 app = FastAPI(
@@ -226,6 +226,23 @@ def recognize(body: Recognition, request: Request):
         )
     try:
         service = get_recognition_service()
+        mode, gate_enabled, block_reason = evaluate_gate(service)
+        if mode == "disabled":
+            return {
+                "decision": "inconclusive",
+                "faces": [],
+                "engine_status": "DISABLED",
+                "reason": "RECOGNITION_DISABLED",
+                "operation_mode": mode,
+                "recognition_enabled": False,
+                "block_reason": block_reason,
+                "liveness_passed": False,
+                "is_confirmed": False,
+                "evaluation": service.evaluation or {},
+                "event_id": str(body.event_id),
+                "gallery_revision": body.gallery_revision,
+                "model_sha256": service.pipeline.model_sha256,
+            }
         result = service.process(
             body.image,
             school_id=str(body.school_id),
@@ -235,7 +252,8 @@ def recognize(body: Recognition, request: Request):
             gallery=[entry.model_dump(mode="json") for entry in body.gallery],
         )
         accepted = (
-            result.status == "CONFIRMED"
+            gate_enabled
+            and result.status == "CONFIRMED"
             and result.is_confirmed
             and result.liveness_passed is True
         )
@@ -243,27 +261,35 @@ def recognize(body: Recognition, request: Request):
         if len(faces) == 1 and result.similarity is not None:
             faces[0]["similarity"] = result.similarity
         continuing = (
-            result.status == "VERIFYING"
+            gate_enabled
+            and result.status == "VERIFYING"
             and result.is_confirmed
             and result.liveness_passed is False
         )
         if accepted or continuing:
             faces[0]["student_id"] = result.student_id
-        return {
-            "decision": "accepted"
+        decision = (
+            "accepted"
             if accepted
             else "verification_required"
             if continuing
             else "no_face"
             if result.status == "NO_FACE"
             else "inconclusive"
-            if result.status in ("MULTIPLE_FACES", "LOW_QUALITY", "ERROR")
-            else "unknown",
+            if (
+                not gate_enabled
+                or result.status in ("MULTIPLE_FACES", "LOW_QUALITY", "ERROR")
+            )
+            else "unknown"
+        )
+        return {
+            "decision": decision,
             "faces": faces,
             "engine_status": result.status,
             "reason": result.reason,
+            "operation_mode": mode,
             "recognition_enabled": accepted,
-            "block_reason": "",
+            "block_reason": block_reason,
             "liveness_passed": result.liveness_passed is True,
             "is_confirmed": result.is_confirmed,
             "evaluation": service.evaluation or {},

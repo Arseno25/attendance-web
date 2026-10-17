@@ -34,11 +34,12 @@ func (s *Service) biometricStudents(w http.ResponseWriter, r *http.Request) {
 	}
 	defer sc.tx.Rollback(context.Background())
 	search := strings.TrimSpace(r.URL.Query().Get("search"))
-	if len(search) > 100 {
+	enrolled := r.URL.Query().Get("enrolled")
+	if len(search) > 100 || (enrolled != "" && enrolled != "true" && enrolled != "false") {
 		invalid(w, "Filter siswa tidak valid")
 		return
 	}
-	s.list(w, r, sc, `SELECT st.id::text AS id,st.full_name,st.nis,st.status,current_class.class_name,reference.reference_photo_version FROM students st LEFT JOIN LATERAL(SELECT CASE WHEN reference_ciphertext IS NOT NULL THEN id::text END AS reference_photo_version FROM face_templates WHERE school_id=st.school_id AND student_id=st.id) reference ON true LEFT JOIN LATERAL(SELECT c.name AS class_name FROM student_enrollments e JOIN classes c ON c.school_id=e.school_id AND c.id=e.class_id WHERE e.school_id=st.school_id AND e.student_id=st.id AND e.joined_at<=statement_timestamp() AND e.left_at>statement_timestamp() ORDER BY e.joined_at DESC LIMIT 1) current_class ON true WHERE st.school_id=$1 AND `+studentScope+` AND (st.nis ILIKE $4 OR st.full_name ILIKE $4)`, s.schoolID, sc.classScoped, sc.classes, "%"+search+"%")
+	s.list(w, r, sc, `SELECT st.id::text AS id,st.full_name,st.nis,st.status,current_class.class_name,reference.reference_photo_version FROM students st LEFT JOIN LATERAL(SELECT true AS face_enrolled,CASE WHEN reference_ciphertext IS NOT NULL THEN id::text END AS reference_photo_version FROM face_templates WHERE school_id=st.school_id AND student_id=st.id) reference ON true LEFT JOIN LATERAL(SELECT c.name AS class_name FROM student_enrollments e JOIN classes c ON c.school_id=e.school_id AND c.id=e.class_id WHERE e.school_id=st.school_id AND e.student_id=st.id AND e.joined_at<=statement_timestamp() AND e.left_at>statement_timestamp() ORDER BY e.joined_at DESC LIMIT 1) current_class ON true WHERE st.school_id=$1 AND `+studentScope+` AND (st.nis ILIKE $4 OR st.full_name ILIKE $4) AND ($5='' OR COALESCE(reference.face_enrolled,false)=($5='true'))`, s.schoolID, sc.classScoped, sc.classes, "%"+search+"%", enrolled)
 }
 
 func (s *Service) faceStatus(w http.ResponseWriter, r *http.Request) {

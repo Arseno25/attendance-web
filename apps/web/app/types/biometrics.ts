@@ -31,6 +31,19 @@ export interface FaceStatus {
     automatic_attendance_approved?: boolean
   }
 }
+export type KioskState =
+  | 'initializing'
+  | 'camera_ready'
+  | 'detecting'
+  | 'processing'
+  | 'recognized'
+  | 'already_recorded'
+  | 'unknown'
+  | 'inconclusive'
+  | 'multiple_faces'
+  | 'camera_error'
+  | 'network_error'
+  | 'session_inactive'
 export interface Recognition {
   reference_photo?: string
   identity_continuous?: boolean

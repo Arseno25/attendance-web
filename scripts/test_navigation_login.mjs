@@ -22,7 +22,7 @@ async function component(name, file) {
   const { descriptor } = parse(readFileSync(file, 'utf8'), { filename: file })
   const script = compileScript(descriptor, { id: name })
   let source = script.content.replace(/^import (NavMain|NavUser) from .*$/gm, 'const $1 = {}')
-  source = source.replaceAll('~/lib/validation/auth', pathToFileURL(resolve('apps/web/app/lib/validation/auth.ts')).href)
+  source = source.replace(/from '~\/([^']+)'/g, (_, specifier) => `from ${JSON.stringify(pathToFileURL(resolve('apps/web/app', specifier + (specifier.endsWith('.ts') ? '' : '.ts'))).href)}`)
   const target = `${directory}/${name}.ts`
   writeFileSync(target, source)
   return (await import(pathToFileURL(target).href)).default
@@ -30,7 +30,7 @@ async function component(name, file) {
 const Sidebar = await component('Sidebar', 'apps/web/app/components/AppSidebar.vue')
 const Login = await component('Login', 'apps/web/app/components/login-04/components/LoginForm.vue')
 const Overview = await component('Overview', 'apps/web/app/pages/admin/index.vue')
-Object.assign(globalThis, { computed, ref, watch, useFormValidation, useRuntimeConfig: () => ({ public: { apiBase: 'http://localhost/api/v1' } }), useSchoolBranding: () => ({ branding: ref({ app_name: 'Absensi Sekolah' }) }) })
+Object.assign(globalThis, { computed, ref, watch, useFormValidation, useRuntimeConfig: () => ({ public: { apiBase: 'http://localhost/api/v1' } }), useSchoolBranding: () => ({ branding: ref({ app_name: 'Absensi Sekolah' }) }), useReports: () => ({ dateTime: (value) => String(value) }) })
 
 test('sidebar groups only authorized links, hides empty categories and reacts to access changes', () => {
   const session = ref({ user: { role: 'super_admin' }, permissions: ['students.read', 'academics.read', 'corrections.request', 'attendance.read', 'devices.health', 'biometrics.enroll', 'users.read', 'roles.manage', 'audit.read'] })

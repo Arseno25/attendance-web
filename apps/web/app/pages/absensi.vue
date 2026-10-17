@@ -3,7 +3,12 @@ import { toast } from 'vue-sonner'
 import { Camera, CameraOff, ShieldCheck, Clock, LogIn, LogOut, CircleCheck } from '@lucide/vue'
 import { pairingSchema } from '../lib/validation/biometrics-devices.ts'
 import { useFormValidation } from '../composables/useFormValidation.ts'
-import { faceOverlays, attendanceFeedback } from '../lib/biometrics.ts'
+import {
+  faceOverlays,
+  attendanceFeedback,
+  deriveKioskState,
+  kioskStateLabels,
+} from '../lib/biometrics.ts'
 import type { FaceOverlay, Recognition } from '~/types/biometrics'
 import type { Result } from '~/types/auth'
 import type { AttendanceSession } from '~/types/attendance'
@@ -46,7 +51,17 @@ const camera = ref<{ start: () => Promise<void>; stop: () => void; capture: () =
 )
 const cameraBusy = ref(false)
 const faces = ref<FaceOverlay[]>([])
+const latestRecognition = ref<Recognition | null>(null)
 const scanMessage = ref('')
+const isInitialized = ref(false)
+const kioskState = computed(() =>
+  deriveKioskState({
+    initialized: isInitialized.value,
+    sessionReady: sessionReady.value,
+    cameraActive: cameraActive.value,
+    result: latestRecognition.value,
+  }),
+)
 const clock = ref(Date.now())
 let clockOffset = 0
 let clockTimer: ReturnType<typeof setInterval> | undefined
@@ -123,6 +138,7 @@ function syncClock(serverTime?: string) {
   clock.value = Date.now() + clockOffset
 }
 function showResult(result: Recognition) {
+  latestRecognition.value = result
   faces.value = faceOverlays(result)
   if (result.decision === 'no_face') {
     absentSince ??= Date.now()
@@ -224,6 +240,7 @@ function stopCamera() {
   scanAbort?.abort()
   camera.value?.stop()
   cameraActive.value = false
+  latestRecognition.value = null
   faces.value = []
   scanMessage.value = ''
 }
@@ -448,6 +465,7 @@ onMounted(async () => {
   await reconnect()
   if (disposed) return
   initialized = true
+  isInitialized.value = true
   if (!kiosk.value) await discover()
   clockTimer = setInterval(() => {
     clock.value = Date.now() + clockOffset
@@ -639,6 +657,7 @@ onBeforeUnmount(() => {
             {{ departure ? 'Absensi pulang' : 'Absensi masuk' }}
           </Badge>
           <Badge variant="outline">{{ kiosk.class_name }}</Badge>
+          <Badge variant="secondary">{{ kioskStateLabels[kioskState] }}</Badge>
           <p class="text-sm text-muted-foreground">
             {{
               kiosk.checkout_at
@@ -773,25 +792,6 @@ onBeforeUnmount(() => {
                     </p>
                     <p class="text-sm text-muted-foreground">{{ feedback.message }}</p>
                   </div>
-                </div>
-                <div
-                  v-if="lastResult.similarity !== undefined"
-                  class="space-y-2"
-                >
-                  <dl class="flex items-center justify-between gap-3">
-                    <dt class="text-sm text-muted-foreground">Skor kemiripan</dt>
-                    <dd class="text-xl font-semibold tabular-nums">
-                      {{
-                        lastResult.similarity.toLocaleString('id-ID', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })
-                      }}
-                    </dd>
-                  </dl>
-                  <p class="text-xs text-muted-foreground">
-                    Tangkapan pertama yang terverifikasi · skala 0–1.
-                  </p>
                 </div>
                 <Separator />
                 <dl class="grid grid-cols-2 gap-4">

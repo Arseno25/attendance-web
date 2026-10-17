@@ -73,7 +73,7 @@ export const attendanceLabels: Record<string, string> = {
   excused: 'Izin',
   sick: 'Sakit',
   absent: 'Alfa',
-  pending_review: 'Perlu review',
+  pending_review: 'Perlu ditinjau',
 }
 export const sessionLabels: Record<string, string> = {
   scheduled: 'Terjadwal',

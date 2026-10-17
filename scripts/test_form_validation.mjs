@@ -69,6 +69,9 @@ test('academic and student forms require dates, references, names and valid stat
   invalid(newStudentSchema, { ...student, nis: ' ' }, 'nis')
   invalid(placementSchema, { class_id: id, reason: '\n\t' }, 'reason')
   invalid(studentFilterSchema, { search: 'é'.repeat(51), class_id: '', status: '' }, 'search')
+  valid(studentFilterSchema, { search: '', class_id: '', status: '', enrolled: 'true' })
+  valid(studentFilterSchema, { search: '', class_id: '', status: '', enrolled: 'false' })
+  invalid(studentFilterSchema, { search: '', class_id: '', status: '', enrolled: 'invalid' }, 'enrolled')
 })
 
 test('schedules reject duplicate or missing weekdays, invalid times, noninteger or empty grace, and closed tolerance windows', () => {

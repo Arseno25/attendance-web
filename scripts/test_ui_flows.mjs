@@ -30,6 +30,23 @@ test('status badges distinguish attendance, review and revoked states', async ()
   assert.equal(statusVariant('unknown'), 'secondary')
 })
 
+test('operational status text is plain Indonesian without technical jargon', async () => {
+  const { recognitionStatusText } = await import('../apps/web/app/lib/status.ts')
+  const cases = [
+    [{ pipeline_ready: false, recognition_enabled: false }, 'Layanan wajah sedang disiapkan.'],
+    [{ pipeline_ready: true, recognition_enabled: true, operation_mode: 'provisional' }, 'Absensi wajah otomatis sudah aktif.'],
+    [{ pipeline_ready: true, recognition_enabled: false, operation_mode: 'disabled' }, 'Absensi wajah sedang dinonaktifkan. Gunakan absensi manual.'],
+    [{ pipeline_ready: true, recognition_enabled: false, operation_mode: 'shadow' }, 'Sistem masih dalam masa uji coba. Absensi wajah otomatis belum aktif.'],
+    [{ pipeline_ready: true, recognition_enabled: false, operation_mode: 'approved' }, 'Menunggu persetujuan sebelum absensi wajah otomatis aktif.'],
+    [{ pipeline_ready: true, recognition_enabled: false }, 'Absensi wajah otomatis belum aktif. Gunakan absensi manual.'],
+  ]
+  for (const [input, expected] of cases) {
+    const text = recognitionStatusText(input)
+    assert.equal(text, expected)
+    assert.doesNotMatch(text, /pipeline|provisional|approved|shadow|disabled|model|\bAI\b|mode|engine/i, text)
+  }
+})
+
 test('dialog focus returns to a row trigger and respects removed targets or cancelled events', async () => {
   const { dialogFocus } = await import('../apps/web/app/lib/dialogFocus.ts')
   const previousDocument = globalThis.document

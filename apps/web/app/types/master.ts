@@ -48,6 +48,7 @@ export interface Student {
   class_id: string | null
   class_name: string | null
   academic_year_name: string | null
+  face_enrolled?: boolean
   placements?: Placement[]
 }
 export const statusLabels: Record<string, string> = {

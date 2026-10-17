@@ -4,6 +4,8 @@
 
 > Rancangan teknis, bukan pendapat hukum. Konsultasikan dengan penanggung jawab PDP/hukum sekolah sebelum pilot biometrik siswa.
 
+> **AI Operation Mode (fail-closed gate)**: service AI dikendalikan oleh `AI_OPERATION_MODE` — `disabled`, `shadow`, `approved`, `provisional` (default). Attendance otomatis hanya diizinkan pada mode `approved`, dan hanya jika laporan evaluasi independen cocok hash-nya (`AI_RECOGNITION_APPROVAL_PATH` + `AI_RECOGNITION_APPROVAL_SHA256`), konfigurasi engine (threshold/margin) cocok, checksum model cocok, evaluasi liveness lulus, dan review manusia menyetujui. Semua mismatch menghasilkan fail-closed (tanpa attendance otomatis). Lihat `docs/UPGRADE-V2-REPORT.md`.
+
 ## 1. Kepatuhan dan tata kelola
 
 UU No. 27 Tahun 2022 menempatkan **data biometrik dan data anak sebagai data pribadi spesifik**. Pemrosesan data anak memerlukan kontrol persetujuan orang tua/wali; pemrosesan berisiko tinggi memerlukan penilaian dampak perlindungan data. Dasar pemrosesan dan kebebasan persetujuan dalam konteks relasi sekolah-anak perlu dianalisis secara khusus; jangan menganggap checkbox sudah cukup. Portal hukum primer: https://peraturan.bpk.go.id/Details/229798/uu-no-27-tahun-2022.

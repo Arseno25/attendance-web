@@ -45,9 +45,18 @@ export const searchSchema = z.object({
     .trim()
     .refine((value) => byteLength(value) <= 100, 'Pencarian maksimal 100 byte.'),
 })
+export const enrolledFilter = z
+  .union([
+    z.literal(''),
+    z.enum(['true', 'false'], {
+      error: 'Pilih status wajah yang valid.',
+    }),
+  ])
+  .optional()
 export const studentFilterSchema = searchSchema.extend({
   class_id: optionalUuid,
   status: z.union([z.literal(''), studentStatus]),
+  enrolled: enrolledFilter,
 })
 // shortcut: CSV row parsing and the 500-row limit stay on the server, which handles quoted newlines and reports every domain error.
 export const importSchema = z.object({

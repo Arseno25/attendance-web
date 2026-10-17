@@ -32,6 +32,7 @@ func New(baseURL, token string) (*Client, error) {
 
 type Status struct {
 	PipelineReady      bool           `json:"pipeline_ready"`
+	OperationMode      string         `json:"operation_mode"`
 	RecognitionEnabled bool           `json:"recognition_enabled"`
 	BlockReason        string         `json:"block_reason"`
 	ModelSHA           string         `json:"model_sha256"`

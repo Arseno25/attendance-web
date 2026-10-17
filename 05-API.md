@@ -26,8 +26,8 @@ Pagination query: `page=1&page_size=20`, maximum 100; sorting allowlisted. Stand
 | GET | `/auth/me` | All logged-in | Session/role/scopes |
 | GET/POST | `/users` | Super admin only | Search/pagination; create account |
 | PATCH | `/users/{id}` | Super admin only | Change profile/access; revoke affected sessions |
-| GET | `/dashboard/summary?date=` | Admin, teacher scoped | KPIs |
-| GET | `/students` | Admin, teacher scoped | Search / pagination |
+| GET | `/dashboard/summary?date=` | Admin, teacher scoped | KPIs + `operations` (sesi berjalan, kamera, mode operasi AI) |
+| GET | `/students?enrolled=true\|false` | Admin, teacher scoped | Search / pagination / filter status wajah |
 | POST | `/students` | Admin | Add student |
 | GET | `/students/{id}` | Admin, teacher scoped | Detail |
 | PATCH | `/students/{id}` | Admin | Update |
@@ -38,6 +38,7 @@ Pagination query: `page=1&page_size=20`, maximum 100; sorting allowlisted. Stand
 | GET | `/students/{id}/consents` | Authorized admin | Consent history |
 | POST | `/students/{id}/consents` | Consent officer | Register validated legal status |
 | POST | `/students/{id}/consents/withdraw` | Authorized workflow | Disable matching + queue deletion |
+| GET | `/biometrics/students?enrolled=true\|false` | Enroll/revoke operator | Seleksi siswa terbatas untuk manajemen wajah |
 | POST | `/students/{id}/enrollments` | Enroll operator | Start enrollment (transient upload) |
 | GET | `/students/{id}/face-status` | Admin/authorized operator | Status only |
 | POST | `/kiosk/session` | Provisioned kiosk | Short-lived limited session |

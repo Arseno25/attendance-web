@@ -371,31 +371,60 @@ def get_cipher():
         raise ValueError("Template encryption key is unavailable") from None
 
 
+def operation_mode():
+    mode = os.environ.get("AI_OPERATION_MODE", "provisional").strip().lower()
+    return (
+        mode
+        if mode in ("disabled", "shadow", "approved", "provisional")
+        else "disabled"
+    )
+
+
+def evaluate_gate(service):
+    mode = operation_mode()
+    if mode == "disabled":
+        return mode, False, "RECOGNITION_DISABLED"
+    if not callable(getattr(service, "liveness_hook", None)):
+        return mode, False, "PIPELINE_NOT_CONFIGURED"
+    if mode == "shadow":
+        return mode, False, "SHADOW_MODE"
+    if mode == "approved":
+        evaluation = getattr(service, "evaluation", None) or {}
+        if evaluation.get("automatic_attendance_approved") is True:
+            return mode, True, ""
+        return mode, False, "APPROVAL_REQUIRED"
+    return mode, True, ""
+
+
 def status():
+    mode = operation_mode()
     try:
         pipeline = get_pipeline()
         get_cipher()
     except OSError, ValueError, cv2.error:
         return {
             "pipeline_ready": False,
+            "operation_mode": mode,
             "recognition_enabled": False,
             "block_reason": "PIPELINE_NOT_CONFIGURED",
             "evaluation": EVALUATION,
         }
     evaluation = EVALUATION
     enabled = False
+    block_reason = "PIPELINE_NOT_CONFIGURED"
     try:
         from app.recognition import get_recognition_service
 
         service = get_recognition_service()
         evaluation = service.evaluation or EVALUATION
-        enabled = callable(service.liveness_hook)
+        mode, enabled, block_reason = evaluate_gate(service)
     except OSError, ValueError, cv2.error:
         pass
     return {
         "pipeline_ready": True,
+        "operation_mode": mode,
         "recognition_enabled": enabled,
-        "block_reason": "" if enabled else "PIPELINE_NOT_CONFIGURED",
+        "block_reason": block_reason,
         "model_sha256": pipeline.model_sha256,
         "detector_sha256": pipeline.detector_sha256,
         "evaluation": evaluation,

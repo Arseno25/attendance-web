@@ -52,9 +52,20 @@ export interface AttendanceReport {
 }
 export type AttendanceDay = AttendanceTotals & { date: string }
 
+export interface DashboardOperations {
+  open_sessions: number
+  total_devices: number
+  online_devices: number
+  revoked_devices: number
+  pipeline_ready: boolean
+  recognition_enabled: boolean
+  operation_mode?: string
+}
+
 export interface AttendanceDashboard {
   totals: AttendanceTotals
   filters: ReportFilters
   trend: AttendanceDay[]
   recent: ReportRow[]
+  operations?: DashboardOperations
 }

@@ -984,6 +984,11 @@ func TestAttendanceDatabaseWorkflow(t *testing.T) {
 	expect(call("GET", "/academic-years", nil), 200)
 	expect(call("GET", "/attendance-sessions", nil), 403)
 	login("owner@example.test")
+	dashSummary := expect(call("GET", "/dashboard/summary", nil), 200)["data"].(map[string]any)
+	ops, ok := dashSummary["operations"].(map[string]any)
+	if !ok || ops["open_sessions"] == nil || ops["total_devices"] == nil || ops["online_devices"] == nil {
+		t.Fatal("dashboard summary missing operational metrics", dashSummary)
+	}
 	wsServer := httptest.NewServer(h)
 	defer wsServer.Close()
 	wsURL := "ws" + strings.TrimPrefix(wsServer.URL, "http") + "/api/v1/ws/attendance?session_id=" + outSession

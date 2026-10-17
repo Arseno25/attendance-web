@@ -14,6 +14,7 @@ const total = ref(0)
 const search = ref('')
 const classFilter = ref('all')
 const status = ref('all')
+const enrolledFilter = ref('all')
 const loading = ref(false)
 const message = ref('')
 const open = ref(false)
@@ -23,6 +24,7 @@ const { errors, validate } = useFormValidation(
     search: search.value,
     class_id: classFilter.value === 'all' ? '' : classFilter.value,
     status: status.value === 'all' ? '' : status.value,
+    enrolled: enrolledFilter.value === 'all' ? '' : enrolledFilter.value,
   }),
 )
 async function load() {
@@ -37,6 +39,7 @@ async function load() {
         search: search.value,
         class_id: classFilter.value === 'all' ? '' : classFilter.value,
         status: status.value === 'all' ? '' : status.value,
+        enrolled: enrolledFilter.value === 'all' ? '' : enrolledFilter.value,
       },
     })
     students.value = result.data
@@ -215,6 +218,29 @@ await load()
                 {{ errors.status }}
               </FieldError>
             </Field>
+            <Field
+              class="sm:w-44"
+              :data-invalid="!!errors.enrolled"
+            >
+              <Select
+                v-model="enrolledFilter"
+                :disabled="loading"
+                @update:model-value="filter"
+              >
+                <SelectTrigger
+                  id="student-enrolled-filter"
+                  aria-label="Filter pendaftaran wajah"
+                  class="w-full sm:w-44"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua wajah</SelectItem>
+                  <SelectItem value="true">Wajah terdaftar</SelectItem>
+                  <SelectItem value="false">Belum terdaftar</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
           </template>
         </DataTableToolbar>
         <div
@@ -237,6 +263,7 @@ await load()
             { id: 'nama-siswa', label: 'Nama siswa', cellClass: 'font-medium' },
             { id: 'nis', label: 'NIS' },
             { id: 'kelas-terakhir', label: 'Kelas terakhir' },
+            { id: 'wajah', label: 'Wajah' },
             { id: 'status', label: 'Status' },
             {
               id: 'tindakan',
@@ -258,6 +285,11 @@ await load()
             <div class="text-xs text-muted-foreground">
               {{ student.academic_year_name }}
             </div>
+          </template>
+          <template #cell-wajah="{ item: student }">
+            <Badge :variant="student.face_enrolled ? 'success' : 'secondary'">
+              {{ student.face_enrolled ? 'Terdaftar' : 'Belum' }}
+            </Badge>
           </template>
           <template #cell-status="{ item: student }">
             <Badge :variant="statusVariant(student.status)">

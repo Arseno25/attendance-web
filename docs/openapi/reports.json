@@ -843,6 +843,41 @@
                   "$ref": "#/components/schemas/Row"
                 }
               },
+              "operations": {
+                "type": "object",
+                "description": "School-scoped operational readiness snapshot for admin monitoring.",
+                "properties": {
+                  "open_sessions": {
+                    "type": "integer"
+                  },
+                  "total_devices": {
+                    "type": "integer"
+                  },
+                  "online_devices": {
+                    "type": "integer"
+                  },
+                  "revoked_devices": {
+                    "type": "integer"
+                  },
+                  "pipeline_ready": {
+                    "type": "boolean"
+                  },
+                  "recognition_enabled": {
+                    "type": "boolean"
+                  },
+                  "operation_mode": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "open_sessions",
+                  "total_devices",
+                  "online_devices",
+                  "revoked_devices",
+                  "pipeline_ready",
+                  "recognition_enabled"
+                ]
+              },
               "filters": {
                 "$ref": "#/components/schemas/Filters"
               }

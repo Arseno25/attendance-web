@@ -111,7 +111,7 @@ Dokumen kebutuhan tetap berada di root. Lihat [rencana induk](07-IMPLEMENTATION-
 | GET `/api/v1/audit-logs` | Super admin: audit per sekolah, pagination |
 | GET `/internal/v1/health/live` | 200 bila runtime CPU ONNX tersedia |
 | GET `/internal/v1/health/ready` | 200 saat model dan kunci enrollment siap; recognition tetap false sampai evaluasi |
-| GET `/api/v1/biometrics/students` | Seleksi siswa terbatas untuk petugas enroll/revoke |
+| GET `/api/v1/biometrics/students?enrolled=` | Seleksi siswa terbatas untuk petugas enroll/revoke; filter status pendaftaran wajah |
 | GET `/api/v1/students/{id}/face-status` | Status pendaftaran dan evaluasi tanpa template plaintext |
 | POST `/api/v1/students/{id}/enrollments` | 3–5 JPEG; siswa aktif, kualitas dan konsistensi; template terenkripsi |
 | POST `/api/v1/students/{id}/face-revoke` | Izin revoke + alasan; hapus template |
@@ -132,6 +132,8 @@ Go mengembalikan error JSON, generated request ID, exact-origin CORS dan no-stor
 8. Verifikasi health, konfigurasi runtime, backup/restore database dan model. Health AI di Compose memakai liveness; readiness model/enrollment terpisah dari gate recognition dan bukan persetujuan biometrik produksi.
 
 Konfigurasi Compose divalidasi lokal, tetapi belum dijalankan pada server Coolify. Sebelum trafik produksi, uji live bahwa named volume dan secret bekerja, API gagal mulai jika migrasi gagal, dan init model dapat mengisi volume kosong. Backup volume tetap diperlukan. Belum ada deployment ke akun/server Coolify pada tahap ini; domain, credential production, legal policy, model license dan pilot tetap mengikuti gate pada rencana induk.
+
+Set `AI_OPERATION_MODE` (`disabled` | `shadow` | `approved` | `provisional`) secara eksplisit; default `provisional`. Mode `approved` (attendance otomatis) hanya boleh diaktifkan setelah laporan evaluasi independen ditinjau manusia dan hash-nya cocok; lihat [UPGRADE-V2-REPORT.md](docs/UPGRADE-V2-REPORT.md).
 
 ## Model dan alur lokal
 

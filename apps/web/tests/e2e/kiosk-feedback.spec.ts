@@ -115,7 +115,8 @@ test('kiosk shows a clear nonblocking confirmation and replaces it for the next 
     confirmation.getByRole('img', { name: 'Foto pendaftaran Siswa Uji A', exact: true }),
   ).toBeVisible()
   await expect(confirmation.getByRole('progressbar')).toHaveCount(0)
-  await expect(confirmation.getByRole('definition').filter({ hasText: '0,91' })).toBeVisible()
+  // The public kiosk never shows raw biometric scores or other technical figures.
+  await expect(confirmation.getByRole('definition').filter({ hasText: /\d,\d\d/ })).toHaveCount(0)
   await expect(page.locator('[data-sonner-toast]')).toHaveCount(1)
   await page.screenshot({
     path: resolve('../../.tools/kiosk-feedback/notification-desktop.png'),
@@ -123,7 +124,7 @@ test('kiosk shows a clear nonblocking confirmation and replaces it for the next 
     animations: 'disabled',
   })
   await expect.poll(() => scans).toBeGreaterThan(3)
-  await expect(confirmation.getByRole('definition').filter({ hasText: '0,91' })).toBeVisible()
+  await expect(confirmation.getByRole('definition').filter({ hasText: /\d,\d\d/ })).toHaveCount(0)
   await expect(page.locator('[data-sonner-toast]')).toHaveCount(1)
   pupil = 'B'
   await expect(confirmation.getByText('Siswa Uji B', { exact: true })).toBeVisible()

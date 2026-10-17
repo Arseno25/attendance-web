@@ -177,7 +177,20 @@ func (s *Service) dashboard(w http.ResponseWriter, r *http.Request) {
 	if recent == nil {
 		recent = []map[string]any{}
 	}
-	httpresponse.Data(w, 200, map[string]any{"totals": totals, "trend": trend, "recent": recent, "filters": f})
+	ops, err := one(r.Context(), tx, `SELECT
+ (SELECT count(*) FROM attendance_sessions se WHERE se.school_id=$1 AND (NOT $2::boolean OR se.class_id=ANY($3::uuid[])) AND se.status='open' AND se.starts_at<=clock_timestamp() AND se.closes_at>clock_timestamp()) AS open_sessions,
+ (SELECT count(*) FROM camera_devices d WHERE d.school_id=$1 AND d.revoked_at IS NULL) AS total_devices,
+ (SELECT count(*) FROM camera_devices d WHERE d.school_id=$1 AND d.revoked_at IS NULL AND d.last_seen_at>=clock_timestamp()-interval '5 minutes') AS online_devices,
+ (SELECT count(*) FROM camera_devices d WHERE d.school_id=$1 AND d.revoked_at IS NOT NULL) AS revoked_devices`, s.schoolID, u.Scope == auth.ScopeAssignedClasses, u.ClassIDs)
+	if err != nil {
+		dbError(w, err)
+		return
+	}
+	aiState := s.ai.Status(r.Context())
+	ops["pipeline_ready"] = aiState.PipelineReady
+	ops["recognition_enabled"] = aiState.RecognitionEnabled
+	ops["operation_mode"] = aiState.OperationMode
+	httpresponse.Data(w, 200, map[string]any{"totals": totals, "trend": trend, "recent": recent, "operations": ops, "filters": f})
 }
 
 // CSV escaping prevents new cells; the apostrophe prevents formula-like values on initial spreadsheet import.
@@ -214,7 +227,7 @@ func (s *Service) exportReport(w http.ResponseWriter, r *http.Request, tx pgx.Tx
 		buffer.WriteString(strings.Join(line, ",") + "\r\n")
 	}
 	writeRow([]string{"Tanggal", "Tahun ajaran", "Kelas", "Sesi", "NIS", "Nama siswa", "Status", "Waktu hadir lokal", "Zona waktu", "Alasan", "Status sesi", "Waktu pulang lokal"})
-	labels := map[string]string{"present": "Hadir", "late": "Terlambat", "excused": "Izin", "sick": "Sakit", "absent": "Alfa", "not_recorded": "Belum tercatat", "pending_review": "Perlu review"}
+	labels := map[string]string{"present": "Hadir", "late": "Terlambat", "excused": "Izin", "sick": "Sakit", "absent": "Alfa", "not_recorded": "Belum tercatat", "pending_review": "Perlu ditinjau"}
 	zones := map[string]*time.Location{}
 	for _, item := range data {
 		checkin := ""

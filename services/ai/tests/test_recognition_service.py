@@ -284,3 +284,121 @@ def test_replayed_pixels_cannot_accumulate_identity_even_with_new_track(monkeypa
     with pytest.raises(ImageError) as error:
         service.process(image(77), **dict(args, track_id="two"))
     assert error.value.code == "CAPTURE_REPLAY"
+
+
+def test_operation_modes_control_automatic_recognition_and_fail_closed(monkeypatch):
+    from app import pipeline as module
+    from app import recognition
+    from app.recognition import RecognitionService
+
+    pipeline = fake_pipeline(monkeypatch)
+    pipeline.detector_sha256 = "c" * 64
+    cipher = TemplateCipher(b"k" * 32, "test-key")
+    evaluation = {
+        "status": "reviewed",
+        "automatic_attendance_approved": True,
+        "holdout_verified": True,
+        "liveness_verified": True,
+        "stability_verified": True,
+        "threshold_margin_verified": True,
+        "model_sha256": "a" * 64,
+        "report_sha256": "b" * 64,
+    }
+    service = RecognitionService(
+        pipeline,
+        cipher,
+        EngineConfig(threshold=0.8, margin=0.1, min_interval=0),
+        liveness_hook=lambda *_: True,
+        evaluation=None,
+    )
+    monkeypatch.setattr(module, "get_pipeline", lambda: pipeline)
+    monkeypatch.setattr(module, "get_cipher", lambda: cipher)
+    monkeypatch.setattr(recognition, "get_recognition_service", lambda: service)
+    monkeypatch.setattr(main, "get_recognition_service", lambda: service)
+    monkeypatch.setenv("AI_SERVICE_TOKEN", "a" * 48)
+    school, student = str(uuid4()), str(uuid4())
+    body = {
+        "school_id": school,
+        "session_id": str(uuid4()),
+        "device_id": str(uuid4()),
+        "track_id": str(uuid4()),
+        "event_id": str(uuid4()),
+        "image": image(1),
+        "gallery_revision": 1,
+        "gallery": [template(cipher, school, student)],
+    }
+    with TestClient(main.app) as client:
+        # 1. disabled mode: status and recognize both stay disabled
+        monkeypatch.setenv("AI_OPERATION_MODE", "disabled")
+        st = module.status()
+        assert st["operation_mode"] == "disabled"
+        assert st["recognition_enabled"] is False
+        assert st["block_reason"] == "RECOGNITION_DISABLED"
+        for i in range(3):
+            body["event_id"] = str(uuid4())
+            body["image"] = image(i + 1)
+            resp = client.post(
+                "/internal/v1/recognize",
+                json=body,
+                headers={"Authorization": "Bearer " + "a" * 48},
+            ).json()
+            assert resp["decision"] == "inconclusive"
+            assert resp["recognition_enabled"] is False
+            assert resp["block_reason"] == "RECOGNITION_DISABLED"
+            assert student not in str(resp)
+
+        # 2. shadow mode: evaluates frames but never enables automatic attendance or exposes student_id
+        monkeypatch.setenv("AI_OPERATION_MODE", "shadow")
+        st = module.status()
+        assert st["operation_mode"] == "shadow"
+        assert st["recognition_enabled"] is False
+        assert st["block_reason"] == "SHADOW_MODE"
+        for i in range(3):
+            body["event_id"] = str(uuid4())
+            body["image"] = image(i + 10)
+            resp = client.post(
+                "/internal/v1/recognize",
+                json=body,
+                headers={"Authorization": "Bearer " + "a" * 48},
+            ).json()
+            assert resp["recognition_enabled"] is False
+            assert resp["block_reason"] == "SHADOW_MODE"
+            assert resp["decision"] != "accepted"
+            assert student not in str(resp)
+
+        # 3. approved mode without reviewed evaluation: fail-closed
+        monkeypatch.setenv("AI_OPERATION_MODE", "approved")
+        st = module.status()
+        assert st["operation_mode"] == "approved"
+        assert st["recognition_enabled"] is False
+        assert st["block_reason"] == "APPROVAL_REQUIRED"
+        for i in range(3):
+            body["event_id"] = str(uuid4())
+            body["image"] = image(i + 20)
+            resp = client.post(
+                "/internal/v1/recognize",
+                json=body,
+                headers={"Authorization": "Bearer " + "a" * 48},
+            ).json()
+            assert resp["recognition_enabled"] is False
+            assert resp["block_reason"] == "APPROVAL_REQUIRED"
+            assert resp["decision"] != "accepted"
+            assert student not in str(resp)
+
+        # 4. approved mode with valid reviewed evaluation: enabled after 3 consistent live frames
+        service.evaluation = evaluation
+        st = module.status()
+        assert st["operation_mode"] == "approved"
+        assert st["recognition_enabled"] is True
+        assert st["block_reason"] == ""
+        for i in range(3):
+            body["event_id"] = str(uuid4())
+            body["image"] = image(i + 30)
+            resp = client.post(
+                "/internal/v1/recognize",
+                json=body,
+                headers={"Authorization": "Bearer " + "a" * 48},
+            ).json()
+        assert resp["decision"] == "accepted"
+        assert resp["recognition_enabled"] is True
+        assert resp["faces"][0]["student_id"] == student

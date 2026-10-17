@@ -23,3 +23,22 @@ const variants: Record<string, BadgeVariants['variant']> = {
 export function statusVariant(status: string): BadgeVariants['variant'] {
   return variants[status] ?? 'secondary'
 }
+
+export function recognitionStatusText(operations: {
+  pipeline_ready: boolean
+  recognition_enabled: boolean
+  operation_mode?: string
+}): string {
+  if (!operations.pipeline_ready) return 'Layanan wajah sedang disiapkan.'
+  if (operations.recognition_enabled) return 'Absensi wajah otomatis sudah aktif.'
+  switch (operations.operation_mode) {
+    case 'disabled':
+      return 'Absensi wajah sedang dinonaktifkan. Gunakan absensi manual.'
+    case 'shadow':
+      return 'Sistem masih dalam masa uji coba. Absensi wajah otomatis belum aktif.'
+    case 'approved':
+      return 'Menunggu persetujuan sebelum absensi wajah otomatis aktif.'
+    default:
+      return 'Absensi wajah otomatis belum aktif. Gunakan absensi manual.'
+  }
+}
